@@ -15,7 +15,7 @@ import { XMLUtils } from "./XMLUtils";
 
 export class Attribute implements XMLNode {
 
-    static readonly ATTRIBUTE_NODE = 2;
+    static readonly ATTRIBUTE_NODE: number = 2;
 
     private name: string;
     private value: string;
@@ -52,8 +52,12 @@ export class Attribute implements XMLNode {
         return this.name + '="' + XMLUtils.unquote(XMLUtils.cleanString(this.value)) + '"';
     }
 
-    equals(node: Attribute): boolean {
-        return this.name === node.name && this.value === node.value;
+    equals(obj: XMLNode): boolean {
+        if (obj instanceof Attribute) {
+            let node: Attribute = obj as Attribute;
+            return this.name === node.name && this.value === node.value;
+        }
+        return false;
     }
 
 }

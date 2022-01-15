@@ -11,38 +11,43 @@
  *******************************************************************************/
 
 import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
 
-export class TextNode implements XMLNode {
+export class ProcessingInstruction implements XMLNode {
 
-    static readonly TEXT_NODE: number = 6;
+    static readonly PROCESSING_INSTRUCTION_NODE: number = 5;
 
+    private target: string;
     private value: string;
 
-    constructor(value: string) {
+    constructor(target: string, value: string) {
+        this.target = target;
         this.value = value;
     }
 
-    setValue(value: string) {
-        this.value = value;
+    getTarget(): string {
+        return this.target;
     }
 
     getValue(): string {
         return this.value;
     }
 
+    setValue(value: string): void {
+        this.value = value;
+    }
+
     getNodeType(): number {
-        return TextNode.TEXT_NODE;
+        return ProcessingInstruction.PROCESSING_INSTRUCTION_NODE;
     }
 
     toString(): string {
-        return XMLUtils.cleanString(this.value);
+        return '<?' + this.target + ' ' + this.value + '?>';
     }
 
     equals(obj: XMLNode): boolean {
-        if (obj instanceof TextNode) {
-            let node: TextNode = obj as TextNode;
-            return this.value === node.value;
+        if (obj instanceof ProcessingInstruction) {
+            let node: ProcessingInstruction = obj as ProcessingInstruction;
+            return this.target === node.target && this.value === node.value;
         }
         return false;
     }

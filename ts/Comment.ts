@@ -11,11 +11,10 @@
  *******************************************************************************/
 
 import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
 
-export class TextNode implements XMLNode {
+export class Comment implements XMLNode {
 
-    static readonly TEXT_NODE: number = 6;
+    static readonly COMMENT_NODE: number = 4;
 
     private value: string;
 
@@ -32,16 +31,16 @@ export class TextNode implements XMLNode {
     }
 
     getNodeType(): number {
-        return TextNode.TEXT_NODE;
+        return Comment.COMMENT_NODE;
     }
 
     toString(): string {
-        return XMLUtils.cleanString(this.value);
+        return '<!-- ' + this.value + ' -->';
     }
 
     equals(obj: XMLNode): boolean {
-        if (obj instanceof TextNode) {
-            let node: TextNode = obj as TextNode;
+        if (obj instanceof Comment) {
+            let node: Comment = obj as Comment;
             return this.value === node.value;
         }
         return false;
