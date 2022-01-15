@@ -1,0 +1,15 @@
+{
+  "name": "typesxml",
+  "productName": "TypesXML",
+  "version": "1.0.0",
+  "description": "Open source XML library written in TypeScript",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "Rodolfo M. Raya",
+  "license": "EPL-1.0",
+  "devDependencies": {
+    "typescript": "^4.5.4"
+  }
+}
