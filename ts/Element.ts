@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { Attribute } from "./Attribute";
+import { CData } from "./CData";
 import { Comment } from "./Comment";
 import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
@@ -65,7 +66,16 @@ export class Element implements XMLNode {
     }
 
     addString(text: string): void {
-        this.content.push(new TextNode(text));
+        this.addTextNode(new TextNode(text));
+    }
+
+    addTextNode(node: TextNode): void {
+        if (this.content.length > 0 && this.content[this.content.length - 1].getNodeType() === TextNode.TEXT_NODE) {
+            let lastNode: TextNode = this.content[this.content.length - 1] as TextNode;
+            lastNode.setValue(lastNode.getValue() + node.getValue());
+            return;
+        }
+        this.content.push(node);
     }
 
     addElement(node: Element): void {
@@ -77,6 +87,10 @@ export class Element implements XMLNode {
     }
 
     addProcessingInstruction(node: ProcessingInstruction): void {
+        this.content.push(node);
+    }
+
+    addCData(node: CData): void {
         this.content.push(node);
     }
 
@@ -95,8 +109,9 @@ export class Element implements XMLNode {
     toString(): string {
         let result: string = '<' + this.name;
         this.attributes.forEach((value: Attribute) => {
-            result += '' + value.toString();
+            result += ' ' + value.toString();
         });
+        result += '>';
         if (this.content.length > 0) {
             this.content.forEach((value: XMLNode) => {
                 result += value.toString();
