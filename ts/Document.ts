@@ -120,11 +120,15 @@ export class Document implements XMLNode {
                 || this.encoding !== node.encoding || this.content.length !== node.content.length || this.entities.size !== node.entities.size) {
                 return false;
             }
-            this.entities.forEach((value, key) => {
+            let sameEntities: boolean = true;
+            this.entities.forEach((value: string, key: string) => {
                 if (value !== node.entities.get(key)) {
-                    return false;
+                    sameEntities = false;
                 }
             });
+            if (!sameEntities) {
+                return false;
+            }
             for (let i = 0; i < this.content.length; i++) {
                 if (!this.content[i].equals(node.content[i])) {
                     return false;
