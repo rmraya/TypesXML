@@ -6,8 +6,9 @@
         "noImplicitAny": true,
         "allowUnreachableCode": false,
         "noImplicitThis": true,
-        "sourceMap": false,
-        "outDir": "js",
+        "sourceMap": true,
+        "declaration": true,
+        "outDir": "./dist",
         "baseUrl": ".",
         "paths": {
             "*": [

@@ -8,6 +8,11 @@
   },
   "author": "Rodolfo M. Raya",
   "license": "EPL-1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "/dist"
+  ],
   "devDependencies": {
     "@types/node": "^17.0.8",
     "typescript": "^4.5.4"
