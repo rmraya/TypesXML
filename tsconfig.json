@@ -4,6 +4,8 @@
         "moduleResolution": "node",
         "module": "CommonJS",
         "noImplicitAny": true,
+        "allowUnreachableCode": false,
+        "noImplicitThis": true,
         "sourceMap": false,
         "outDir": "js",
         "baseUrl": ".",

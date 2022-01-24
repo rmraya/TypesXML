@@ -46,11 +46,8 @@ export class Element implements XMLNode {
         return this.attributes.has(name);
     }
 
-    getAttribute(name: string): Attribute | null {
-        if (this.attributes.has(name)) {
-            return this.attributes.get(name);
-        }
-        return null;
+    getAttribute(name: string): Attribute {
+        return this.attributes.get(name);
     }
 
     setAttribute(attribute: Attribute) {
@@ -127,15 +124,16 @@ export class Element implements XMLNode {
             if (this.name !== node.name || this.attributes.size !== node.attributes.size || this.content.length !== node.content.length) {
                 return false;
             }
-            this.attributes.forEach((att) => {
-                let other: Attribute | null = node.getAttribute(att.getName());
-                if (other === null) {
-                    return false;
-                }
-                if (att.getValue() !== other.getValue()) {
-                    return false;
+            let sameAttributes: boolean = true;
+            this.attributes.forEach((att: Attribute, key: string) => {
+                let other: Attribute = node.getAttribute(key);
+                if (other === undefined || att.getValue() !== other.getValue()) {
+                    sameAttributes = false;
                 }
             });
+            if (!sameAttributes) {
+                return false;
+            }
             for (let i = 0; i < this.content.length; i++) {
                 if (!this.content[i].equals(node.content[i])) {
                     return false;
@@ -145,5 +143,4 @@ export class Element implements XMLNode {
         }
         return false;
     }
-
 }
