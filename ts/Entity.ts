@@ -15,7 +15,7 @@ import { XMLUtils } from "./XMLUtils";
 
 export class Entity implements XMLNode {
 
-    static readonly ENTITY_NODE: number = 6;
+    static readonly ENTITY_NODE: number = 7;
 
     private name: string;
     private value: string;
