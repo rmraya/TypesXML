@@ -20,4 +20,9 @@ export class XMLUtils {
     static unquote(text: string): string {
         return text.replace('"', '&quot;');
     }
+
+    static normalizeLines(text: string) {
+        let result: string = text.replace('\r\n', '\n');
+        return result.replace('\r', '\n');
+    }
 }

@@ -14,6 +14,8 @@ export { Attribute } from './Attribute';
 export { CData } from './CData';
 export { Comment } from './Comment';
 export { Document } from './Document';
+export { DocumentType } from './DocumentType';
+export { Entity } from './Entity';
 export { Element } from './Element';
 export { ProcessingInstruction } from './ProcessingInstruction';
 export { TextNode } from './TextNode';
