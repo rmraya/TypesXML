@@ -10,8 +10,11 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLNode } from "./XMLNode";
+import { Comment } from "./Comment";
 import { Element } from "./Element";
+import { ProcessingInstruction } from "./ProcessingInstruction";
+import { TextNode } from "./TextNode";
+import { XMLNode } from "./XMLNode";
 
 export class Document implements XMLNode {
 
@@ -88,6 +91,18 @@ export class Document implements XMLNode {
 
     getInternalSubSet(): string {
         return this.internalSubSet;
+    }
+
+    addComment(comment: Comment): void {
+        this.content.push(comment);
+    }
+
+    addProcessingInstrution(pi: ProcessingInstruction): void {
+        this.content.push(pi);
+    }
+
+    addTextNode(node: TextNode): void {
+        this.content.push(node);
     }
 
     getNodeType(): number {

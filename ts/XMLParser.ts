@@ -12,17 +12,21 @@
 
 import { readFile } from 'fs';
 import { Attribute } from './Attribute';
+import { Comment } from './Comment';
 import { Document } from "./Document";
+import { ProcessingInstruction } from './ProcessingInstruction';
+import { TextNode } from './TextNode';
+import { XMLDeclaration } from './XMLDeclaration';
+import { XMLNode } from './XMLNode';
 
 export class XMLParser {
 
-    source: string;
-    pointer: number;
-    document: Document;
-    xmlVersion: string;
-    xmlEncoding: string;
-    xmlStandalone: string;
-    inProlog: boolean;
+    private source: string;
+    private pointer: number;
+    private document: Document;
+    private inProlog: boolean;
+    private prologContent: Array<XMLNode>;
+    private xmlDeclaration: XMLDeclaration;
 
     constructor() {
         this.source = '';
@@ -49,25 +53,27 @@ export class XMLParser {
 
     readProlog(): void {
         this.inProlog = true;
+        this.prologContent = new Array();
         while (this.inProlog) {
             if (this.lookingAt('<?xml')) {
                 this.parseXMLDecl();
                 continue;
             }
             if (this.lookingAt('<!DOCTYPE')) {
-                // TODO
+                this.parseDoctype();
                 continue;
             }
             if (this.lookingAt('<?') && !this.lookingAt('<?xml')) {
-                // TODO
+                this.parseProcessingInstruction();
                 continue;
             }
             if (this.lookingAt('<!--')) {
-                // TODO
+                this.parseComment();
                 continue;
             }
             let char: string = this.source.charAt(this.pointer);
-            if (this.isSpace(char)) {
+            if (this.isXmlSpace(char)) {
+                this.prologContent.push(new TextNode(char));
                 this.pointer++;
                 continue;
             }
@@ -93,22 +99,70 @@ export class XMLParser {
         if (index === -1) {
             throw new Error('Malformed XML declaration');
         }
-        let xmlDeclaration = this.source.substring(this.pointer, this.pointer + index + '?>'.length);
-        this.pointer += xmlDeclaration.length;
+        let declarationText = this.source.substring(this.pointer, this.pointer + index + '?>'.length);
+        this.pointer += declarationText.length;
+        this.xmlDeclaration = new XMLDeclaration();
         try {
-            let attributesPortion = xmlDeclaration.substring('<?xml'.length, xmlDeclaration.length - '?>'.length);
+            let attributesPortion = declarationText.substring('<?xml'.length, declarationText.length - '?>'.length);
             let atts: Map<string, Attribute> = this.parseAttributes(attributesPortion);
             if (atts.has('version')) {
-                this.xmlVersion = atts.get('version').getValue();
+                this.xmlDeclaration.setVersion(atts.get('version').getValue());
             }
             if (atts.has('encoding')) {
-                this.xmlEncoding = atts.get('encoding').getValue();
+                this.xmlDeclaration.setEncoding(atts.get('encoding').getValue());
             }
             if (atts.has('standalone')) {
-                this.xmlStandalone = atts.get('standalone').getValue();
+                this.xmlDeclaration.setStandalone(atts.get('standalone').getValue());
             }
         } catch (e) {
-            throw new Error("Malformed XML declaration: " + xmlDeclaration);
+            throw new Error("Malformed XML declaration: " + declarationText);
+        }
+    }
+
+    parseComment(): void {
+        let index: number = this.source.indexOf('-->', this.pointer);
+        if (index === -1) {
+            throw new Error('Malformed XML comment');
+        }
+        let content: string = this.source.substring(this.pointer, this.pointer + index + '-->'.length);
+        this.pointer += content.length;
+        let comment: Comment = new Comment(content.substring('<!--'.length));
+        if (this.inProlog) {
+            this.prologContent.push(comment);
+        } else {
+            this.document.addComment(comment);
+        }
+    }
+
+    parseProcessingInstruction(): void {
+        let index: number = this.source.indexOf('?>', this.pointer);
+        if (index === -1) {
+            throw new Error('Malformed Processing Instruction');
+        }
+        let instructionText = this.source.substring(this.pointer, this.pointer + index + '?>'.length);
+        this.pointer += instructionText.length;
+        instructionText.substring('<?'.length);
+        let target: string = '';
+        let i: number = 0;
+        for (; i < instructionText.length; i++) {
+            let char: string = instructionText[i];
+            if (this.isXmlSpace(char)) {
+                break;
+            }
+            target += char;
+        }
+        for (; instructionText.length; i++) {
+            let char: string = instructionText[i];
+            if (!this.isXmlSpace(char)) {
+                break;
+            }
+        }
+        let value: string = instructionText.substring(i);
+        let pi: ProcessingInstruction = new ProcessingInstruction(target, value);
+        if (this.inProlog) {
+            this.prologContent.push(pi);
+        } else {
+            this.document.addProcessingInstrution(pi);
         }
     }
 
@@ -120,7 +174,7 @@ export class XMLParser {
         let separator: string = '';
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
-            if (inName && !(this.isSpace(char) || '=' === char)) {
+            if (inName && !(this.isXmlSpace(char) || '=' === char)) {
                 // still in name
                 continue;
             }
@@ -149,7 +203,27 @@ export class XMLParser {
         return attributes;
     }
 
-    isSpace(char: string): boolean {
+    parseDoctype(): void {
+        let stack: number = 0;
+        let i = this.pointer
+        for (; i < this.source.length; i++) {
+            let char: string = this.source[i];
+            if ('<' === char) {
+                stack++;
+            }
+            if ('>' === char) {
+                stack--;
+                if (stack === 0) {
+                    break;
+                }
+            }
+        }
+        let declaration: string = this.source.substring(this.pointer, i);
+        this.pointer += declaration.length;
+        // TODO parse declaration
+    }
+
+    isXmlSpace(char: string): boolean {
         return char.charCodeAt(0) === 0x20 || char.charCodeAt(0) === 0x9 || char.charCodeAt(0) === 0xA;
     }
 }

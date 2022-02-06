@@ -19,6 +19,7 @@ export { Element } from './Element';
 export { Entity } from './Entity';
 export { ProcessingInstruction } from './ProcessingInstruction';
 export { TextNode } from './TextNode';
+export { XMLDeclaration } from './XMLDeclaration';
 export { XMLNode } from './XMLNode';
 export { XMLParser } from './XMLParser';
 export { XMLUtils } from './XMLUtils';
