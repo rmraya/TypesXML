@@ -13,6 +13,10 @@
   "files": [
     "/dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rmraya/TypesXML.git"
+  },
   "devDependencies": {
     "@types/node": "^17.0.14",
     "typescript": "^4.5.5"
