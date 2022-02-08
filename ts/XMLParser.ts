@@ -10,10 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { readFile } from 'fs';
 import { Attribute } from './Attribute';
 import { Comment } from './Comment';
 import { Document } from "./Document";
+import { Element } from './Element';
 import { ProcessingInstruction } from './ProcessingInstruction';
 import { TextNode } from './TextNode';
 import { XMLDeclaration } from './XMLDeclaration';
@@ -27,33 +27,25 @@ export class XMLParser {
     private inProlog: boolean;
     private prologContent: Array<XMLNode>;
     private xmlDeclaration: XMLDeclaration;
+    private stack: Element[];
+    private currentElement: Element;
 
     constructor() {
         this.source = '';
         this.pointer = 0;
+        this.stack = [];
     }
 
-    parseString(source: string): Document {
+    parse(source: string): Document {
         this.source = source;
         this.readProlog();
         this.readDocument();
         return this.document;
     }
 
-    parseFile(file: string): Document {
-        // TODO get encoding from BOM
-        readFile(file, 'utf8', (error: NodeJS.ErrnoException, data: string) => {
-            if (error) {
-                throw error;
-            }
-            this.parseString(data);
-        });
-        return this.document;
-    }
-
     readProlog(): void {
         this.inProlog = true;
-        this.prologContent = new Array();
+        this.prologContent = new Array<XMLNode>();
         while (this.inProlog) {
             if (this.lookingAt('<?xml')) {
                 this.parseXMLDecl();
@@ -82,7 +74,28 @@ export class XMLParser {
     }
 
     readDocument(): void {
-        // TODO
+        let inDocument: boolean = true;
+        while (inDocument) {
+            if (this.lookingAt('<!--')) {
+                this.parseComment();
+                continue;
+            }
+            if (this.lookingAt('<?')) {
+                this.parseProcessingInstruction();
+                continue;
+            }
+            if (this.lookingAt('<')) {
+                this.parseRoot();
+                continue;
+            }
+            let char: string = this.source.charAt(this.pointer);
+            if (this.isXmlSpace(char)) {
+                this.document.addTextNode(new TextNode(char));
+                this.pointer++;
+                continue;
+            }
+            inDocument = false;
+        }
     }
 
     lookingAt(text: string): boolean {
@@ -92,6 +105,104 @@ export class XMLParser {
             }
         }
         return true;
+    }
+
+    parseRoot(): void {
+        let rootName: string = '';
+        let i = this.pointer + 1;
+        for (; !(this.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
+            rootName += this.source[i];
+        }
+        this.document = new Document(rootName, this.xmlDeclaration, this.prologContent);
+        let attributesPortion: string = '';
+        for (; !(this.source[i] === '/' || this.source[i] === '>'); i++) {
+            attributesPortion += this.source[i];
+        }
+        let atts: Map<string, Attribute> = this.parseAttributes(attributesPortion);
+        atts.forEach((value: Attribute) => {
+            this.document.getRoot().setAttribute(value);
+        });
+        this.pointer = this.source.indexOf('>', this.pointer) + 1;
+        let isEmpty: boolean = this.source[this.pointer - 1] === '/';
+        if (!isEmpty) {
+            this.stack.push(this.document.getRoot());
+            this.currentElement = this.document.getRoot();
+            this.parseElement();
+        }
+    }
+
+    startElement() {
+        let name: string = '';
+        let i = this.pointer + 1;
+        for (; !(this.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
+            name += this.source[i];
+        }
+        let element: Element = new Element(name);
+        let attributesPortion: string = '';
+        for (; !(this.source[i] === '/' || this.source[i] === '>'); i++) {
+            attributesPortion += this.source[i];
+        }
+        let atts: Map<string, Attribute> = this.parseAttributes(attributesPortion);
+        atts.forEach((value: Attribute) => {
+            element.setAttribute(value);
+        });
+        this.currentElement.addElement(element);
+        this.pointer = this.source.indexOf('>', this.pointer) + 1;
+        let isEmpty: boolean = this.source[this.pointer - 2] === '/';
+        if (!isEmpty) {
+            this.stack.push(element);
+            this.currentElement = element;
+            this.parseElement();
+        }
+    }
+
+    parseElement(): void {
+        let inElement: boolean = true;
+        while (inElement) {
+            if (this.lookingAt('</')) {
+                this.endElement();
+                return;
+            }
+            if (this.lookingAt('<!--')) {
+                this.parseComment();
+                continue;
+            }
+            if (this.lookingAt('<?')) {
+                this.parseProcessingInstruction();
+                continue;
+            }
+            if (this.lookingAt('<![CDATA[')) {
+                this.parseCData();
+                continue;
+            }
+            if (this.lookingAt('<')) {
+                this.startElement();
+                continue;
+            }
+            if (this.pointer < this.source.length) {
+                let index = this.source.indexOf('<', this.pointer);
+                if (index !== -1) {
+                    let text: string = this.source.substring(this.pointer, index);
+                    this.currentElement.addString(text);
+                    this.pointer += text.length
+                    continue;
+                }
+            }
+            inElement = false;
+        }
+        throw new Error('Error parsing element');
+    }
+
+    endElement(): void {
+        if (this.lookingAt('</' + this.currentElement.getName() + '>')) {
+            this.pointer += ('</' + this.currentElement.getName() + '>').length;
+            this.stack.pop(); // get rid of the element we are closing
+            if (this.stack.length > 0) {
+                this.currentElement = this.stack[this.stack.length - 1];
+            }
+            return;
+        }
+        throw new Error('Malformed element');
     }
 
     parseXMLDecl(): void {
@@ -124,13 +235,17 @@ export class XMLParser {
         if (index === -1) {
             throw new Error('Malformed XML comment');
         }
-        let content: string = this.source.substring(this.pointer, this.pointer + index + '-->'.length);
+        let content: string = this.source.substring(this.pointer, index + '-->'.length);
         this.pointer += content.length;
-        let comment: Comment = new Comment(content.substring('<!--'.length));
+        let comment: Comment = new Comment(content.substring('<!--'.length, content.length - '-->'.length));
         if (this.inProlog) {
             this.prologContent.push(comment);
         } else {
-            this.document.addComment(comment);
+            if (this.stack.length === 0) {
+                this.document.addComment(comment);
+            } else {
+                this.currentElement.addComment(comment);
+            }
         }
     }
 
@@ -162,7 +277,11 @@ export class XMLParser {
         if (this.inProlog) {
             this.prologContent.push(pi);
         } else {
-            this.document.addProcessingInstrution(pi);
+            if (this.stack.length === 0) {
+                this.document.addProcessingInstruction(pi);
+            } else {
+                this.currentElement.addProcessingInstruction(pi);
+            }
         }
     }
 
@@ -170,25 +289,30 @@ export class XMLParser {
         let attributes: Map<string, Attribute> = new Map();
         let text: string = original.trim();
         let pairs: string[] = [];
-        let inName = true;
         let separator: string = '';
-        for (let i = 0; i < text.length; i++) {
-            let char = text[i];
-            if (inName && !(this.isXmlSpace(char) || '=' === char)) {
-                // still in name
-                continue;
+        while (text.indexOf('=') != -1) {
+            let i: number = 0;
+            for (; i < text.length; i++) {
+                let char = text[i];
+                if (this.isXmlSpace(char) || '=' === char) {
+                    break;
+                }
             }
-            inName = false;
-            if (char !== separator) {
-                //still in value
+            for (; i < text.length; i++) {
+                let char = text[i];
                 if (separator === '' && ('\'' === char || '"' === char)) {
                     separator = char;
+                    continue;
                 }
-                continue;
+                if (char === separator) {
+                    break;
+                }
             }
             // end of value
-            pairs.push(text.substring(0, i + 1).trim());
-            text = text.substring(i + 1).trim();
+            let pair = text.substring(0, i + 1).trim();
+            pairs.push(pair);
+            text = text.substring(pair.length).trim();
+            separator = '';
         }
         for (let i = 0; i < pairs.length; i++) {
             let pair: string = pairs[i];
@@ -221,6 +345,10 @@ export class XMLParser {
         let declaration: string = this.source.substring(this.pointer, i);
         this.pointer += declaration.length;
         // TODO parse declaration
+    }
+
+    parseCData(): void {
+        // TODO
     }
 
     isXmlSpace(char: string): boolean {

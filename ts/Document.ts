@@ -14,90 +14,36 @@ import { Comment } from "./Comment";
 import { Element } from "./Element";
 import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
+import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLNode } from "./XMLNode";
 
 export class Document implements XMLNode {
 
     static readonly DOCUMENT_NODE: number = 0;
 
-    private systemId: string;
-    private publicId: string;
+    xmlDeclaration: XMLDeclaration;
     private root: Element;
-    private internalSubSet: string;
-    private entities: Map<string, string>;
-    private encoding: string;
     private content: Array<XMLNode>;
 
-    constructor(name: string, systemId: string, publicId: string) {
-        this.systemId = systemId;
-        this.publicId = publicId;
-        this.root = new Element(name);
+    constructor(name: string, xmlDeclaration: XMLDeclaration, prologContent: Array<XMLNode>) {
+        this.xmlDeclaration = xmlDeclaration;
         this.content = new Array();
-        this.content.push(this.root);
-        this.internalSubSet = '';
-        this.entities = new Map();
-        this.encoding = 'UTF-8';
-    }
-
-    setRoot(root: Element): void {
-        this.root = root;
-        for (let i = 0; i < this.content.length; i++) {
-            if (this.content[i].getNodeType() === Element.ELEMENT_NODE) {
-                this.content.splice(i, 1, root);
-                break;
-            }
+        for (let i = 0; i < prologContent.length; i++) {
+            this.content.push(prologContent[i]);
         }
+        this.root = new Element(name);
+        this.content.push(this.root);
     }
 
     getRoot(): Element {
         return this.root;
     }
 
-    setSystemId(systemId: string): void {
-        this.systemId = systemId;
-    }
-
-    getSystemId(): string {
-        return this.systemId;
-    }
-
-    setPublicId(publicId: string): void {
-        this.publicId = publicId;
-    }
-
-    getPublicId(): string {
-        return this.publicId;
-    }
-
-    setEncoding(encoding: string): void {
-        this.encoding = encoding;
-    }
-
-    getEncoding(): string {
-        return this.encoding;
-    }
-
-    setEntities(entities: Map<string, string>): void {
-        this.entities = entities;
-    }
-
-    getEntities(): Map<string, string> {
-        return this.entities;
-    }
-
-    setInternalSubSet(internalSubSet: string): void {
-        this.internalSubSet = internalSubSet;
-    }
-
-    getInternalSubSet(): string {
-        return this.internalSubSet;
-    }
-
     addComment(comment: Comment): void {
         this.content.push(comment);
     }
 
-    addProcessingInstrution(pi: ProcessingInstruction): void {
+    addProcessingInstruction(pi: ProcessingInstruction): void {
         this.content.push(pi);
     }
 
@@ -110,18 +56,7 @@ export class Document implements XMLNode {
     }
 
     toString(): string {
-        let result: string = '<?xml version="1.0" encoding="' + this.encoding + '"?>\n';
-        if (this.systemId !== '' || this.publicId !== '') {
-            result += '<!DOCTYPE ' + this.root.getName();
-            if (this.publicId !== '' && this.systemId !== '') {
-                result += ' PUBLIC "' + this.publicId + '" "' + this.systemId + '"'
-            }
-            if (this.systemId !== '' && this.publicId === '') {
-                result += ' SYSTEM "' + this.systemId + '"';
-            }
-            result += '>\n';
-        }
-        // TODO handle internal subset and entities
+        let result: string = this.xmlDeclaration ? this.xmlDeclaration.toString() : '';
         this.content.forEach((value: XMLNode) => {
             result += value.toString();
         });
@@ -131,17 +66,7 @@ export class Document implements XMLNode {
     equals(obj: XMLNode): boolean {
         if (obj instanceof Document) {
             let node = obj as Document;
-            if (this.systemId !== node.systemId || this.publicId !== node.publicId || this.internalSubSet !== node.internalSubSet
-                || this.encoding !== node.encoding || this.content.length !== node.content.length || this.entities.size !== node.entities.size) {
-                return false;
-            }
-            let sameEntities: boolean = true;
-            this.entities.forEach((value: string, key: string) => {
-                if (value !== node.entities.get(key)) {
-                    sameEntities = false;
-                }
-            });
-            if (!sameEntities) {
+            if (this.xmlDeclaration !== node.xmlDeclaration || this.content.length !== node.content.length) {
                 return false;
             }
             for (let i = 0; i < this.content.length; i++) {
