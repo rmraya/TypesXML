@@ -10,7 +10,7 @@ class Test {
 
     constructor() {
         try {
-            readFile('sample.xml', 'default.srx', 'utf-8', (err, data) => {
+            readFile('sample.xml', 'utf-8', (err, data) => {
                 if (err) {
                     throw new Error(err.message);
                 }
