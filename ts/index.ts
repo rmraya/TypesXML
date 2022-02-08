@@ -16,7 +16,7 @@ export { Comment } from './Comment';
 export { Document } from './Document';
 export { DocumentType } from './DocumentType';
 export { Element } from './Element';
-export { Entity } from './Entity';
+export { EntityDecl } from './dtd/EntityDecl';
 export { ProcessingInstruction } from './ProcessingInstruction';
 export { TextNode } from './TextNode';
 export { XMLDeclaration } from './XMLDeclaration';

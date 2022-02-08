@@ -10,10 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
+import { XMLNode } from "../XMLNode";
+import { XMLUtils } from "../XMLUtils";
 
-export class Entity implements XMLNode {
+export class EntityDecl implements XMLNode {
 
     static readonly ENTITY_NODE: number = 7;
 
@@ -34,7 +34,7 @@ export class Entity implements XMLNode {
     }
 
     getNodeType(): number {
-        return Entity.ENTITY_NODE;
+        return EntityDecl.ENTITY_NODE;
     }
 
     toString(): string {
@@ -42,8 +42,8 @@ export class Entity implements XMLNode {
     }
 
     equals(obj: XMLNode): boolean {
-        if (obj instanceof Entity) {
-            let node = obj as Entity;
+        if (obj instanceof EntityDecl) {
+            let node = obj as EntityDecl;
             return this.name === node.name && this.value === node.value;
         }
         return false;
