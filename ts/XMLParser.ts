@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { Attribute } from './Attribute';
+import { CData } from './CData';
 import { Comment } from './Comment';
 import { Document } from "./Document";
 import { Element } from './Element';
@@ -348,7 +349,14 @@ export class XMLParser {
     }
 
     parseCData(): void {
-        // TODO
+        let index: number = this.source.indexOf(']]>', this.pointer);
+        if (index === -1) {
+            throw new Error('Malformed CData');
+        }
+        let instructionText = this.source.substring(this.pointer, this.pointer + index + ']]>'.length);
+        this.pointer += instructionText.length;
+        instructionText = instructionText.substring('<![CDATA['.length, instructionText.length - ']]>'.length);
+        this.currentElement.addCData(new CData(instructionText));
     }
 
     isXmlSpace(char: string): boolean {

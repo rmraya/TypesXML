@@ -27,8 +27,7 @@ export class XMLUtils {
     }
 
     static normalizeSpaces(text: string): string {
-        let regExp: RegExp = new RegExp('[\r\n\t]', 's');
-        return text.replace(regExp, ' ');
+        return text.replace(new RegExp('[\r\n\t]', 's'), ' ');
     }
 
     static validXmlChars(text: string): string {
