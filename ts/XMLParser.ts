@@ -19,6 +19,7 @@ import { ProcessingInstruction } from './ProcessingInstruction';
 import { TextNode } from './TextNode';
 import { XMLDeclaration } from './XMLDeclaration';
 import { XMLNode } from './XMLNode';
+import { XMLUtils } from './XMLUtils';
 
 export class XMLParser {
 
@@ -65,7 +66,7 @@ export class XMLParser {
                 continue;
             }
             let char: string = this.source.charAt(this.pointer);
-            if (this.isXmlSpace(char)) {
+            if (XMLUtils.isXmlSpace(char)) {
                 this.prologContent.push(new TextNode(char));
                 this.pointer++;
                 continue;
@@ -90,7 +91,7 @@ export class XMLParser {
                 continue;
             }
             let char: string = this.source.charAt(this.pointer);
-            if (this.isXmlSpace(char)) {
+            if (XMLUtils.isXmlSpace(char)) {
                 this.document.addTextNode(new TextNode(char));
                 this.pointer++;
                 continue;
@@ -111,7 +112,7 @@ export class XMLParser {
     parseRoot(): void {
         let rootName: string = '';
         let i = this.pointer + 1;
-        for (; !(this.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
+        for (; !(XMLUtils.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
             rootName += this.source[i];
         }
         this.document = new Document(rootName, this.xmlDeclaration, this.prologContent);
@@ -135,7 +136,7 @@ export class XMLParser {
     startElement() {
         let name: string = '';
         let i = this.pointer + 1;
-        for (; !(this.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
+        for (; !(XMLUtils.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
             name += this.source[i];
         }
         let element: Element = new Element(name);
@@ -262,14 +263,14 @@ export class XMLParser {
         let i: number = 0;
         for (; i < instructionText.length; i++) {
             let char: string = instructionText[i];
-            if (this.isXmlSpace(char)) {
+            if (XMLUtils.isXmlSpace(char)) {
                 break;
             }
             target += char;
         }
         for (; instructionText.length; i++) {
             let char: string = instructionText[i];
-            if (!this.isXmlSpace(char)) {
+            if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
         }
@@ -295,7 +296,7 @@ export class XMLParser {
             let i: number = 0;
             for (; i < text.length; i++) {
                 let char = text[i];
-                if (this.isXmlSpace(char) || '=' === char) {
+                if (XMLUtils.isXmlSpace(char) || '=' === char) {
                     break;
                 }
             }
@@ -357,9 +358,5 @@ export class XMLParser {
         this.pointer += instructionText.length;
         instructionText = instructionText.substring('<![CDATA['.length, instructionText.length - ']]>'.length);
         this.currentElement.addCData(new CData(instructionText));
-    }
-
-    isXmlSpace(char: string): boolean {
-        return char.charCodeAt(0) === 0x20 || char.charCodeAt(0) === 0x9 || char.charCodeAt(0) === 0xA;
     }
 }

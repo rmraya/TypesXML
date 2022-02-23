@@ -18,7 +18,9 @@ export class AttlistDecl implements XMLNode {
 
     private listName: string;
 
-    
+    constructor(declaration: string) {
+
+    }
 
     getNodeType(): number {
         return AttlistDecl.ATTRIBUTE_DECL_NODE;

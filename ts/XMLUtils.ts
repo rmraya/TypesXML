@@ -26,6 +26,10 @@ export class XMLUtils {
         return result.replace('\r', '\n');
     }
 
+    static isXmlSpace(char: string): boolean {
+        return char.charCodeAt(0) === 0x20 || char.charCodeAt(0) === 0x9 || char.charCodeAt(0) === 0xA;
+    }
+
     static normalizeSpaces(text: string): string {
         return text.replace(new RegExp('[\r\n\t]', 's'), ' ');
     }

@@ -20,9 +20,25 @@ export class EntityDecl implements XMLNode {
     private name: string;
     private value: string;
 
-    constructor(name: string, value: string) {
-        this.name = name;
-        this.value = value;
+    constructor(declaration: string) {
+        this.name = '';
+        let i: number = '<!ENTITY'.length;
+        let char: string = declaration.charAt(i);
+        while (XMLUtils.isXmlSpace(char)) {
+            i++;
+            char = declaration.charAt(i);
+        }
+        while (!XMLUtils.isXmlSpace(char)) {
+            this.name += char;
+            i++;
+            char = declaration.charAt(i);
+        }
+
+        // TODO check if this is an extrnal entity declaration using SYSTEM or PUBLIC 
+
+        let start: number = declaration.indexOf('"', i);
+        let end: number = declaration.indexOf('"', start + 1);
+        this.value = declaration.substring(start, end);
     }
 
     getName(): string {

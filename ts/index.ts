@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 export { Attribute } from './Attribute';
+export {AttlistDecl} from './dtd/AttlistDecl';
 export { CData } from './CData';
 export { Comment } from './Comment';
 export { Document } from './Document';
