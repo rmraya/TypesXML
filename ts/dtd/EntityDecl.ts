@@ -15,10 +15,11 @@ import { XMLUtils } from "../XMLUtils";
 
 export class EntityDecl implements XMLNode {
 
-    static readonly ENTITY_NODE: number = 7;
+    static readonly ENTITY_DECL_NODE: number = 7;
 
     private name: string;
     private value: string;
+    private type: string;
 
     constructor(declaration: string) {
         this.name = '';
@@ -33,12 +34,18 @@ export class EntityDecl implements XMLNode {
             i++;
             char = declaration.charAt(i);
         }
-
-        // TODO check if this is an extrnal entity declaration using SYSTEM or PUBLIC 
-
-        let start: number = declaration.indexOf('"', i);
-        let end: number = declaration.indexOf('"', start + 1);
-        this.value = declaration.substring(start, end);
+        if (declaration.indexOf('SYSTEM') !== -1) {
+            this.type = 'SYSTEM';
+            // TODO
+        } else if (declaration.indexOf('PUBLIC') !== -1) {
+            this.type = 'PUBLIC';
+            // TODO
+        } else {
+            this.type = 'DEFAULT';
+            let start: number = declaration.indexOf('"', i);
+            let end: number = declaration.indexOf('"', start + 1);
+            this.value = declaration.substring(start, end);
+        }
     }
 
     getName(): string {
@@ -50,17 +57,18 @@ export class EntityDecl implements XMLNode {
     }
 
     getNodeType(): number {
-        return EntityDecl.ENTITY_NODE;
+        return EntityDecl.ENTITY_DECL_NODE;
     }
 
     toString(): string {
+        // TODO support SYTEM and PUBLIC
         return '<!ENTITY ' + this.name + ' "' + XMLUtils.unquote(XMLUtils.cleanString(this.value)) + '">'
     }
 
     equals(obj: XMLNode): boolean {
         if (obj instanceof EntityDecl) {
             let node = obj as EntityDecl;
-            return this.name === node.name && this.value === node.value;
+            return this.name === node.name && this.type === node.type && this.value === node.value;
         }
         return false;
     }

@@ -13,30 +13,29 @@
 import { XMLUtils } from "../XMLUtils";
 import { XMLNode } from "../XMLNode";
 
-export class AttlistDecl implements XMLNode {
+export class NotationDecl implements XMLNode {
 
-    static readonly ATTRIBUTE_DECL_NODE: number = 9;
+    static readonly NOTATION_DECL_NODE: number = 11;
 
-    private listName: string;
+    private name: string;
 
     constructor(declaration: string) {
-        this.listName = '';
-        let i: number = '<!ATTLIST'.length;
+        this.name = '';
+        let i: number = '<!NOTATION'.length;
         let char: string = declaration.charAt(i);
         while (XMLUtils.isXmlSpace(char)) {
             i++;
             char = declaration.charAt(i);
         }
         while (!XMLUtils.isXmlSpace(char)) {
-            this.listName += char;
+            this.name += char;
             i++;
             char = declaration.charAt(i);
         }
-
     }
 
     getNodeType(): number {
-        return AttlistDecl.ATTRIBUTE_DECL_NODE;
+        return NotationDecl.NOTATION_DECL_NODE;
     }
 
     toString(): string {
