@@ -14,6 +14,7 @@ import { Attribute } from './Attribute';
 import { CData } from './CData';
 import { Comment } from './Comment';
 import { Document } from "./Document";
+import { DocumentType } from './DocumentType';
 import { Element } from './Element';
 import { ProcessingInstruction } from './ProcessingInstruction';
 import { TextNode } from './TextNode';
@@ -49,7 +50,7 @@ export class XMLParser {
         this.inProlog = true;
         this.prologContent = new Array<XMLNode>();
         while (this.inProlog) {
-            if (this.lookingAt('<?xml')) {
+            if (this.lookingAt('<?xml ') || this.lookingAt('<?xml\t') || this.lookingAt('<?xml\r') || this.lookingAt('<?xml\n')) {
                 this.parseXMLDecl();
                 continue;
             }
@@ -57,7 +58,7 @@ export class XMLParser {
                 this.parseDoctype();
                 continue;
             }
-            if (this.lookingAt('<?') && !this.lookingAt('<?xml')) {
+            if (this.lookingAt('<?')) {
                 this.parseProcessingInstruction();
                 continue;
             }
@@ -67,7 +68,12 @@ export class XMLParser {
             }
             let char: string = this.source.charAt(this.pointer);
             if (XMLUtils.isXmlSpace(char)) {
-                this.prologContent.push(new TextNode(char));
+                if (this.prologContent.length > 0 && this.prologContent[this.prologContent.length - 1].getNodeType() === TextNode.TEXT_NODE) {
+                    let lastNode: TextNode = this.prologContent[this.prologContent.length - 1] as TextNode;
+                    lastNode.setValue(lastNode.getValue() + char);
+                } else {
+                    this.prologContent.push(new TextNode(char));
+                }
                 this.pointer++;
                 continue;
             }
@@ -212,24 +218,9 @@ export class XMLParser {
         if (index === -1) {
             throw new Error('Malformed XML declaration');
         }
-        let declarationText = this.source.substring(this.pointer, this.pointer + index + '?>'.length);
-        this.pointer += declarationText.length;
-        this.xmlDeclaration = new XMLDeclaration();
-        try {
-            let attributesPortion = declarationText.substring('<?xml'.length, declarationText.length - '?>'.length);
-            let atts: Map<string, Attribute> = this.parseAttributes(attributesPortion);
-            if (atts.has('version')) {
-                this.xmlDeclaration.setVersion(atts.get('version').getValue());
-            }
-            if (atts.has('encoding')) {
-                this.xmlDeclaration.setEncoding(atts.get('encoding').getValue());
-            }
-            if (atts.has('standalone')) {
-                this.xmlDeclaration.setStandalone(atts.get('standalone').getValue());
-            }
-        } catch (e) {
-            throw new Error("Malformed XML declaration: " + declarationText);
-        }
+        let declaration: string = this.source.substring(this.pointer, this.pointer + index + '?>'.length);
+        this.xmlDeclaration = new XMLDeclaration(declaration);
+        this.pointer += declaration.length;
     }
 
     parseComment(): void {
@@ -344,9 +335,9 @@ export class XMLParser {
                 }
             }
         }
-        let declaration: string = this.source.substring(this.pointer, i);
+        let declaration: string = this.source.substring(this.pointer, i + 1);
+        this.prologContent.push(new DocumentType(declaration));
         this.pointer += declaration.length;
-        // TODO parse declaration
     }
 
     parseCData(): void {
@@ -355,8 +346,8 @@ export class XMLParser {
             throw new Error('Malformed CData');
         }
         let instructionText = this.source.substring(this.pointer, this.pointer + index + ']]>'.length);
-        this.pointer += instructionText.length;
         instructionText = instructionText.substring('<![CDATA['.length, instructionText.length - ']]>'.length);
         this.currentElement.addCData(new CData(instructionText));
+        this.pointer += instructionText.length;
     }
 }

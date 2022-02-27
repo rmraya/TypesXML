@@ -56,4 +56,12 @@ export class XMLUtils {
             (c >= 0x10000 && c <= 0x10FFFF);
     }
 
+    static lookingAt(search: string, text: string, start: number): boolean {
+        for (let i = 0; i < text.length; i++) {
+            if (text.length < start + i || text[start + i] !== search[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { Comment } from "./Comment";
+import { DocumentType } from "./DocumentType";
 import { Element } from "./Element";
 import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
@@ -22,6 +23,7 @@ export class Document implements XMLNode {
     static readonly DOCUMENT_NODE: number = 0;
 
     xmlDeclaration: XMLDeclaration;
+    documentType: DocumentType;
     private root: Element;
     private content: Array<XMLNode>;
 
@@ -29,7 +31,11 @@ export class Document implements XMLNode {
         this.xmlDeclaration = xmlDeclaration;
         this.content = new Array();
         for (let i = 0; i < prologContent.length; i++) {
-            this.content.push(prologContent[i]);
+            let node: XMLNode = prologContent[i];
+            if (node instanceof DocumentType) {
+                this.documentType = node as DocumentType;
+            }
+            this.content.push(node);
         }
         this.root = new Element(name);
         this.content.push(this.root);

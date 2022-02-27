@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { XMLNode } from "./XMLNode";
+import { XMLUtils } from "./XMLUtils";
 
 export class XMLDeclaration implements XMLNode {
 
@@ -20,10 +21,60 @@ export class XMLDeclaration implements XMLNode {
     private encoding: string;
     private standalone: string;
 
-    constructor() {
+    constructor(declarationText: string) {
         this.version = '';
         this.encoding = '';
         this.standalone = '';
+        let attributesPortion = declarationText.substring('<?xml'.length, declarationText.length - '?>'.length);
+        this.parseAttributes(attributesPortion.trim());
+    }
+
+    parseAttributes(text: string): void {
+        let pairs: string[] = [];
+        let separator: string = '';
+        while (text.indexOf('=') != -1) {
+            let i: number = 0;
+            for (; i < text.length; i++) {
+                let char = text[i];
+                if (XMLUtils.isXmlSpace(char) || '=' === char) {
+                    break;
+                }
+            }
+            for (; i < text.length; i++) {
+                let char = text[i];
+                if (separator === '' && ('\'' === char || '"' === char)) {
+                    separator = char;
+                    continue;
+                }
+                if (char === separator) {
+                    break;
+                }
+            }
+            // end of value
+            let pair = text.substring(0, i + 1).trim();
+            pairs.push(pair);
+            text = text.substring(pair.length).trim();
+            separator = '';
+        }
+        for (let i = 0; i < pairs.length; i++) {
+            let pair: string = pairs[i];
+            let index = pair.indexOf('=');
+            if (index === -1) {
+                throw new Error('Malformed XML declaration');
+            }
+            let name = pair.substring(0, index).trim();
+            let value = pair.substring(index + 1).trim();
+            value = value.substring(1, value.length - 1);
+            if (name === 'version') {
+                this.version = value;
+            }
+            if (name === 'encoding') {
+                this.encoding = value;
+            }
+            if (name === 'standalone') {
+                this.standalone = value;
+            }
+        }
     }
 
     getVersion(): string {

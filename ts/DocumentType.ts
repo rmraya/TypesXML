@@ -10,7 +10,9 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { InternalSubset } from "./dtd/InternalSubset";
 import { XMLNode } from "./XMLNode";
+import { XMLUtils } from "./XMLUtils";
 
 export class DocumentType implements XMLNode {
 
@@ -19,9 +21,46 @@ export class DocumentType implements XMLNode {
     private name: string;
     private systemId: string;
     private publicId: string;
+    private internalSubset: InternalSubset;
 
-    constructor(name: string) {
-        this.name = name;
+    constructor(declaration: string) {
+        this.name = '';
+        let i: number = '<!DOCTYPE'.length;
+        // skip spaces before root name
+        for (; i < declaration.length; i++) {
+            let char: string = declaration.charAt(i);
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+        }
+        for (; i < declaration.length; i++) {
+            let char: string = declaration.charAt(i);
+            if (XMLUtils.isXmlSpace(char)) {
+                break
+            }
+            this.name += char;
+        }
+        // skip spaces after root name
+        for (; i < declaration.length; i++) {
+            let char: string = declaration.charAt(i);
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+        }
+        if (XMLUtils.lookingAt('[', declaration, i)) {
+            let index = declaration.indexOf(']', i);
+            if (i === -1) {
+                throw 'Malformed Internal Subset declaration';
+            }
+            let subset: string = declaration.substring(i, index + 1);
+            this.internalSubset = new InternalSubset(subset);
+        }
+        if (XMLUtils.lookingAt('PUBLIC', declaration, i)) {
+
+        }
+        if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
+
+        }
     }
 
     setSystemId(systemId: string): void {
@@ -38,6 +77,14 @@ export class DocumentType implements XMLNode {
 
     getPublicId(): string {
         return this.publicId;
+    }
+
+    setInternalSubset(subset: InternalSubset): void {
+        this.internalSubset = subset;
+    }
+
+    getInternalSubset(): InternalSubset {
+        return this.internalSubset;
     }
 
     getNodeType(): number {
