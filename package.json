@@ -6,7 +6,11 @@
   "scripts": {
     "build": "tsc"
   },
-  "author": "Rodolfo M. Raya",
+  "author": {
+    "name": "Rodolfo M. Raya",
+    "url": "https://maxprograms.com",
+    "email": "rmraya@maxprograms.com"
+  },
   "license": "EPL-1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
