@@ -110,12 +110,12 @@ export class Element implements XMLNode {
         });
         if (this.content.length > 0) {
             result += '>';
-            this.content.forEach((value: XMLNode) => {
-                result += value.toString();
+            this.content.forEach((node: XMLNode) => {
+                result += node.toString();
             });
             return result + '</' + this.name + '>';
         }
-        return result +'/>';
+        return result + '/>';
     }
 
     equals(obj: XMLNode): boolean {

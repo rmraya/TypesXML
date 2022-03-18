@@ -22,7 +22,7 @@ export class XMLDeclaration implements XMLNode {
     private standalone: string;
 
     constructor(declarationText: string) {
-        this.version = '';
+        this.version = '1.0';
         this.encoding = '';
         this.standalone = '';
         let attributesPortion = declarationText.substring('<?xml'.length, declarationText.length - '?>'.length);

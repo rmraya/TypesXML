@@ -17,6 +17,7 @@ import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
 import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLNode } from "./XMLNode";
+import { XMLUtils } from "./XMLUtils";
 
 export class Document implements XMLNode {
 
@@ -63,8 +64,9 @@ export class Document implements XMLNode {
 
     toString(): string {
         let result: string = this.xmlDeclaration ? this.xmlDeclaration.toString() : '';
-        this.content.forEach((value: XMLNode) => {
-            result += value.toString();
+        let isXml10: boolean = this.xmlDeclaration.getVersion() === '1.0';
+        this.content.forEach((node: XMLNode) => {
+            result += isXml10 ? XMLUtils.validXml10Chars(node.toString()) : XMLUtils.validXml11Chars(node.toString());
         });
         return result;
     }
