@@ -12,15 +12,18 @@
 
 import { XMLUtils } from "../XMLUtils";
 import { XMLNode } from "../XMLNode";
+import { Attribute } from "../Attribute";
 
 export class AttlistDecl implements XMLNode {
 
     static readonly ATTRIBUTE_DECL_NODE: number = 9;
 
     private listName: string;
+    private attributes: Map<string, Attribute>;
 
     constructor(declaration: string) {
         this.listName = '';
+        this.attributes = new Map<string, Attribute>();
         let i: number = '<!ATTLIST'.length;
         let char: string = declaration.charAt(i);
         while (XMLUtils.isXmlSpace(char)) {
@@ -32,7 +35,15 @@ export class AttlistDecl implements XMLNode {
             i++;
             char = declaration.charAt(i);
         }
+        this.parseAttributes(declaration.substring(i).trim());
+    }
 
+    getAttributes(): Map<string, Attribute> {
+        return this.attributes;
+    }
+
+    parseAttributes(text: string) {
+        // TODO
     }
 
     getNodeType(): number {
@@ -40,11 +51,15 @@ export class AttlistDecl implements XMLNode {
     }
 
     toString(): string {
-        throw new Error("Method not implemented.");
+        let result: string = '<!ATTLIST ' + this.listName;
+        this.attributes.forEach((a: Attribute) => {
+            result += ' ' + a.getName() + ' ' + a.getType() + ' ' + a.getDefaultValue() + '\n';
+        });
+        return result + '>'; 
     }
 
     equals(node: XMLNode): boolean {
+        // TODO
         throw new Error("Method not implemented.");
     }
-
 }

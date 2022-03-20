@@ -107,7 +107,11 @@ export class XMLParser {
     }
 
     lookingAt(text: string): boolean {
-        for (let i = 0; i < text.length; i++) {
+        let length: number = text.length;
+        if (this.pointer + length > this.source.length) {
+            return false;
+        }
+        for (let i = 0; i < length; i++) {
             if (this.source[this.pointer + i] !== text[i]) {
                 return false;
             }
@@ -249,24 +253,7 @@ export class XMLParser {
         }
         let instructionText = this.source.substring(this.pointer, this.pointer + index + '?>'.length);
         this.pointer += instructionText.length;
-        instructionText.substring('<?'.length);
-        let target: string = '';
-        let i: number = 0;
-        for (; i < instructionText.length; i++) {
-            let char: string = instructionText[i];
-            if (XMLUtils.isXmlSpace(char)) {
-                break;
-            }
-            target += char;
-        }
-        for (; instructionText.length; i++) {
-            let char: string = instructionText[i];
-            if (!XMLUtils.isXmlSpace(char)) {
-                break;
-            }
-        }
-        let value: string = instructionText.substring(i);
-        let pi: ProcessingInstruction = new ProcessingInstruction(target, value);
+        let pi: ProcessingInstruction = new ProcessingInstruction(instructionText);
         if (this.inProlog) {
             this.prologContent.push(pi);
         } else {

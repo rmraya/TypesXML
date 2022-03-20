@@ -56,10 +56,10 @@ export class DocumentType implements XMLNode {
             this.internalSubset = new InternalSubset(subset);
         }
         if (XMLUtils.lookingAt('PUBLIC', declaration, i)) {
-
+            // TODO
         }
         if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
-
+            // TODO
         }
     }
 
@@ -97,6 +97,9 @@ export class DocumentType implements XMLNode {
             doctype += ' PUBLIC "' + this.publicId + '" "' + this.systemId + '"';
         } else if (this.systemId) {
             doctype += ' SYSTEM "' + this.systemId + '"';
+        }
+        if (this.internalSubset) {
+            doctype += ' ' + this.internalSubset.toString();
         }
         return doctype + '>';
     }

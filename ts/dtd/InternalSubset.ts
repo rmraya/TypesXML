@@ -1,4 +1,10 @@
+import { Comment } from "../Comment";
+import { ProcessingInstruction } from "../ProcessingInstruction";
+import { TextNode } from "../TextNode";
 import { XMLNode } from "../XMLNode";
+import { XMLUtils } from "../XMLUtils";
+import { AttlistDecl } from "./AttlistDecl";
+import { ElementDecl } from "./ElementDecl";
 
 /*******************************************************************************
  * Copyright (c) 2022 Maxprograms.
@@ -20,6 +26,77 @@ export class InternalSubset implements XMLNode {
 
     constructor(declaration: string) {
         this.content = new Array();
+        let length = declaration.length;
+        this.parseDeclaration(declaration.substring(1, length - 1));
+    }
+
+    parseDeclaration(declaration: string) {
+        let pointer: number = 0;
+        let inSubset = true;
+        while (inSubset) {
+            if (XMLUtils.lookingAt('<!ELEMENT', declaration, pointer)) {
+                let index = declaration.indexOf('>', pointer);
+                if (index === -1) {
+                    throw new Error('Malformed element declaration');
+                }
+                let elementText = declaration.substring(pointer, index + '>'.length);
+                this.content.push(new ElementDecl(elementText));
+                pointer += elementText.length;
+                continue;
+            }
+            if (XMLUtils.lookingAt('<!ATTLIST', declaration, pointer)) {
+                let index = declaration.indexOf('>', pointer);
+                if (index === -1) {
+                    throw new Error('Malformed attribute declaration');
+                }
+                let attListText = declaration.substring(pointer, index + '>'.length);
+                this.content.push(new AttlistDecl(attListText));
+                pointer += attListText.length;
+                continue;
+            }
+            if (XMLUtils.lookingAt('<!ENTITY', declaration, pointer)) {
+                // TODO
+            }
+            if (XMLUtils.lookingAt('<!NOTATION', declaration, pointer)) {
+                // TODO
+            }
+            if (XMLUtils.lookingAt('<?', declaration, pointer)) {
+                let index = declaration.indexOf('?>', pointer);
+                if (index === -1) {
+                    throw new Error('Malformed processing instruction in internal subset');
+                }
+                let piText = declaration.substring(pointer, index + '?>'.length);
+                this.content.push(new ProcessingInstruction(piText));
+                pointer += piText.length;
+                continue;
+            }
+            if (XMLUtils.lookingAt('<!--', declaration, pointer)) {
+                let index = declaration.indexOf('-->', pointer);
+                if (index === -1) {
+                    throw new Error('Malformed comment in internal subset');
+                }
+                let commentText = declaration.substring(pointer, index + '-->'.length);
+                this.content.push(new Comment(commentText.substring('<!--'.length, commentText.length - '-->'.length)));
+                pointer += commentText.length;
+                continue;
+            }
+            if (XMLUtils.lookingAt('%', declaration, pointer)) {
+                // Parameter-entity references 
+                // TODO
+            }
+            let char: string = declaration.charAt(pointer);
+            if (XMLUtils.isXmlSpace(char)) {
+                if (this.content.length > 0 && this.content[this.content.length - 1].getNodeType() === TextNode.TEXT_NODE) {
+                    let lastNode: TextNode = this.content[this.content.length - 1] as TextNode;
+                    lastNode.setValue(lastNode.getValue() + char);
+                } else {
+                    this.content.push(new TextNode(char));
+                }
+                pointer++;
+                continue;
+            }
+            inSubset = false;
+        }
     }
 
     getNodeType(): number {

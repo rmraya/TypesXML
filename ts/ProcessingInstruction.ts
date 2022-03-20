@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { XMLNode } from "./XMLNode";
+import { XMLUtils } from "./XMLUtils";
 
 export class ProcessingInstruction implements XMLNode {
 
@@ -19,7 +20,23 @@ export class ProcessingInstruction implements XMLNode {
     private target: string;
     private value: string;
 
-    constructor(target: string, value: string) {
+    constructor(declaration: string) {
+        let target: string = '';
+        let i: number = '<?'.length;
+        for (; i < declaration.length; i++) {
+            let char: string = declaration[i];
+            if (XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+            target += char;
+        }
+        for (; declaration.length; i++) {
+            let char: string = declaration[i];
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+        }
+        let value: string = declaration.substring(i, declaration.indexOf('?>'));
         this.target = target;
         this.value = value;
     }

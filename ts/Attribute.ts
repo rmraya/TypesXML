@@ -19,6 +19,8 @@ export class Attribute implements XMLNode {
 
     private name: string;
     private value: string;
+    private type: string;
+    private defaultValue: string;
 
     constructor(name: string, value: string) {
         this.name = name;
@@ -42,6 +44,22 @@ export class Attribute implements XMLNode {
             return '';
         }
         return this.name.substring(0, this.name.indexOf(':'));
+    }
+
+    setType(type: string): void {
+        this.type = type;
+    }
+
+    getType(): string {
+        return this.type ? this.type : '';
+    }
+
+    setDefaultValue(defaultValue: string): void {
+        this.defaultValue = defaultValue;
+    }
+
+    getDefaultValue(): string {
+        return this.defaultValue ? this.defaultValue : '';
     }
 
     getNodeType(): number {

@@ -10,18 +10,18 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLUtils } from "../XMLUtils";
 import { XMLNode } from "../XMLNode";
+import { XMLUtils } from "../XMLUtils";
 
-export class NotationDecl implements XMLNode {
+export class ElementDecl implements XMLNode {
 
-    static readonly NOTATION_DECL_NODE: number = 11;
+    static readonly ELEMENT_DECL_NODE: number = 13;
 
     private name: string;
 
     constructor(declaration: string) {
         this.name = '';
-        let i: number = '<!NOTATION'.length;
+        let i: number = '<!ELEMENT'.length;
         let char: string = declaration.charAt(i);
         while (XMLUtils.isXmlSpace(char)) {
             i++;
@@ -35,17 +35,17 @@ export class NotationDecl implements XMLNode {
     }
 
     getNodeType(): number {
-        return NotationDecl.NOTATION_DECL_NODE;
+        return ElementDecl.ELEMENT_DECL_NODE;
     }
 
     toString(): string {
+        let result: string = '<!ELEMENT ' + this.name;
         // TODO
-        throw new Error("Method not implemented.");
+        return result + '>';
     }
 
     equals(node: XMLNode): boolean {
         // TODO
         throw new Error("Method not implemented.");
     }
-
 }

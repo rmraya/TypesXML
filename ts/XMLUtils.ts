@@ -78,8 +78,12 @@ export class XMLUtils {
     }
 
     static lookingAt(search: string, text: string, start: number): boolean {
-        for (let i = 0; i < text.length; i++) {
-            if (text.length < start + i || text[start + i] !== search[i]) {
+        let length: number = search.length;
+        if (length + start > text.length) {
+            return false;
+        }
+        for (let i = 0; i < length; i++) {
+            if (text[start + i] !== search[i]) {
                 return false;
             }
         }
