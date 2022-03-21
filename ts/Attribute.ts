@@ -73,7 +73,8 @@ export class Attribute implements XMLNode {
     equals(obj: XMLNode): boolean {
         if (obj instanceof Attribute) {
             let node: Attribute = obj as Attribute;
-            return this.name === node.name && this.value === node.value;
+            return this.name === node.getName() && this.value === node.getValue()
+                && this.type === node.getType() && this.defaultValue === node.getDefaultValue();
         }
         return false;
     }
