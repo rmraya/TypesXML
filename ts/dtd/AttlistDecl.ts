@@ -38,6 +38,10 @@ export class AttlistDecl implements XMLNode {
         this.parseAttributes(declaration.substring(i).trim());
     }
 
+    getListName(): string {
+        return this.listName;
+    }
+
     getAttributes(): Map<string, Attribute> {
         return this.attributes;
     }
@@ -55,11 +59,23 @@ export class AttlistDecl implements XMLNode {
         this.attributes.forEach((a: Attribute) => {
             result += ' ' + a.getName() + ' ' + a.getType() + ' ' + a.getDefaultValue() + '\n';
         });
-        return result + '>'; 
+        return result + '>';
     }
 
-    equals(node: XMLNode): boolean {
-        // TODO
-        throw new Error("Method not implemented.");
+    equals(obj: XMLNode): boolean {
+        if (obj instanceof AttlistDecl) {
+            let node: AttlistDecl = obj as AttlistDecl;
+            let nodeAtts: Map<string, Attribute> = node.getAttributes();
+            if (this.listName !== node.getListName() || this.attributes.size !== nodeAtts.size) {
+                return false;
+            }
+            this.attributes.forEach((value: Attribute, key: string) => {
+                if (value !== nodeAtts.get(key)) {
+                    return false;
+                }
+            });
+            return true;
+        }
+        return false;
     }
 }

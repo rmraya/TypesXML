@@ -19,7 +19,7 @@ export class Comment implements XMLNode {
     private value: string;
 
     constructor(value: string) {
-        this.value = value;
+        this.value = value.substring('<!--'.length, value.length - '-->'.length);
     }
 
     setValue(value: string) {

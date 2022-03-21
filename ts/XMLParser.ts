@@ -232,9 +232,9 @@ export class XMLParser {
         if (index === -1) {
             throw new Error('Malformed XML comment');
         }
-        let content: string = this.source.substring(this.pointer, index + '-->'.length);
-        this.pointer += content.length;
-        let comment: Comment = new Comment(content.substring('<!--'.length, content.length - '-->'.length));
+        let commentText: string = this.source.substring(this.pointer, index + '-->'.length);
+        this.pointer += commentText.length;
+        let comment: Comment = new Comment(commentText);
         if (this.inProlog) {
             this.prologContent.push(comment);
         } else {

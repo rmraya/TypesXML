@@ -76,7 +76,7 @@ export class InternalSubset implements XMLNode {
                     throw new Error('Malformed comment in internal subset');
                 }
                 let commentText = declaration.substring(pointer, index + '-->'.length);
-                this.content.push(new Comment(commentText.substring('<!--'.length, commentText.length - '-->'.length)));
+                this.content.push(new Comment(commentText));
                 pointer += commentText.length;
                 continue;
             }
