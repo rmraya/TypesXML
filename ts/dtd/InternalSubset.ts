@@ -1,11 +1,3 @@
-import { Comment } from "../Comment";
-import { ProcessingInstruction } from "../ProcessingInstruction";
-import { TextNode } from "../TextNode";
-import { XMLNode } from "../XMLNode";
-import { XMLUtils } from "../XMLUtils";
-import { AttlistDecl } from "./AttlistDecl";
-import { ElementDecl } from "./ElementDecl";
-
 /*******************************************************************************
  * Copyright (c) 2022 Maxprograms.
  *
@@ -17,6 +9,14 @@ import { ElementDecl } from "./ElementDecl";
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { Comment } from "../Comment";
+import { ProcessingInstruction } from "../ProcessingInstruction";
+import { TextNode } from "../TextNode";
+import { XMLNode } from "../XMLNode";
+import { XMLUtils } from "../XMLUtils";
+import { AttlistDecl } from "./AttlistDecl";
+import { ElementDecl } from "./ElementDecl";
 
 export class InternalSubset implements XMLNode {
 
@@ -111,9 +111,8 @@ export class InternalSubset implements XMLNode {
         return result + ']';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof InternalSubset) {
-            let node: InternalSubset = obj as InternalSubset;
+    equals(node: XMLNode): boolean {
+        if (node instanceof InternalSubset) {
             for (let i = 0; i < this.content.length; i++) {
                 if (!this.content[i].equals(node.content[i])) {
                     return false;

@@ -56,8 +56,7 @@ export class XMLDeclaration implements XMLNode {
             text = text.substring(pair.length).trim();
             separator = '';
         }
-        for (let i = 0; i < pairs.length; i++) {
-            let pair: string = pairs[i];
+        pairs.forEach((pair: string) => {
             let index = pair.indexOf('=');
             if (index === -1) {
                 throw new Error('Malformed XML declaration');
@@ -74,7 +73,7 @@ export class XMLDeclaration implements XMLNode {
             if (name === 'standalone') {
                 this.standalone = value;
             }
-        }
+        });
     }
 
     getVersion(): string {
@@ -113,9 +112,8 @@ export class XMLDeclaration implements XMLNode {
             + '?>';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof XMLDeclaration) {
-            let node: XMLDeclaration = obj as XMLDeclaration;
+    equals(node: XMLNode): boolean {
+        if (node instanceof XMLDeclaration) {
             return this.version === node.version
                 && this.encoding === node.encoding
                 && this.standalone === node.standalone;

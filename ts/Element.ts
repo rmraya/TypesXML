@@ -118,9 +118,8 @@ export class Element implements XMLNode {
         return result + '/>';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof Element) {
-            let node: Element = obj as Element;
+    equals(node: XMLNode): boolean {
+        if (node instanceof Element) {
             if (this.name !== node.name || this.attributes.size !== node.attributes.size || this.content.length !== node.content.length) {
                 return false;
             }

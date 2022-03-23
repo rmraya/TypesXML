@@ -39,9 +39,8 @@ export class TextNode implements XMLNode {
         return XMLUtils.cleanString(this.value);
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof TextNode) {
-            let node: TextNode = obj as TextNode;
+    equals(node: XMLNode): boolean {
+        if (node instanceof TextNode) {
             return this.value === node.value;
         }
         return false;

@@ -11,13 +11,16 @@
  *******************************************************************************/
 
 export { Attribute } from './Attribute';
-export {AttlistDecl} from './dtd/AttlistDecl';
+export { AttlistDecl } from './dtd/AttlistDecl';
 export { CData } from './CData';
 export { Comment } from './Comment';
 export { Document } from './Document';
 export { DocumentType } from './DocumentType';
 export { Element } from './Element';
+export { ElementDecl } from './dtd/ElementDecl';
 export { EntityDecl } from './dtd/EntityDecl';
+export { InternalSubset } from './dtd/InternalSubset';
+export { NotationDecl } from './dtd/NotationDecl';
 export { ProcessingInstruction } from './ProcessingInstruction';
 export { TextNode } from './TextNode';
 export { XMLDeclaration } from './XMLDeclaration';

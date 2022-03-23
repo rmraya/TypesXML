@@ -30,7 +30,7 @@ export class ProcessingInstruction implements XMLNode {
             }
             target += char;
         }
-        for (; declaration.length; i++) {
+        for (; i < declaration.length; i++) {
             let char: string = declaration[i];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
@@ -61,9 +61,8 @@ export class ProcessingInstruction implements XMLNode {
         return '<?' + this.target + ' ' + this.value + '?>';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof ProcessingInstruction) {
-            let node: ProcessingInstruction = obj as ProcessingInstruction;
+    equals(node: XMLNode): boolean {
+        if (node instanceof ProcessingInstruction) {
             return this.target === node.target && this.value === node.value;
         }
         return false;

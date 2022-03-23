@@ -50,7 +50,7 @@ export class DocumentType implements XMLNode {
         if (XMLUtils.lookingAt('[', declaration, i)) {
             let index = declaration.indexOf(']', i);
             if (i === -1) {
-                throw 'Malformed Internal Subset declaration';
+                throw new Error('Malformed Internal Subset declaration');
             }
             let subset: string = declaration.substring(i, index + 1);
             this.internalSubset = new InternalSubset(subset);
@@ -104,9 +104,8 @@ export class DocumentType implements XMLNode {
         return doctype + '>';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof DocumentType) {
-            let node = obj as DocumentType;
+    equals(node: XMLNode): boolean {
+        if (node instanceof DocumentType) {
             return this.publicId === node.publicId && this.systemId === node.systemId;
         }
         return false;

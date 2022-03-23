@@ -70,9 +70,8 @@ export class Attribute implements XMLNode {
         return this.name + '="' + XMLUtils.unquote(XMLUtils.cleanString(this.value)) + '"';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof Attribute) {
-            let node: Attribute = obj as Attribute;
+    equals(node: XMLNode): boolean {
+        if (node instanceof Attribute) {
             return this.name === node.name && this.value === node.value;
         }
         return false;

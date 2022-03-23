@@ -294,8 +294,7 @@ export class XMLParser {
             text = text.substring(pair.length).trim();
             separator = '';
         }
-        for (let i = 0; i < pairs.length; i++) {
-            let pair: string = pairs[i];
+        pairs.forEach((pair: string) => {
             let index = pair.indexOf('=');
             if (index === -1) {
                 throw new Error('Malformed attribute');
@@ -303,7 +302,7 @@ export class XMLParser {
             let name = pair.substring(0, index).trim();
             let value = pair.substring(index + 1).trim();
             attributes.set(name, new Attribute(name, value.substring(1, value.length - 1)));
-        }
+        });
         return attributes;
     }
 

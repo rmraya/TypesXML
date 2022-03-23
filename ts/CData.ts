@@ -38,9 +38,8 @@ export class CData implements XMLNode {
         return '<![CDATA[' + this.value + ']]>';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof CData) {
-            let node: CData = obj as CData;
+    equals(node: XMLNode): boolean {
+        if (node instanceof CData) {
             return this.value === node.value;
         }
         return false;

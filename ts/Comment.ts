@@ -38,9 +38,8 @@ export class Comment implements XMLNode {
         return '<!-- ' + this.value + ' -->';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof Comment) {
-            let node: Comment = obj as Comment;
+    equals(node: XMLNode): boolean {
+        if (node instanceof Comment) {
             return this.value === node.value;
         }
         return false;

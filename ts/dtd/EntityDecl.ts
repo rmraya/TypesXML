@@ -65,9 +65,8 @@ export class EntityDecl implements XMLNode {
         return '<!ENTITY ' + this.name + ' "' + XMLUtils.unquote(XMLUtils.cleanString(this.value)) + '">'
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof EntityDecl) {
-            let node = obj as EntityDecl;
+    equals(node: XMLNode): boolean {
+        if (node instanceof EntityDecl) {
             return this.name === node.name && this.type === node.type && this.value === node.value;
         }
         return false;

@@ -62,9 +62,8 @@ export class AttlistDecl implements XMLNode {
         return result + '>';
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof AttlistDecl) {
-            let node: AttlistDecl = obj as AttlistDecl;
+    equals(node: XMLNode): boolean {
+        if (node instanceof AttlistDecl) {
             let nodeAtts: Map<string, Attribute> = node.getAttributes();
             if (this.listName !== node.getListName() || this.attributes.size !== nodeAtts.size) {
                 return false;

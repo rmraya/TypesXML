@@ -31,13 +31,12 @@ export class Document implements XMLNode {
     constructor(name: string, xmlDeclaration: XMLDeclaration, prologContent: Array<XMLNode>) {
         this.xmlDeclaration = xmlDeclaration;
         this.content = new Array();
-        for (let i = 0; i < prologContent.length; i++) {
-            let node: XMLNode = prologContent[i];
+        prologContent.forEach((node: XMLNode) => {
             if (node instanceof DocumentType) {
-                this.documentType = node as DocumentType;
+                this.documentType = node;
             }
             this.content.push(node);
-        }
+        });
         this.root = new Element(name);
         this.content.push(this.root);
     }
@@ -71,9 +70,8 @@ export class Document implements XMLNode {
         return result;
     }
 
-    equals(obj: XMLNode): boolean {
-        if (obj instanceof Document) {
-            let node = obj as Document;
+    equals(node: XMLNode): boolean {
+        if (node instanceof Document) {
             if (this.xmlDeclaration !== node.xmlDeclaration || this.content.length !== node.content.length) {
                 return false;
             }

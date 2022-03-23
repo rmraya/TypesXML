@@ -3,5 +3,6 @@ package-lock.json
 /node_modules/
 /dist/
 /.vscode/
+/.scannerwork/
 ts/test.ts
 test.xml
