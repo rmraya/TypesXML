@@ -17,6 +17,8 @@ import { XMLNode } from "../XMLNode";
 import { XMLUtils } from "../XMLUtils";
 import { AttlistDecl } from "./AttlistDecl";
 import { ElementDecl } from "./ElementDecl";
+import { EntityDecl } from "./EntityDecl";
+import { NotationDecl } from "./NotationDecl";
 
 export class InternalSubset implements XMLNode {
 
@@ -55,10 +57,24 @@ export class InternalSubset implements XMLNode {
                 continue;
             }
             if (XMLUtils.lookingAt('<!ENTITY', declaration, pointer)) {
-                // TODO
+                let index = declaration.indexOf('>', pointer);
+                if (index === -1) {
+                    throw new Error('Malformed entity declaration');
+                }
+                let entityDeclText = declaration.substring(pointer, index + '>'.length);
+                this.content.push(new EntityDecl(entityDeclText));
+                pointer += entityDeclText.length;
+                continue;
             }
             if (XMLUtils.lookingAt('<!NOTATION', declaration, pointer)) {
-                // TODO
+                let index = declaration.indexOf('>', pointer);
+                if (index === -1) {
+                    throw new Error('Malformed notation declaration');
+                }
+                let notationDeclText = declaration.substring(pointer, index + '>'.length);
+                this.content.push(new NotationDecl(notationDeclText));
+                pointer += notationDeclText.length;
+                continue;
             }
             if (XMLUtils.lookingAt('<?', declaration, pointer)) {
                 let index = declaration.indexOf('?>', pointer);
