@@ -10,13 +10,12 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "./Constants";
 import { InternalSubset } from "./dtd/InternalSubset";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
 export class DocumentType implements XMLNode {
-
-    static readonly DOCUMENT_TYPE_NODE: number = 10;
 
     private name: string;
     private systemId: string;
@@ -88,7 +87,7 @@ export class DocumentType implements XMLNode {
     }
 
     getNodeType(): number {
-        return DocumentType.DOCUMENT_TYPE_NODE;
+        return Constants.DOCUMENT_TYPE_NODE;
     }
 
     toString(): string {

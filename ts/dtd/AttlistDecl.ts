@@ -10,20 +10,19 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLUtils } from "../XMLUtils";
+import { Constants } from "../Constants";
+import { XMLAttribute } from "../XMLAttribute";
 import { XMLNode } from "../XMLNode";
-import { Attribute } from "../Attribute";
+import { XMLUtils } from "../XMLUtils";
 
 export class AttlistDecl implements XMLNode {
 
-    static readonly ATTRIBUTE_DECL_NODE: number = 9;
-
     private listName: string;
-    private attributes: Map<string, Attribute>;
+    private attributes: Map<string, XMLAttribute>;
 
     constructor(declaration: string) {
         this.listName = '';
-        this.attributes = new Map<string, Attribute>();
+        this.attributes = new Map<string, XMLAttribute>();
         let i: number = '<!ATTLIST'.length;
         let char: string = declaration.charAt(i);
         while (XMLUtils.isXmlSpace(char)) {
@@ -42,7 +41,7 @@ export class AttlistDecl implements XMLNode {
         return this.listName;
     }
 
-    getAttributes(): Map<string, Attribute> {
+    getAttributes(): Map<string, XMLAttribute> {
         return this.attributes;
     }
 
@@ -51,12 +50,12 @@ export class AttlistDecl implements XMLNode {
     }
 
     getNodeType(): number {
-        return AttlistDecl.ATTRIBUTE_DECL_NODE;
+        return Constants.ATTRIBUTE_DECL_NODE;
     }
 
     toString(): string {
         let result: string = '<!ATTLIST ' + this.listName;
-        this.attributes.forEach((a: Attribute) => {
+        this.attributes.forEach((a: XMLAttribute) => {
             result += ' ' + a.getName() + ' ' + a.getType() + ' ' + a.getDefaultValue() + '\n';
         });
         return result + '>';
@@ -64,11 +63,11 @@ export class AttlistDecl implements XMLNode {
 
     equals(node: XMLNode): boolean {
         if (node instanceof AttlistDecl) {
-            let nodeAtts: Map<string, Attribute> = node.getAttributes();
+            let nodeAtts: Map<string, XMLAttribute> = node.getAttributes();
             if (this.listName !== node.getListName() || this.attributes.size !== nodeAtts.size) {
                 return false;
             }
-            this.attributes.forEach((value: Attribute, key: string) => {
+            this.attributes.forEach((value: XMLAttribute, key: string) => {
                 if (value !== nodeAtts.get(key)) {
                     return false;
                 }

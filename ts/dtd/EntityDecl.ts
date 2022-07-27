@@ -10,12 +10,11 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
 import { XMLUtils } from "../XMLUtils";
 
 export class EntityDecl implements XMLNode {
-
-    static readonly ENTITY_DECL_NODE: number = 7;
 
     private name: string;
     private value: string;
@@ -57,7 +56,7 @@ export class EntityDecl implements XMLNode {
     }
 
     getNodeType(): number {
-        return EntityDecl.ENTITY_DECL_NODE;
+        return Constants.ENTITY_DECL_NODE;
     }
 
     toString(): string {

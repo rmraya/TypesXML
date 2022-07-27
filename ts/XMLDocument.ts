@@ -10,22 +10,21 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Comment } from "./Comment";
+import { Constants } from "./Constants";
 import { DocumentType } from "./DocumentType";
-import { Element } from "./Element";
 import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
+import { XMLComment } from "./XMLComment";
 import { XMLDeclaration } from "./XMLDeclaration";
+import { XMLElement } from "./XMLElement";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
-export class Document implements XMLNode {
-
-    static readonly DOCUMENT_NODE: number = 0;
+export class XMLDocument implements XMLNode {
 
     xmlDeclaration: XMLDeclaration;
     documentType: DocumentType;
-    private root: Element;
+    private root: XMLElement;
     private content: Array<XMLNode>;
 
     constructor(name: string, xmlDeclaration: XMLDeclaration, prologContent: Array<XMLNode>) {
@@ -37,15 +36,15 @@ export class Document implements XMLNode {
             }
             this.content.push(node);
         });
-        this.root = new Element(name);
+        this.root = new XMLElement(name);
         this.content.push(this.root);
     }
 
-    getRoot(): Element {
+    getRoot(): XMLElement {
         return this.root;
     }
 
-    addComment(comment: Comment): void {
+    addComment(comment: XMLComment): void {
         this.content.push(comment);
     }
 
@@ -58,7 +57,7 @@ export class Document implements XMLNode {
     }
 
     getNodeType(): number {
-        return Document.DOCUMENT_NODE;
+        return Constants.DOCUMENT_NODE;
     }
 
     toString(): string {
@@ -71,7 +70,7 @@ export class Document implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof Document) {
+        if (node instanceof XMLDocument) {
             if (this.xmlDeclaration !== node.xmlDeclaration || this.content.length !== node.content.length) {
                 return false;
             }

@@ -10,12 +10,12 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
 export class TextNode implements XMLNode {
 
-    static readonly TEXT_NODE: number = 6;
 
     private value: string;
 
@@ -32,7 +32,7 @@ export class TextNode implements XMLNode {
     }
 
     getNodeType(): number {
-        return TextNode.TEXT_NODE;
+        return Constants.TEXT_NODE;
     }
 
     toString(): string {

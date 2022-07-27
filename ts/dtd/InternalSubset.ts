@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Comment } from "../Comment";
+import { XMLComment } from "../XMLComment";
 import { ProcessingInstruction } from "../ProcessingInstruction";
 import { TextNode } from "../TextNode";
 import { XMLNode } from "../XMLNode";
@@ -19,10 +19,9 @@ import { AttlistDecl } from "./AttlistDecl";
 import { ElementDecl } from "./ElementDecl";
 import { EntityDecl } from "./EntityDecl";
 import { NotationDecl } from "./NotationDecl";
+import { Constants } from "../Constants";
 
 export class InternalSubset implements XMLNode {
-
-    static readonly INTERNAL_SUBSET: number = 12;
 
     content: Array<XMLNode>;
 
@@ -92,7 +91,7 @@ export class InternalSubset implements XMLNode {
                     throw new Error('Malformed comment in internal subset');
                 }
                 let commentText = declaration.substring(pointer, index + '-->'.length);
-                this.content.push(new Comment(commentText));
+                this.content.push(new XMLComment(commentText));
                 pointer += commentText.length;
                 continue;
             }
@@ -102,7 +101,7 @@ export class InternalSubset implements XMLNode {
             }
             let char: string = declaration.charAt(pointer);
             if (XMLUtils.isXmlSpace(char)) {
-                if (this.content.length > 0 && this.content[this.content.length - 1].getNodeType() === TextNode.TEXT_NODE) {
+                if (this.content.length > 0 && this.content[this.content.length - 1].getNodeType() === Constants.TEXT_NODE) {
                     let lastNode: TextNode = this.content[this.content.length - 1] as TextNode;
                     lastNode.setValue(lastNode.getValue() + char);
                 } else {
@@ -116,7 +115,7 @@ export class InternalSubset implements XMLNode {
     }
 
     getNodeType(): number {
-        return InternalSubset.INTERNAL_SUBSET;
+        return Constants.INTERNAL_SUBSET_NODE;
     }
 
     toString(): string {

@@ -1,0 +1,29 @@
+/*******************************************************************************
+ * Copyright (c) 2022 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse   License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
+
+export class Constants {
+
+    static readonly DOCUMENT_NODE: number = 0;
+    static readonly ELEMENT_NODE: number = 1;
+    static readonly ATTRIBUTE_NODE: number = 2;
+    static readonly CDATA_SECTION_NODE: number = 3;
+    static readonly COMMENT_NODE: number = 4;
+    static readonly PROCESSING_INSTRUCTION_NODE: number = 5;
+    static readonly TEXT_NODE: number = 6;
+    static readonly ENTITY_DECL_NODE: number = 7;
+    static readonly XML_DECLARATION: number = 8;
+    static readonly ATTRIBUTE_DECL_NODE: number = 9;
+    static readonly DOCUMENT_TYPE_NODE: number = 10;
+    static readonly NOTATION_DECL_NODE: number = 11;
+    static readonly INTERNAL_SUBSET_NODE: number = 12;
+    static readonly ELEMENT_DECL_NODE: number = 13;
+}

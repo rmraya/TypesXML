@@ -11,11 +11,11 @@
  *******************************************************************************/
 
 import { writeFileSync } from "fs";
-import { Document } from "./Document";
+import { XMLDocument } from "./XMLDocument";
 
 export class XMLWriter {
 
-    static writeDocument(doc: Document, file: string): void {
+    static writeDocument(doc: XMLDocument, file: string): void {
         writeFileSync(file, doc.toString());
     }
 }

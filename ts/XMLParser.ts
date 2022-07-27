@@ -10,28 +10,29 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Attribute } from './Attribute';
+import { XMLAttribute } from './XMLAttribute';
 import { CData } from './CData';
-import { Comment } from './Comment';
-import { Document } from "./Document";
+import { XMLComment } from './XMLComment';
+import { XMLDocument } from "./XMLDocument";
 import { DocumentType } from './DocumentType';
-import { Element } from './Element';
+import { XMLElement } from './XMLElement';
 import { ProcessingInstruction } from './ProcessingInstruction';
 import { TextNode } from './TextNode';
 import { XMLDeclaration } from './XMLDeclaration';
 import { XMLNode } from './XMLNode';
 import { XMLUtils } from './XMLUtils';
+import { Constants } from './Constants';
 
 export class XMLParser {
 
     private source: string;
     private pointer: number;
-    private document: Document;
+    private document: XMLDocument;
     private inProlog: boolean;
     private prologContent: Array<XMLNode>;
     private xmlDeclaration: XMLDeclaration;
-    private stack: Element[];
-    private currentElement: Element;
+    private stack: XMLElement[];
+    private currentElement: XMLElement;
 
     constructor() {
         this.source = '';
@@ -39,7 +40,7 @@ export class XMLParser {
         this.stack = [];
     }
 
-    parse(source: string): Document {
+    parse(source: string): XMLDocument {
         this.source = source;
         this.readProlog();
         this.readDocument();
@@ -68,7 +69,7 @@ export class XMLParser {
             }
             let char: string = this.source.charAt(this.pointer);
             if (XMLUtils.isXmlSpace(char)) {
-                if (this.prologContent.length > 0 && this.prologContent[this.prologContent.length - 1].getNodeType() === TextNode.TEXT_NODE) {
+                if (this.prologContent.length > 0 && this.prologContent[this.prologContent.length - 1].getNodeType() === Constants.TEXT_NODE) {
                     let lastNode: TextNode = this.prologContent[this.prologContent.length - 1] as TextNode;
                     lastNode.setValue(lastNode.getValue() + char);
                 } else {
@@ -125,13 +126,13 @@ export class XMLParser {
         for (; !(XMLUtils.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
             rootName += this.source[i];
         }
-        this.document = new Document(rootName, this.xmlDeclaration, this.prologContent);
+        this.document = new XMLDocument(rootName, this.xmlDeclaration, this.prologContent);
         let attributesPortion: string = '';
         for (; !(this.source[i] === '/' || this.source[i] === '>'); i++) {
             attributesPortion += this.source[i];
         }
-        let atts: Map<string, Attribute> = this.parseAttributes(attributesPortion);
-        atts.forEach((value: Attribute) => {
+        let atts: Map<string, XMLAttribute> = this.parseAttributes(attributesPortion);
+        atts.forEach((value: XMLAttribute) => {
             this.document.getRoot().setAttribute(value);
         });
         this.pointer = this.source.indexOf('>', this.pointer) + 1;
@@ -149,13 +150,13 @@ export class XMLParser {
         for (; !(XMLUtils.isXmlSpace(this.source[i]) || this.source[i] === '/' || this.source[i] === '>'); i++) {
             name += this.source[i];
         }
-        let element: Element = new Element(name);
+        let element: XMLElement = new XMLElement(name);
         let attributesPortion: string = '';
         for (; !(this.source[i] === '/' || this.source[i] === '>'); i++) {
             attributesPortion += this.source[i];
         }
-        let atts: Map<string, Attribute> = this.parseAttributes(attributesPortion);
-        atts.forEach((value: Attribute) => {
+        let atts: Map<string, XMLAttribute> = this.parseAttributes(attributesPortion);
+        atts.forEach((value: XMLAttribute) => {
             element.setAttribute(value);
         });
         this.currentElement.addElement(element);
@@ -234,7 +235,7 @@ export class XMLParser {
         }
         let commentText: string = this.source.substring(this.pointer, index + '-->'.length);
         this.pointer += commentText.length;
-        let comment: Comment = new Comment(commentText);
+        let comment: XMLComment = new XMLComment(commentText);
         if (this.inProlog) {
             this.prologContent.push(comment);
         } else {
@@ -265,8 +266,8 @@ export class XMLParser {
         }
     }
 
-    parseAttributes(original: string): Map<string, Attribute> {
-        let attributes: Map<string, Attribute> = new Map();
+    parseAttributes(original: string): Map<string, XMLAttribute> {
+        let attributes: Map<string, XMLAttribute> = new Map();
         let text: string = original.trim();
         let pairs: string[] = [];
         let separator: string = '';
@@ -301,7 +302,7 @@ export class XMLParser {
             }
             let name = pair.substring(0, index).trim();
             let value = pair.substring(index + 1).trim();
-            attributes.set(name, new Attribute(name, value.substring(1, value.length - 1)));
+            attributes.set(name, new XMLAttribute(name, value.substring(1, value.length - 1)));
         });
         return attributes;
     }

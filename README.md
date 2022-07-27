@@ -1,18 +1,23 @@
 # TypesXML
+
 Open source XML library written in TypeScript
 
 ## Features currently in development
+
 - Parsing of the Internal Subset specified in the <!DOCTYPE> declaration
 
 ## Limitations
+
 - Validation not supported yet
 - Default values for attributes are not set when parsing an element
 
 ## On the Roadmap
+
 - Support for XML Schemas
 - Support for RelaxNG
 
 ## Example
+
 ```TypeScript
 import { XMLParser } from "./XMLParser";
 import { Document } from "./Document";

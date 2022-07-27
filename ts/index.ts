@@ -10,14 +10,15 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-export { Attribute } from './Attribute';
+export { XMLAttribute as Attribute } from './XMLAttribute';
 export { AttlistDecl } from './dtd/AttlistDecl';
 export { CData } from './CData';
-export { Comment } from './Comment';
+export { Constants } from './Constants';
+export { XMLComment as Comment } from './XMLComment';
 export { ContentModel } from './grammar/ContentModel';
-export { Document } from './Document';
+export { XMLDocument as Document } from './XMLDocument';
 export { DocumentType } from './DocumentType';
-export { Element } from './Element';
+export { XMLElement as Element } from './XMLElement';
 export { ElementDecl } from './dtd/ElementDecl';
 export { EntityDecl } from './dtd/EntityDecl';
 export { Grammar } from './grammar/Grammar';

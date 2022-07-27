@@ -10,11 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
 
 export class CData implements XMLNode {
-
-    static readonly CDATA_SECTION_NODE: number = 3;
 
     private value: string;
 
@@ -31,7 +30,7 @@ export class CData implements XMLNode {
     }
 
     getNodeType(): number {
-        return CData.CDATA_SECTION_NODE;
+        return Constants.CDATA_SECTION_NODE;
     }
 
     toString(): string {

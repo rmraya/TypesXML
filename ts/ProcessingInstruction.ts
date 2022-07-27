@@ -10,12 +10,11 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
 export class ProcessingInstruction implements XMLNode {
-
-    static readonly PROCESSING_INSTRUCTION_NODE: number = 5;
 
     private target: string;
     private value: string;
@@ -54,7 +53,7 @@ export class ProcessingInstruction implements XMLNode {
     }
 
     getNodeType(): number {
-        return ProcessingInstruction.PROCESSING_INSTRUCTION_NODE;
+        return Constants.PROCESSING_INSTRUCTION_NODE;
     }
 
     toString(): string {

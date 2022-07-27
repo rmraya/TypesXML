@@ -10,11 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
 
-export class Comment implements XMLNode {
-
-    static readonly COMMENT_NODE: number = 4;
+export class XMLComment implements XMLNode {
 
     private value: string;
 
@@ -31,7 +30,7 @@ export class Comment implements XMLNode {
     }
 
     getNodeType(): number {
-        return Comment.COMMENT_NODE;
+        return Constants.COMMENT_NODE;
     }
 
     toString(): string {
@@ -39,7 +38,7 @@ export class Comment implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof Comment) {
+        if (node instanceof XMLComment) {
             return this.value === node.value;
         }
         return false;

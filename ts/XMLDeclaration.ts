@@ -10,12 +10,11 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
 export class XMLDeclaration implements XMLNode {
-
-    static readonly XML_DECLARATION: number = 8;
 
     private version: string;
     private encoding: string;
@@ -101,7 +100,7 @@ export class XMLDeclaration implements XMLNode {
     }
 
     getNodeType(): number {
-        return XMLDeclaration.XML_DECLARATION;
+        return Constants.XML_DECLARATION;
     }
 
     toString(): string {

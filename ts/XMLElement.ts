@@ -10,19 +10,18 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Attribute } from "./Attribute";
+import { XMLAttribute } from "./XMLAttribute";
 import { CData } from "./CData";
-import { Comment } from "./Comment";
+import { XMLComment } from "./XMLComment";
 import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
 import { XMLNode } from "./XMLNode";
+import { Constants } from "./Constants";
 
-export class Element implements XMLNode {
-
-    static readonly ELEMENT_NODE: number = 1;
-
+export class XMLElement implements XMLNode {
+    
     private name: string;
-    private attributes: Map<string, Attribute>;
+    private attributes: Map<string, XMLAttribute>;
     private content: Array<XMLNode>;
 
     constructor(name: string) {
@@ -46,16 +45,16 @@ export class Element implements XMLNode {
         return this.attributes.has(name);
     }
 
-    getAttribute(name: string): Attribute {
+    getAttribute(name: string): XMLAttribute {
         return this.attributes.get(name);
     }
 
-    setAttribute(attribute: Attribute) {
+    setAttribute(attribute: XMLAttribute) {
         this.attributes.set(attribute.getName(), attribute);
     }
 
-    getAttributes(): Array<Attribute> {
-        let result: Array<Attribute> = new Array();
+    getAttributes(): Array<XMLAttribute> {
+        let result: Array<XMLAttribute> = new Array();
         this.attributes.forEach((value) => {
             result.push(value);
         });
@@ -67,7 +66,7 @@ export class Element implements XMLNode {
     }
 
     addTextNode(node: TextNode): void {
-        if (this.content.length > 0 && this.content[this.content.length - 1].getNodeType() === TextNode.TEXT_NODE) {
+        if (this.content.length > 0 && this.content[this.content.length - 1].getNodeType() === Constants.TEXT_NODE) {
             let lastNode: TextNode = this.content[this.content.length - 1] as TextNode;
             lastNode.setValue(lastNode.getValue() + node.getValue());
             return;
@@ -75,11 +74,11 @@ export class Element implements XMLNode {
         this.content.push(node);
     }
 
-    addElement(node: Element): void {
+    addElement(node: XMLElement): void {
         this.content.push(node);
     }
 
-    addComment(node: Comment): void {
+    addComment(node: XMLComment): void {
         this.content.push(node);
     }
 
@@ -100,12 +99,12 @@ export class Element implements XMLNode {
     }
 
     getNodeType(): number {
-        return Element.ELEMENT_NODE;
+        return Constants.ELEMENT_NODE;
     }
 
     toString(): string {
         let result: string = '<' + this.name;
-        this.attributes.forEach((value: Attribute) => {
+        this.attributes.forEach((value: XMLAttribute) => {
             result += ' ' + value.toString();
         });
         if (this.content.length > 0) {
@@ -119,13 +118,13 @@ export class Element implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof Element) {
+        if (node instanceof XMLElement) {
             if (this.name !== node.name || this.attributes.size !== node.attributes.size || this.content.length !== node.content.length) {
                 return false;
             }
             let sameAttributes: boolean = true;
-            this.attributes.forEach((att: Attribute, key: string) => {
-                let other: Attribute = node.getAttribute(key);
+            this.attributes.forEach((att: XMLAttribute, key: string) => {
+                let other: XMLAttribute = node.getAttribute(key);
                 if (other === undefined || att.getValue() !== other.getValue()) {
                     sameAttributes = false;
                 }

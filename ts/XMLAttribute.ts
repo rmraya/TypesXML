@@ -10,13 +10,12 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
-export class Attribute implements XMLNode {
-
-    static readonly ATTRIBUTE_NODE: number = 2;
-
+export class XMLAttribute implements XMLNode {
+    
     private name: string;
     private value: string;
     private type: string;
@@ -63,7 +62,7 @@ export class Attribute implements XMLNode {
     }
 
     getNodeType(): number {
-        return Attribute.ATTRIBUTE_NODE;
+        return Constants.ATTRIBUTE_NODE;
     }
 
     toString(): string {
@@ -71,7 +70,7 @@ export class Attribute implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof Attribute) {
+        if (node instanceof XMLAttribute) {
             return this.name === node.name && this.value === node.value;
         }
         return false;
