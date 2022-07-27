@@ -20,7 +20,7 @@ Open source XML library written in TypeScript
 
 ```TypeScript
 import { XMLParser } from "./XMLParser";
-import { Document } from "./Document";
+import { XMLDocument } from "./XMLDocument";
 import { readFile } from "fs";
 
 class Test {
@@ -32,7 +32,7 @@ class Test {
                     throw new Error(err.message);
                 }
                 let parser: XMLParser = new XMLParser();
-                let document: Document = parser.parse(data);
+                let document: XMLDocument = parser.parse(data);
                 console.log(document.toString());
             });
         } catch (e) {
