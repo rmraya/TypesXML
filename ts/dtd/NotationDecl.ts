@@ -33,6 +33,10 @@ export class NotationDecl implements XMLNode {
         }
     }
 
+    getName():string {
+        return this.name;
+    }
+
     getNodeType(): number {
         return Constants.NOTATION_DECL_NODE;
     }

@@ -33,6 +33,10 @@ export class ElementDecl implements XMLNode {
         }
     }
 
+    getName(): string {
+        return this.name;
+    }
+
     getNodeType(): number {
         return Constants.ELEMENT_DECL_NODE;
     }

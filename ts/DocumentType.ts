@@ -11,7 +11,9 @@
  *******************************************************************************/
 
 import { Constants } from "./Constants";
+import { DTDParser } from "./dtd/DTDParser";
 import { InternalSubset } from "./dtd/InternalSubset";
+import { Grammar } from "./grammar/Grammar";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
@@ -21,6 +23,7 @@ export class DocumentType implements XMLNode {
     private systemId: string;
     private publicId: string;
     private internalSubset: InternalSubset;
+    private internalGrammar: Grammar;
 
     constructor(declaration: string) {
         this.name = '';
@@ -53,6 +56,7 @@ export class DocumentType implements XMLNode {
             }
             let subset: string = declaration.substring(i, index + 1);
             this.internalSubset = new InternalSubset(subset);
+            this.internalGrammar = new DTDParser().parse(subset);
         }
         if (XMLUtils.lookingAt('PUBLIC', declaration, i)) {
             // TODO

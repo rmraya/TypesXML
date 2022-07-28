@@ -56,23 +56,27 @@ export class XMLDeclaration implements XMLNode {
             separator = '';
         }
         pairs.forEach((pair: string) => {
-            let index = pair.indexOf('=');
-            if (index === -1) {
-                throw new Error('Malformed XML declaration');
-            }
-            let name = pair.substring(0, index).trim();
-            let value = pair.substring(index + 1).trim();
-            value = value.substring(1, value.length - 1);
-            if (name === 'version') {
-                this.version = value;
-            }
-            if (name === 'encoding') {
-                this.encoding = value;
-            }
-            if (name === 'standalone') {
-                this.standalone = value;
-            }
+            this.setValues(pair);
         });
+    }
+
+    setValues(pair: string): void {
+        let index = pair.indexOf('=');
+        if (index === -1) {
+            throw new Error('Malformed XML declaration');
+        }
+        let name = pair.substring(0, index).trim();
+        let value = pair.substring(index + 1).trim();
+        value = value.substring(1, value.length - 1);
+        if (name === 'version') {
+            this.version = value;
+        }
+        if (name === 'encoding') {
+            this.encoding = value;
+        }
+        if (name === 'standalone') {
+            this.standalone = value;
+        }
     }
 
     getVersion(): string {

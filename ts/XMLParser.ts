@@ -36,12 +36,12 @@ export class XMLParser {
 
     constructor() {
         this.source = '';
-        this.pointer = 0;
-        this.stack = [];
     }
 
     parse(source: string): XMLDocument {
         this.source = source;
+        this.pointer = 0;
+        this.stack = [];
         this.readProlog();
         this.readDocument();
         return this.document;

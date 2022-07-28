@@ -23,4 +23,12 @@ export class Grammar {
     getContentModel(elementName: string): ContentModel {
         return this.models.get(elementName);
     }
+
+    toString(): string {
+        let result: string;
+        this.models.forEach((value: ContentModel) => {
+            result = result + value.toString() + '\n';
+        });
+        return result;
+    }
 }

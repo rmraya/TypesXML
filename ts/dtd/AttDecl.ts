@@ -29,8 +29,10 @@ export class AttDecl implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        // TODO
-        throw new Error("Method not implemented.");
+        if (node instanceof AttDecl) {
+            return this.name === node.name && this.type === node.type && this.defaultType === node.defaultType && this.defaultValue === node.defaultValue;
+        }
+        return false;
     }
 
     toString(): string {

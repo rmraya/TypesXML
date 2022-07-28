@@ -15,6 +15,7 @@ export { Constants } from './Constants';
 export { DocumentType } from './DocumentType';
 export { AttDecl } from './dtd/AttDecl';
 export { AttlistDecl } from './dtd/AttlistDecl';
+export { DTDParser } from './dtd/DTDParser';
 export { ElementDecl } from './dtd/ElementDecl';
 export { EntityDecl } from './dtd/EntityDecl';
 export { InternalSubset } from './dtd/InternalSubset';

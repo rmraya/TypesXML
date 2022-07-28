@@ -31,7 +31,7 @@ export class XMLUtils {
     }
 
     static normalizeSpaces(text: string): string {
-        return text.replace(new RegExp('[\r\n\t]', 's'), ' ');
+        return text.replace(/[\r\n\t]/s, ' ');
     }
 
     static validXml10Chars(text: string): string {
