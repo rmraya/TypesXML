@@ -20,10 +20,11 @@ export class Constants {
     static readonly PROCESSING_INSTRUCTION_NODE: number = 5;
     static readonly TEXT_NODE: number = 6;
     static readonly ENTITY_DECL_NODE: number = 7;
-    static readonly XML_DECLARATION: number = 8;
-    static readonly ATTRIBUTE_DECL_NODE: number = 9;
+    static readonly XML_DECLARATION_NODE: number = 8;
+    static readonly ATTRIBUTE_LIST_DECL_NODE: number = 9;
     static readonly DOCUMENT_TYPE_NODE: number = 10;
     static readonly NOTATION_DECL_NODE: number = 11;
     static readonly INTERNAL_SUBSET_NODE: number = 12;
     static readonly ELEMENT_DECL_NODE: number = 13;
+    static readonly ATTRIBUTE_DECL_NODE: number = 14;
 }

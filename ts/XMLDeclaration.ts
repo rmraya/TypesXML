@@ -100,7 +100,7 @@ export class XMLDeclaration implements XMLNode {
     }
 
     getNodeType(): number {
-        return Constants.XML_DECLARATION;
+        return Constants.XML_DECLARATION_NODE;
     }
 
     toString(): string {

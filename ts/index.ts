@@ -13,6 +13,7 @@
 export { CData } from './CData';
 export { Constants } from './Constants';
 export { DocumentType } from './DocumentType';
+export { AttDecl } from './dtd/AttDecl';
 export { AttlistDecl } from './dtd/AttlistDecl';
 export { ElementDecl } from './dtd/ElementDecl';
 export { EntityDecl } from './dtd/EntityDecl';
