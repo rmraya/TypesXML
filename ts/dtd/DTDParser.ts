@@ -19,7 +19,7 @@ import { NotationDecl } from "./NotationDecl";
 
 export class DTDParser {
 
-    private pointer: number;
+
     private grammar: Grammar;
     private elementDeclMap: Map<string, ElementDecl>;
     private attributeListMap: Map<string, AttlistDecl>;
@@ -34,81 +34,85 @@ export class DTDParser {
     }
 
     parse(source: string): Grammar {
-        this.pointer = this.pointer;
+        let pointer: number = 0;
         this.grammar = new Grammar();
 
-        while (this.pointer < source.length) {
-            if (XMLUtils.lookingAt('<!ELEMENT', source, this.pointer)) {
-                let index: number = source.indexOf('>', this.pointer);
+        while (pointer < source.length) {
+            if (XMLUtils.lookingAt('<!ELEMENT', source, pointer)) {
+                let index: number = source.indexOf('>', pointer);
                 if (index === -1) {
                     throw new Error('Malformed element declaration');
                 }
-                let elementText: string = source.substring(this.pointer, index + '>'.length);
+                let elementText: string = source.substring(pointer, index + '>'.length);
                 let elementDecl: ElementDecl = new ElementDecl(elementText);
                 this.elementDeclMap.set(elementDecl.getName(), elementDecl);
-                this.pointer += elementText.length;
+                pointer += elementText.length;
                 continue;
             }
-            if (XMLUtils.lookingAt('<!ATTLIST', source, this.pointer)) {
-                let index: number = source.indexOf('>', this.pointer);
+            if (XMLUtils.lookingAt('<!ATTLIST', source, pointer)) {
+                let index: number = source.indexOf('>', pointer);
                 if (index === -1) {
                     throw new Error('Malformed attribute declaration');
                 }
-                let attListText: string = source.substring(this.pointer, index + '>'.length);
+                let attListText: string = source.substring(pointer, index + '>'.length);
                 let attList: AttlistDecl = new AttlistDecl(attListText);
                 this.attributeListMap.set(attList.getListName(), attList);
-                this.pointer += attListText.length;
+                pointer += attListText.length;
                 continue;
             }
-            if (XMLUtils.lookingAt('<!ENTITY', source, this.pointer)) {
-                let index: number = source.indexOf('>', this.pointer);
+            if (XMLUtils.lookingAt('<!ENTITY', source, pointer)) {
+                let index: number = source.indexOf('>', pointer);
                 if (index === -1) {
                     throw new Error('Malformed entity declaration');
                 }
-                let entityDeclText: string = source.substring(this.pointer, index + '>'.length);
+                let entityDeclText: string = source.substring(pointer, index + '>'.length);
                 let entityDecl: EntityDecl = new EntityDecl(entityDeclText);
                 this.entitiesMap.set(entityDecl.getName(), entityDecl);
-                this.pointer += entityDeclText.length;
+                pointer += entityDeclText.length;
                 continue;
             }
-            if (XMLUtils.lookingAt('<!NOTATION', source, this.pointer)) {
-                let index: number = source.indexOf('>', this.pointer);
+            if (XMLUtils.lookingAt('<!NOTATION', source, pointer)) {
+                let index: number = source.indexOf('>', pointer);
                 if (index === -1) {
                     throw new Error('Malformed notation declaration');
                 }
-                let notationDeclText: string = source.substring(this.pointer, index + '>'.length);
+                let notationDeclText: string = source.substring(pointer, index + '>'.length);
                 let notation: NotationDecl = new NotationDecl(notationDeclText);
                 this.notationsMap.set(notation.getName(), notation);
-                this.pointer += notationDeclText.length;
+                pointer += notationDeclText.length;
                 continue;
             }
-            if (XMLUtils.lookingAt('<?', source, this.pointer)) {
-                let index: number = source.indexOf('?>', this.pointer);
+            if (XMLUtils.lookingAt('<?', source, pointer)) {
+                let index: number = source.indexOf('?>', pointer);
                 if (index === -1) {
                     throw new Error('Malformed processing instruction');
                 }
-                let piText: string = source.substring(this.pointer, index + '?>'.length);
+                let piText: string = source.substring(pointer, index + '?>'.length);
                 // ignore processing instructions
-                this.pointer += piText.length;
+                pointer += piText.length;
                 continue;
             }
-            if (XMLUtils.lookingAt('<!--', source, this.pointer)) {
-                let index: number = source.indexOf('-->', this.pointer);
+            if (XMLUtils.lookingAt('<!--', source, pointer)) {
+                let index: number = source.indexOf('-->', pointer);
                 if (index === -1) {
                     throw new Error('Malformed comment');
                 }
-                let commentText: string = source.substring(this.pointer, index + '-->'.length);
+                let commentText: string = source.substring(pointer, index + '-->'.length);
                 // ignore comments
-                this.pointer += commentText.length;
+                pointer += commentText.length;
                 continue;
             }
-            if (XMLUtils.lookingAt('%', source, this.pointer)) {
-                // Parameter-entity references 
-                // TODO
+            if (XMLUtils.lookingAt('%', source, pointer)) {
+                let index: number = source.indexOf(';', pointer);
+                if (index == -1) {
+                    throw new Error('Malformed entity reference');
+                }
+                let entityName: string = source.substring(pointer + '%'.length, index);
+                pointer += '%'.length + entityName.length + ';'.length;
             }
-            let char: string = source.charAt(this.pointer);
+            let char: string = source.charAt(pointer);
             if (XMLUtils.isXmlSpace(char)) {
-                this.pointer++;
+                pointer++;
                 continue;
             }
             throw new Error('Error parsing DTD');

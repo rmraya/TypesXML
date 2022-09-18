@@ -39,6 +39,9 @@ export class EntityDecl implements XMLNode {
         } else if (declaration.indexOf('PUBLIC') !== -1) {
             this.type = 'PUBLIC';
             // TODO
+        } else if (declaration.indexOf('NDATA') !== -1) {
+            this.type = 'NDATA';
+            // TODO it is related to a notation declaration
         } else {
             this.type = 'DEFAULT';
             let start: number = declaration.indexOf('"', i);
