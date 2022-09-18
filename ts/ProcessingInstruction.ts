@@ -19,23 +19,7 @@ export class ProcessingInstruction implements XMLNode {
     private target: string;
     private value: string;
 
-    constructor(declaration: string) {
-        let target: string = '';
-        let i: number = '<?'.length;
-        for (; i < declaration.length; i++) {
-            let char: string = declaration[i];
-            if (XMLUtils.isXmlSpace(char)) {
-                break;
-            }
-            target += char;
-        }
-        for (; i < declaration.length; i++) {
-            let char: string = declaration[i];
-            if (!XMLUtils.isXmlSpace(char)) {
-                break;
-            }
-        }
-        let value: string = declaration.substring(i, declaration.indexOf('?>'));
+    constructor(target: string, value: string) {
         this.target = target;
         this.value = value;
     }

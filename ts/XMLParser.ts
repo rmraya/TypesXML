@@ -10,18 +10,18 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLAttribute } from './XMLAttribute';
 import { CData } from './CData';
-import { XMLComment } from './XMLComment';
-import { XMLDocument } from "./XMLDocument";
+import { Constants } from './Constants';
 import { DocumentType } from './DocumentType';
-import { XMLElement } from './XMLElement';
 import { ProcessingInstruction } from './ProcessingInstruction';
 import { TextNode } from './TextNode';
+import { XMLAttribute } from './XMLAttribute';
+import { XMLComment } from './XMLComment';
 import { XMLDeclaration } from './XMLDeclaration';
+import { XMLDocument } from './XMLDocument';
+import { XMLElement } from './XMLElement';
 import { XMLNode } from './XMLNode';
 import { XMLUtils } from './XMLUtils';
-import { Constants } from './Constants';
 
 export class XMLParser {
 
@@ -31,7 +31,7 @@ export class XMLParser {
     private inProlog: boolean;
     private prologContent: Array<XMLNode>;
     private xmlDeclaration: XMLDeclaration;
-    private stack: XMLElement[];
+    private stack: Array<XMLElement>;
     private currentElement: XMLElement;
 
     constructor() {
@@ -41,7 +41,7 @@ export class XMLParser {
     parse(source: string): XMLDocument {
         this.source = source;
         this.pointer = 0;
-        this.stack = [];
+        this.stack = new Array<XMLElement>();
         this.readProlog();
         this.readDocument();
         return this.document;
@@ -254,7 +254,23 @@ export class XMLParser {
         }
         let instructionText = this.source.substring(this.pointer, this.pointer + index + '?>'.length);
         this.pointer += instructionText.length;
-        let pi: ProcessingInstruction = new ProcessingInstruction(instructionText);
+        let target: string = '';
+        let i: number = '<?'.length;
+        for (; i < instructionText.length; i++) {
+            let char: string = instructionText[i];
+            if (XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+            target += char;
+        }
+        for (; i < instructionText.length; i++) {
+            let char: string = instructionText[i];
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+        }
+        let value: string = instructionText.substring(i, instructionText.indexOf('?>'));
+        let pi: ProcessingInstruction = new ProcessingInstruction(target, value);
         if (this.inProlog) {
             this.prologContent.push(pi);
         } else {

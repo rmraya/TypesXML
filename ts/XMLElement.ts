@@ -19,15 +19,15 @@ import { XMLNode } from "./XMLNode";
 import { Constants } from "./Constants";
 
 export class XMLElement implements XMLNode {
-    
+
     private name: string;
     private attributes: Map<string, XMLAttribute>;
     private content: Array<XMLNode>;
 
     constructor(name: string) {
         this.name = name;
-        this.attributes = new Map();
-        this.content = new Array();
+        this.attributes = new Map<string, XMLAttribute>();
+        this.content = new Array<XMLNode>();
     }
 
     getName(): string {
@@ -140,5 +140,60 @@ export class XMLElement implements XMLNode {
             return true;
         }
         return false;
+    }
+
+    getChildren(): Array<XMLElement> {
+        let result: Array<XMLElement> = new Array<XMLElement>();
+        this.content.forEach((node: XMLNode) => {
+            if (node instanceof XMLElement) {
+                result.push(node);
+            }
+        });
+        return result;
+    }
+
+    getChild(childName: string): XMLElement {
+        let result: XMLElement = undefined;
+        let length: number = this.content.length;
+        for (let i: number = 0; i < length; i++) {
+            let node: XMLNode = this.content[i];
+            if (node instanceof XMLElement) {
+                let child: XMLElement = node as XMLElement;
+                if (child.getName() === childName) {
+                    result = child;
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+    getText(): string {
+        let result: string = '';
+        this.content.forEach((node: XMLNode) => {
+            if (node instanceof TextNode) {
+                result += (node as TextNode).getValue();
+            }
+            if (node instanceof XMLElement) {
+                result += (node as XMLElement).getText();
+            }
+        });
+        return result;
+    }
+
+    getPI(target: string) {
+        let result: ProcessingInstruction = undefined;
+        let length: number = this.content.length;
+        for (let i: number = 0; i < length; i++) {
+            let node: XMLNode = this.content[i];
+            if (node instanceof ProcessingInstruction) {
+                let pi: ProcessingInstruction = node as ProcessingInstruction;
+                if (pi.getTarget() === target) {
+                    result = pi;
+                    break;
+                }
+            }
+        }
+        return result;
     }
 }

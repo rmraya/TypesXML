@@ -13,6 +13,7 @@
 export { CData } from './CData';
 export { Constants } from './Constants';
 export { DocumentType } from './DocumentType';
+export { Indenter } from './Indenter';
 export { AttDecl } from './dtd/AttDecl';
 export { AttlistDecl } from './dtd/AttlistDecl';
 export { DTDParser } from './dtd/DTDParser';
