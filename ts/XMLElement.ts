@@ -158,9 +158,8 @@ export class XMLElement implements XMLNode {
         for (let i: number = 0; i < length; i++) {
             let node: XMLNode = this.content[i];
             if (node instanceof XMLElement) {
-                let child: XMLElement = node as XMLElement;
-                if (child.getName() === childName) {
-                    result = child;
+                if (node.getName() === childName) {
+                    result = node;
                     break;
                 }
             }
@@ -172,10 +171,10 @@ export class XMLElement implements XMLNode {
         let result: string = '';
         this.content.forEach((node: XMLNode) => {
             if (node instanceof TextNode) {
-                result += (node as TextNode).getValue();
+                result += node.getValue();
             }
             if (node instanceof XMLElement) {
-                result += (node as XMLElement).getText();
+                result += node.getText();
             }
         });
         return result;
@@ -187,9 +186,8 @@ export class XMLElement implements XMLNode {
         for (let i: number = 0; i < length; i++) {
             let node: XMLNode = this.content[i];
             if (node instanceof ProcessingInstruction) {
-                let pi: ProcessingInstruction = node as ProcessingInstruction;
-                if (pi.getTarget() === target) {
-                    result = pi;
+                if (node.getTarget() === target) {
+                    result = node;
                     break;
                 }
             }

@@ -22,13 +22,13 @@ export class XMLDeclaration implements XMLNode {
 
     constructor(version: string, encoding: string, standalone?: string) {
         if (!('1.0' === version || '1.1' === version)) {
-            throw 'Incorrect XML version';
+            throw new Error('Incorrect XML version');
         }
         this.version = version;
         this.encoding = encoding;
         if ( standalone !== undefined) {
             if (!('yes' === standalone || 'no' === standalone)) {
-                throw 'Incorrect "standalone" value';
+                throw new Error('Incorrect "standalone" value');
             }
             this.standalone = standalone;
         }
