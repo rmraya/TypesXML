@@ -101,7 +101,7 @@ export class XMLDeclaration implements XMLNode {
     }
 
     getEncoding(): string {
-        return this.version;
+        return this.encoding;
     }
 
     setEncoding(encoding: string): void {
