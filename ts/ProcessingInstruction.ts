@@ -24,6 +24,26 @@ export class ProcessingInstruction implements XMLNode {
         this.value = value;
     }
 
+    static parse(instructionText: string): ProcessingInstruction {
+        let target: string = '';
+        let i: number = '<?'.length;
+        for (; i < instructionText.length; i++) {
+            let char: string = instructionText[i];
+            if (XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+            target += char;
+        }
+        for (; i < instructionText.length; i++) {
+            let char: string = instructionText[i];
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+        }
+        let value: string = instructionText.substring(i, instructionText.indexOf('?>'));
+        return new ProcessingInstruction(target, value);
+    }
+
     getTarget(): string {
         return this.target;
     }

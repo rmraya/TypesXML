@@ -45,7 +45,7 @@ export class XMLElement implements XMLNode {
         return this.attributes.has(name);
     }
 
-    getAttribute(name: string): XMLAttribute {
+    getAttribute(name: string): XMLAttribute | undefined {
         return this.attributes.get(name);
     }
 
@@ -152,7 +152,7 @@ export class XMLElement implements XMLNode {
         return result;
     }
 
-    getChild(childName: string): XMLElement {
+    getChild(childName: string): XMLElement | undefined {
         let result: XMLElement = undefined;
         let length: number = this.content.length;
         for (let i: number = 0; i < length; i++) {
@@ -181,7 +181,7 @@ export class XMLElement implements XMLNode {
         return result;
     }
 
-    getPI(target: string) {
+    getPI(target: string): ProcessingInstruction | undefined {
         let result: ProcessingInstruction = undefined;
         let length: number = this.content.length;
         for (let i: number = 0; i < length; i++) {

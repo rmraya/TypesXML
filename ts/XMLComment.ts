@@ -17,8 +17,11 @@ export class XMLComment implements XMLNode {
 
     private value: string;
 
-    constructor(value: string) {
-        this.value = value.substring('<!--'.length, value.length - '-->'.length);
+    constructor(comment: string) {
+        if (comment.startsWith('<!--') && comment.endsWith('-->')) {
+            comment = comment.substring('<!--'.length, comment.length - '-->'.length);
+        }
+        this.value = comment;
     }
 
     setValue(value: string) {

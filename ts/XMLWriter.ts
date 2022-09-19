@@ -11,11 +11,19 @@
  *******************************************************************************/
 
 import { writeFileSync } from "fs";
+import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLDocument } from "./XMLDocument";
 
 export class XMLWriter {
 
     static writeDocument(doc: XMLDocument, file: string): void {
-        writeFileSync(file, doc.toString());
+        let options: any = {
+            encoding: 'utf8'
+        };
+        let decl: XMLDeclaration = doc.getXmlDeclaration();
+        if (decl) {
+            options.encoding = decl.getEncoding();
+        }
+        writeFileSync(file, doc.toString(), options);
     }
 }

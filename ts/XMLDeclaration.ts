@@ -20,12 +20,25 @@ export class XMLDeclaration implements XMLNode {
     private encoding: string;
     private standalone: string;
 
-    constructor(declarationText: string) {
-        this.version = '1.0';
-        this.encoding = '';
-        this.standalone = '';
+    constructor(version: string, encoding: string, standalone?: string) {
+        if (!('1.0' === version || '1.1' === version)) {
+            throw 'Incorrect XML version';
+        }
+        this.version = version;
+        this.encoding = encoding;
+        if ( standalone !== undefined) {
+            if (!('yes' === standalone || 'no' === standalone)) {
+                throw 'Incorrect "standalone" value';
+            }
+            this.standalone = standalone;
+        }
+    }
+
+    static parse(declarationText: string): XMLDeclaration {
+        let declaration: XMLDeclaration = new XMLDeclaration('1.0', 'UTF-8');
         let attributesPortion = declarationText.substring('<?xml'.length, declarationText.length - '?>'.length);
-        this.parseAttributes(attributesPortion.trim());
+        declaration.parseAttributes(attributesPortion.trim());
+        return declaration;
     }
 
     parseAttributes(text: string): void {
@@ -111,7 +124,7 @@ export class XMLDeclaration implements XMLNode {
         return '<?xml'
             + (this.version !== '' ? ' version="' + this.version + '"' : '')
             + (this.encoding !== '' ? ' encoding="' + this.encoding + '"' : '')
-            + (this.standalone !== '' ? ' standalone="' + this.standalone + '"' : '')
+            + (this.standalone ? ' standalone="' + this.standalone + '"' : '')
             + '?>';
     }
 

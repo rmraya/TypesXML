@@ -80,24 +80,7 @@ export class InternalSubset implements XMLNode {
                     throw new Error('Malformed processing instruction in internal subset');
                 }
                 let piText: string = declaration.substring(pointer, index + '?>'.length);
-                let target:string = '';
-                let i: number = '<?'.length;
-                for (; i < piText.length; i++) {
-                    let char: string = piText[i];
-                    if (XMLUtils.isXmlSpace(char)) {
-                        break;
-                    }
-                    target += char;
-                }
-                for (; i < piText.length; i++) {
-                    let char: string = piText[i];
-                    if (!XMLUtils.isXmlSpace(char)) {
-                        break;
-                    }
-                }
-                let value: string = piText.substring(i, piText.indexOf('?>'));
-                let pi: ProcessingInstruction = new ProcessingInstruction(target, value);
-                this.content.push(pi);
+                this.content.push(ProcessingInstruction.parse(piText));
                 pointer += piText.length;
                 continue;
             }

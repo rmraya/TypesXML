@@ -23,14 +23,22 @@ export class Indenter {
 
     constructor(spaces: number, level?: number) {
         this.numSpaces = spaces;
-        if (typeof level !== 'undefined') {
+        if (level !== undefined) {
             this.indentLevel = level;
         } else {
             this.indentLevel = 1;
         }
     }
 
-    recurse(e: XMLElement): void {
+    setSpaces(spaces: number): void {
+        this.numSpaces = spaces;
+    }
+
+    setLevel(level: number): void {
+        this.indentLevel = level;
+    }
+
+    indent(e: XMLElement): void {
         if (e.hasAttribute('xml:space') && 'preserve' === e.getAttribute('xml:space').getValue()) {
             return;
         }
@@ -40,7 +48,7 @@ export class Indenter {
         this.indentLevel++;
         let children: Array<XMLElement> = e.getChildren();
         children.forEach((child: XMLElement) => {
-            this.recurse(child);
+            this.indent(child);
         });
         this.indentLevel--;
     }
@@ -56,7 +64,7 @@ export class Indenter {
         }
         let content: Array<XMLNode> = new Array<XMLNode>();
         let nodes: Array<XMLNode> = e.getContent();
-        nodes.forEach((node) => {
+        nodes.forEach((node: XMLNode) => {
             if (!(node instanceof TextNode)) {
                 content.push(new TextNode(start));
                 content.push(node);
@@ -69,7 +77,7 @@ export class Indenter {
     }
 
     private hasText(e: XMLElement): boolean {
-        let result : boolean = false;
+        let result: boolean = false;
         let content: Array<XMLNode> = e.getContent();
         content.forEach((node) => {
             if (node.getNodeType() === Constants.TEXT_NODE) {

@@ -22,26 +22,38 @@ import { XMLUtils } from "./XMLUtils";
 
 export class XMLDocument implements XMLNode {
 
-    xmlDeclaration: XMLDeclaration;
+    xmlDeclaration: XMLDeclaration | undefined;
     documentType: DocumentType;
     private root: XMLElement;
     private content: Array<XMLNode>;
 
-    constructor(name: string, xmlDeclaration: XMLDeclaration, prologContent: Array<XMLNode>) {
-        this.xmlDeclaration = xmlDeclaration;
+    constructor(name: string, xmlDeclaration?: XMLDeclaration, prologContent?: Array<XMLNode>) {
+        if (xmlDeclaration !== undefined) {
+            this.xmlDeclaration = xmlDeclaration;
+        }
         this.content = new Array();
-        prologContent.forEach((node: XMLNode) => {
-            if (node instanceof DocumentType) {
-                this.documentType = node;
-            }
-            this.content.push(node);
-        });
+        if (prologContent !== undefined) {
+            prologContent.forEach((node: XMLNode) => {
+                if (node instanceof DocumentType) {
+                    this.documentType = node;
+                }
+                this.content.push(node);
+            });
+        }
         this.root = new XMLElement(name);
         this.content.push(this.root);
     }
 
     getRoot(): XMLElement {
         return this.root;
+    }
+
+    setXmlDeclaration(declaration: XMLDeclaration): void {
+        this.xmlDeclaration = declaration;
+    }
+
+    getXmlDeclaration(): XMLDeclaration | undefined {
+        return this.xmlDeclaration;
     }
 
     addComment(comment: XMLComment): void {
@@ -61,8 +73,12 @@ export class XMLDocument implements XMLNode {
     }
 
     toString(): string {
-        let result: string = this.xmlDeclaration ? this.xmlDeclaration.toString() : '';
-        let isXml10: boolean = this.xmlDeclaration.getVersion() === '1.0';
+        let result: string = '';
+        let isXml10: boolean = true;
+        if (this.xmlDeclaration) {
+            result += this.xmlDeclaration.toString() + '\n';
+            isXml10 = this.xmlDeclaration.getVersion() === '1.0';
+        }
         this.content.forEach((node: XMLNode) => {
             result += isXml10 ? XMLUtils.validXml10Chars(node.toString()) : XMLUtils.validXml11Chars(node.toString());
         });
