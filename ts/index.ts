@@ -19,6 +19,7 @@ export { AttlistDecl } from "./dtd/AttlistDecl";
 export { DTDParser } from "./dtd/DTDParser";
 export { ElementDecl } from "./dtd/ElementDecl";
 export { EntityDecl } from "./dtd/EntityDecl";
+export { FileReader } from "./FileReader";
 export { InternalSubset } from "./dtd/InternalSubset";
 export { NotationDecl } from "./dtd/NotationDecl";
 export { ContentModel } from "./grammar/ContentModel";
