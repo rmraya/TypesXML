@@ -12,6 +12,8 @@
 
 export class XMLUtils {
 
+    static SPACES: string = ' \t\r\n';
+
     static cleanString(text: string): string {
         let result: string = text.replace('&', '&amp;');
         return result.replace('<', '&lt;');
@@ -27,7 +29,7 @@ export class XMLUtils {
     }
 
     static isXmlSpace(char: string): boolean {
-        return char.charCodeAt(0) === 0x20 || char.charCodeAt(0) === 0x9 || char.charCodeAt(0) === 0xA;
+        return this.SPACES.indexOf(char) > -1;
     }
 
     static normalizeSpaces(text: string): string {

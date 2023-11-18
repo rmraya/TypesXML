@@ -20,13 +20,47 @@ export class FileReader {
     fileSize: number;
     position: number;
 
-    constructor(path: string, encoding: BufferEncoding) {
+    constructor(path: string, encoding?: BufferEncoding) {
         let stats: Stats = statSync(path, { bigint: false, throwIfNoEntry: true });
         this.fileSize = stats.size;
         this.blockSize = stats.blksize;
         this.fileHandle = openSync(path, 'r');
-        this.encoding = encoding;
+        if (encoding) {
+            this.encoding = encoding;
+        } else {
+            this.encoding = this.detectEncoding(path);
+        }
         this.position = 0;
+    }
+
+    detectEncoding(path: string): BufferEncoding {
+        const fd = openSync(path, "r");
+        let buffer = Buffer.alloc(3);
+        let bytesRead: number = readSync(fd, buffer, 0, 3, 0);
+        closeSync(fd);
+
+        if (bytesRead < 2) {
+            throw new Error("File too small to detect encoding");
+        }
+
+        const UTF8 = Buffer.from([-17, -69, -65]);
+        const UTF16 = Buffer.from([-2, -1]);
+
+        if (buffer.toString().startsWith(UTF8.toString())) {
+            return 'utf8';
+        }
+        if (buffer.toString().startsWith(UTF16.toString())) {
+            return 'utf16le';
+        }
+        return "utf8";
+    }
+
+    getEncoding(): BufferEncoding {
+        return this.encoding;
+    }
+
+    setEncoding(encoding: BufferEncoding): void {
+        this.encoding = encoding;
     }
 
     readData(): string {
