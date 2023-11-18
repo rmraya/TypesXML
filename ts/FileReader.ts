@@ -34,13 +34,13 @@ export class FileReader {
     }
 
     detectEncoding(path: string): BufferEncoding {
-        const fd = openSync(path, "r");
+        const fd = openSync(path, 'r');
         let buffer = Buffer.alloc(3);
         let bytesRead: number = readSync(fd, buffer, 0, 3, 0);
         closeSync(fd);
 
         if (bytesRead < 2) {
-            throw new Error("File too small to detect encoding");
+            throw new Error('Error reading BOM: not enough bytes');
         }
 
         const UTF8 = Buffer.from([-17, -69, -65]);
@@ -52,7 +52,7 @@ export class FileReader {
         if (buffer.toString().startsWith(UTF16.toString())) {
             return 'utf16le';
         }
-        return "utf8";
+        return 'utf8';
     }
 
     getEncoding(): BufferEncoding {
