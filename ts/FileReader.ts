@@ -39,7 +39,7 @@ export class FileReader {
         let bytesRead: number = readSync(fd, buffer, 0, 3, 0);
         closeSync(fd);
 
-        if (bytesRead < 2) {
+        if (bytesRead < 3) {
             throw new Error('Error reading BOM: not enough bytes');
         }
 
