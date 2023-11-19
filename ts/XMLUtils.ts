@@ -16,7 +16,8 @@ export class XMLUtils {
 
     static cleanString(text: string): string {
         let result: string = text.replace('&', '&amp;');
-        return result.replace('<', '&lt;');
+        result = result.replace('<', '&lt;');
+        return result.replace('>', '&gt;');
     }
 
     static unquote(text: string): string {

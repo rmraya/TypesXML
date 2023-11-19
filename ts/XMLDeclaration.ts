@@ -12,7 +12,6 @@
 
 import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
 
 export class XMLDeclaration implements XMLNode {
 
@@ -21,7 +20,7 @@ export class XMLDeclaration implements XMLNode {
     private standalone: string;
 
     constructor(version: string, encoding: string, standalone?: string) {
-        if (!('1.0' === version || '1.1' === version)) {
+        if (version !== '' && !('1.0' === version || '1.1' === version)) {
             throw new Error('Incorrect XML version');
         }
         this.version = version;
@@ -31,64 +30,6 @@ export class XMLDeclaration implements XMLNode {
                 throw new Error('Incorrect "standalone" value');
             }
             this.standalone = standalone;
-        }
-    }
-
-    static parse(declarationText: string): XMLDeclaration {
-        let declaration: XMLDeclaration = new XMLDeclaration('1.0', 'UTF-8');
-        let attributesPortion = declarationText.substring('<?xml'.length, declarationText.length - '?>'.length);
-        declaration.parseAttributes(attributesPortion.trim());
-        return declaration;
-    }
-
-    parseAttributes(text: string): void {
-        let pairs: string[] = [];
-        let separator: string = '';
-        while (text.indexOf('=') != -1) {
-            let i: number = 0;
-            for (; i < text.length; i++) {
-                let char = text[i];
-                if (XMLUtils.isXmlSpace(char) || '=' === char) {
-                    break;
-                }
-            }
-            for (; i < text.length; i++) {
-                let char = text[i];
-                if (separator === '' && ('\'' === char || '"' === char)) {
-                    separator = char;
-                    continue;
-                }
-                if (char === separator) {
-                    break;
-                }
-            }
-            // end of value
-            let pair = text.substring(0, i + 1).trim();
-            pairs.push(pair);
-            text = text.substring(pair.length).trim();
-            separator = '';
-        }
-        pairs.forEach((pair: string) => {
-            this.setValues(pair);
-        });
-    }
-
-    setValues(pair: string): void {
-        let index = pair.indexOf('=');
-        if (index === -1) {
-            throw new Error('Malformed XML declaration');
-        }
-        let name = pair.substring(0, index).trim();
-        let value = pair.substring(index + 1).trim();
-        value = value.substring(1, value.length - 1);
-        if (name === 'version') {
-            this.version = value;
-        }
-        if (name === 'encoding') {
-            this.encoding = value;
-        }
-        if (name === 'standalone') {
-            this.standalone = value;
         }
     }
 

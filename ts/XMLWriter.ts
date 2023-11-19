@@ -18,7 +18,7 @@ export class XMLWriter {
 
     static writeDocument(doc: XMLDocument, file: string): void {
         let options: any = {
-            encoding: 'UTF-8'
+            encoding: 'utf8'
         };
         let decl: XMLDeclaration = doc.getXmlDeclaration();
         if (decl) {
