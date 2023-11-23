@@ -22,7 +22,7 @@
     "url": "https://github.com/rmraya/TypesXML.git"
   },
   "devDependencies": {
-    "@types/node": "^20.9.1",
-    "typescript": "^5.2.2"
+    "@types/node": "^20.9.4",
+    "typescript": "^5.3.2"
   }
 }
