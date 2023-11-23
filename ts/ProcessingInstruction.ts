@@ -12,7 +12,6 @@
 
 import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
 
 export class ProcessingInstruction implements XMLNode {
 

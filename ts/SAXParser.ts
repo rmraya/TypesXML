@@ -299,7 +299,6 @@ export class SAXParser {
             }
         }
         this.pointer += i;
-        i = 0;
         // read the rest of the declaration
         let stack: number = 1;
         for (; this.pointer < this.buffer.length; this.pointer++) {
