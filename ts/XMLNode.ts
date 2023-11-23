@@ -15,5 +15,4 @@ export interface XMLNode {
     getNodeType(): number;
     toString(): string;
     equals(node: XMLNode): boolean;
-
 }

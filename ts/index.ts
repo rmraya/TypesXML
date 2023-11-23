@@ -10,27 +10,22 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+export { Catalog } from "./Catalog";
 export { CData } from "./CData";
 export { Constants } from "./Constants";
-export { DocumentType } from "./DocumentType";
+export { ContentHandler } from "./ContentHandler";
+export { DOMBuilder } from "./DOMBuilder";
+export { FileReader } from "./FileReader";
 export { Indenter } from "./Indenter";
-export { AttDecl } from "./dtd/AttDecl";
-export { AttlistDecl } from "./dtd/AttlistDecl";
-export { DTDParser } from "./dtd/DTDParser";
-export { ElementDecl } from "./dtd/ElementDecl";
-export { EntityDecl } from "./dtd/EntityDecl";
-export { InternalSubset } from "./dtd/InternalSubset";
-export { NotationDecl } from "./dtd/NotationDecl";
-export { ContentModel } from "./grammar/ContentModel";
-export { Grammar } from "./grammar/Grammar";
 export { ProcessingInstruction } from "./ProcessingInstruction";
+export { SAXParser } from "./SAXParser";
 export { TextNode } from "./TextNode";
 export { XMLAttribute } from "./XMLAttribute";
 export { XMLComment } from "./XMLComment";
 export { XMLDeclaration } from "./XMLDeclaration";
 export { XMLDocument } from "./XMLDocument";
+export { XMLDocumentType } from "./XMLDocumentType";
 export { XMLElement } from "./XMLElement";
 export { XMLNode } from "./XMLNode";
-export { XMLParser } from "./XMLParser";
 export { XMLUtils } from "./XMLUtils";
 export { XMLWriter } from "./XMLWriter";

@@ -17,11 +17,8 @@ export class XMLComment implements XMLNode {
 
     private value: string;
 
-    constructor(comment: string) {
-        if (comment.startsWith('<!--') && comment.endsWith('-->')) {
-            comment = comment.substring('<!--'.length, comment.length - '-->'.length);
-        }
-        this.value = comment;
+    constructor(value: string) {
+        this.value = value;
     }
 
     setValue(value: string) {
@@ -37,7 +34,7 @@ export class XMLComment implements XMLNode {
     }
 
     toString(): string {
-        return '<!-- ' + this.value + ' -->';
+        return '<!--' + this.value + '-->';
     }
 
     equals(node: XMLNode): boolean {
@@ -46,5 +43,4 @@ export class XMLComment implements XMLNode {
         }
         return false;
     }
-
 }

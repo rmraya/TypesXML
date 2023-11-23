@@ -11,49 +11,62 @@
  *******************************************************************************/
 
 import { Constants } from "./Constants";
-import { DocumentType } from "./DocumentType";
 import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
 import { XMLComment } from "./XMLComment";
 import { XMLDeclaration } from "./XMLDeclaration";
+import { XMLDocumentType } from "./XMLDocumentType";
 import { XMLElement } from "./XMLElement";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 
 export class XMLDocument implements XMLNode {
 
-    xmlDeclaration: XMLDeclaration | undefined;
-    documentType: DocumentType;
-    private root: XMLElement;
     private content: Array<XMLNode>;
 
-    constructor(name: string, xmlDeclaration?: XMLDeclaration, prologContent?: Array<XMLNode>) {
-        if (xmlDeclaration !== undefined) {
-            this.xmlDeclaration = xmlDeclaration;
-        }
+    constructor() {
         this.content = new Array();
-        if (prologContent !== undefined) {
-            prologContent.forEach((node: XMLNode) => {
-                if (node instanceof DocumentType) {
-                    this.documentType = node;
-                }
-                this.content.push(node);
-            });
-        }
-        this.root = new XMLElement(name);
-        this.content.push(this.root);
     }
 
-    getRoot(): XMLElement {
-        return this.root;
+    contentIterator(): IterableIterator<XMLNode> {
+        return this.content.values();
+    }
+
+    setRoot(root: XMLElement): void {
+        this.content.push(root);
+    }
+
+    getRoot(): XMLElement | undefined {
+        for (let i = 0; i < this.content.length; i++) {
+            if (this.content[i] instanceof XMLElement) {
+                return this.content[i] as XMLElement;
+            }
+        }
+        return undefined;
+    }
+
+    setDocumentType(documentType: XMLDocumentType): void {
+        this.content.push(documentType);
+    }
+
+    getDocumentType(): XMLDocumentType | undefined {
+        for (let i = 0; i < this.content.length; i++) {
+            if (this.content[i] instanceof XMLDocumentType) {
+                return this.content[i] as XMLDocumentType;
+            }
+        }
+        return undefined;
     }
 
     setXmlDeclaration(declaration: XMLDeclaration): void {
-        this.xmlDeclaration = declaration;
+        this.content.unshift(declaration);
     }
 
     getXmlDeclaration(): XMLDeclaration | undefined {
-        return this.xmlDeclaration;
+        if (this.content[0] instanceof XMLDeclaration) {
+            return this.content[0] as XMLDeclaration;
+        }
+        return undefined;
     }
 
     addComment(comment: XMLComment): void {
@@ -75,9 +88,9 @@ export class XMLDocument implements XMLNode {
     toString(): string {
         let result: string = '';
         let isXml10: boolean = true;
-        if (this.xmlDeclaration) {
-            result += this.xmlDeclaration.toString() + '\n';
-            isXml10 = this.xmlDeclaration.getVersion() === '1.0';
+        let xmlDeclaration: XMLDeclaration | undefined = this.getXmlDeclaration();
+        if (xmlDeclaration) {
+            isXml10 = xmlDeclaration.getVersion() === '1.0';
         }
         this.content.forEach((node: XMLNode) => {
             result += isXml10 ? XMLUtils.validXml10Chars(node.toString()) : XMLUtils.validXml11Chars(node.toString());
@@ -87,7 +100,7 @@ export class XMLDocument implements XMLNode {
 
     equals(node: XMLNode): boolean {
         if (node instanceof XMLDocument) {
-            if (this.xmlDeclaration !== node.xmlDeclaration || this.content.length !== node.content.length) {
+            if (this.content.length !== node.content.length) {
                 return false;
             }
             for (let i = 0; i < this.content.length; i++) {

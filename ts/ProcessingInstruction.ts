@@ -12,48 +12,27 @@
 
 import { Constants } from "./Constants";
 import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
 
 export class ProcessingInstruction implements XMLNode {
 
     private target: string;
-    private value: string;
+    private data: string;
 
-    constructor(target: string, value: string) {
+    constructor(target: string, data: string) {
         this.target = target;
-        this.value = value;
-    }
-
-    static parse(instructionText: string): ProcessingInstruction {
-        let target: string = '';
-        let i: number = '<?'.length;
-        for (; i < instructionText.length; i++) {
-            let char: string = instructionText[i];
-            if (XMLUtils.isXmlSpace(char)) {
-                break;
-            }
-            target += char;
-        }
-        for (; i < instructionText.length; i++) {
-            let char: string = instructionText[i];
-            if (!XMLUtils.isXmlSpace(char)) {
-                break;
-            }
-        }
-        let value: string = instructionText.substring(i, instructionText.indexOf('?>'));
-        return new ProcessingInstruction(target, value);
+        this.data = data;
     }
 
     getTarget(): string {
         return this.target;
     }
 
-    getValue(): string {
-        return this.value;
+    getData(): string {
+        return this.data;
     }
 
-    setValue(value: string): void {
-        this.value = value;
+    setData(data: string): void {
+        this.data = data;
     }
 
     getNodeType(): number {
@@ -61,12 +40,12 @@ export class ProcessingInstruction implements XMLNode {
     }
 
     toString(): string {
-        return '<?' + this.target + ' ' + this.value + '?>';
+        return '<?' + this.target + ' ' + this.data + '?>';
     }
 
     equals(node: XMLNode): boolean {
         if (node instanceof ProcessingInstruction) {
-            return this.target === node.target && this.value === node.value;
+            return this.target === node.target && this.data === node.data;
         }
         return false;
     }
