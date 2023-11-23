@@ -10,12 +10,13 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+export { Catalog } from "./Catalog";
 export { CData } from "./CData";
 export { Constants } from "./Constants";
 export { ContentHandler } from "./ContentHandler";
-export { XMLDocumentType } from "./XMLDocumentType";
-export { Indenter } from "./Indenter";
+export { DOMBuilder } from "./DOMBuilder";
 export { FileReader } from "./FileReader";
+export { Indenter } from "./Indenter";
 export { ProcessingInstruction } from "./ProcessingInstruction";
 export { SAXParser } from "./SAXParser";
 export { TextNode } from "./TextNode";
@@ -23,6 +24,8 @@ export { XMLAttribute } from "./XMLAttribute";
 export { XMLComment } from "./XMLComment";
 export { XMLDeclaration } from "./XMLDeclaration";
 export { XMLDocument } from "./XMLDocument";
+export { XMLDocumentType } from "./XMLDocumentType";
 export { XMLElement } from "./XMLElement";
 export { XMLNode } from "./XMLNode";
 export { XMLUtils } from "./XMLUtils";
+export { XMLWriter } from "./XMLWriter";
