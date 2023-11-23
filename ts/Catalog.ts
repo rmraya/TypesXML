@@ -17,6 +17,7 @@ import { DOMBuilder } from "./DOMBuilder";
 import { SAXParser } from "./SAXParser";
 import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
+import { XMLUtils } from "./XMLUtils";
 
 export class Catalog {
 
@@ -191,18 +192,17 @@ export class Catalog {
             return urn;
         }
         let publicId: string = urn.trim().substring('urn:publicid:'.length);
-        publicId = publicId.replace(/\\+/, ' ');
-        publicId = publicId.replace(/\\:/, '//');
-        publicId = publicId.replace(';', '::');
-        publicId = publicId.replace('%2B', '+');
-        publicId = publicId.replace('%3A', ':');
-        publicId = publicId.replace('%2F', '/');
-        publicId = publicId.replace('%3B', ';');
-        publicId = publicId.replace('%27', '\'');
-        publicId = publicId.replace('%3F', '?');
-        publicId = publicId.replace('%23', '#');
-        publicId = publicId.replace('%25', '%');
-        return publicId;
+        publicId = XMLUtils.replaceAll(publicId, '+', ' ');
+        publicId = XMLUtils.replaceAll(publicId, ':', '//');
+        publicId = XMLUtils.replaceAll(publicId, ';', '::');
+        publicId = XMLUtils.replaceAll(publicId, '%2B', '+');
+        publicId = XMLUtils.replaceAll(publicId, '%3A', ':');
+        publicId = XMLUtils.replaceAll(publicId, '%2F', '/');
+        publicId = XMLUtils.replaceAll(publicId, '%3B', ';');
+        publicId = XMLUtils.replaceAll(publicId, '%27', '\'');
+        publicId = XMLUtils.replaceAll(publicId, '%3F', '?');
+        publicId = XMLUtils.replaceAll(publicId, '%23', '#');
+        return XMLUtils.replaceAll(publicId, '%25', '%');
     }
 
     getSystemCatalog(): Map<string, string> {

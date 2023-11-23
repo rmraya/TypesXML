@@ -15,18 +15,18 @@ export class XMLUtils {
     static SPACES: string = ' \t\r\n';
 
     static cleanString(text: string): string {
-        let result: string = text.replace('&', '&amp;');
-        result = result.replace('<', '&lt;');
-        return result.replace('>', '&gt;');
+        let result: string = XMLUtils.replaceAll(text, '&', '&amp;');
+        result = XMLUtils.replaceAll(result, '<', '&lt;');
+        return XMLUtils.replaceAll(result, '>', '&gt;');
     }
 
     static unquote(text: string): string {
-        return text.replace('"', '&quot;');
+        return XMLUtils.replaceAll(text, '"', '&quot;');
     }
 
     static normalizeLines(text: string): string {
-        let result: string = text.replace('\r\n', '\n');
-        return result.replace('\r', '\n');
+        let result: string = XMLUtils.replaceAll(text, '\r\n', '\n');
+        return XMLUtils.replaceAll(result, '\r', '\n');
     }
 
     static isXmlSpace(char: string): boolean {
@@ -35,6 +35,24 @@ export class XMLUtils {
 
     static normalizeSpaces(text: string): string {
         return text.replace(/[\r\n\t]/s, ' ');
+    }
+
+    static replaceAll(text: string, search: string, replacement: string): string {
+        let re: RegExp = new RegExp(XMLUtils.escapeRegExpChars(search), 'g');
+        return text.replace(re, replacement);
+    }
+
+    static escapeRegExpChars(text: string): string {
+        let result: string = '';
+        let length: number = text.length;
+        for (let i = 0; i < length; i++) {
+            let c: string = text.charAt(i);
+            if ('[]{}()^$?*+.'.indexOf(c) > -1) {
+                result += '\\';
+            }
+            result += c;
+        }
+        return result;
     }
 
     static validXml10Chars(text: string): string {
