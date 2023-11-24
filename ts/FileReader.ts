@@ -10,9 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { openSync, readSync, closeSync, statSync, Stats } from "fs";
+import { Stats, closeSync, openSync, readSync, statSync } from "fs";
+import { XMLReader } from "./XMLReader";
 
-export class FileReader {
+export class FileReader implements XMLReader {
 
     fileHandle: number;
     encoding: BufferEncoding;

@@ -15,6 +15,7 @@ import { XMLAttribute } from "./XMLAttribute";
 
 export interface ContentHandler {
 
+    initialize(): void;
     setCatalog(catalog: Catalog): void;
 
     startDocument(): void;

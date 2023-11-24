@@ -20,7 +20,7 @@ export class DOMBuilder implements ContentHandler {
     catalog: Catalog;
     grammarUrl: string;
 
-    constructor() {
+    initialize(): void {
         this.document = new XMLDocument();
         this.stack = new Array();
         this.inCdData = false;

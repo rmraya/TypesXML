@@ -37,9 +37,9 @@ export class XMLDocument implements XMLNode {
     }
 
     getRoot(): XMLElement | undefined {
-        for (let i = 0; i < this.content.length; i++) {
-            if (this.content[i] instanceof XMLElement) {
-                return this.content[i] as XMLElement;
+        for (let node of this.content) {
+            if (node instanceof XMLElement) {
+                return node;
             }
         }
         return undefined;
@@ -50,9 +50,9 @@ export class XMLDocument implements XMLNode {
     }
 
     getDocumentType(): XMLDocumentType | undefined {
-        for (let i = 0; i < this.content.length; i++) {
-            if (this.content[i] instanceof XMLDocumentType) {
-                return this.content[i] as XMLDocumentType;
+        for (let node of this.content) {
+            if (node instanceof XMLDocumentType) {
+                return node;
             }
         }
         return undefined;
@@ -64,7 +64,7 @@ export class XMLDocument implements XMLNode {
 
     getXmlDeclaration(): XMLDeclaration | undefined {
         if (this.content[0] instanceof XMLDeclaration) {
-            return this.content[0] as XMLDeclaration;
+            return this.content[0];
         }
         return undefined;
     }

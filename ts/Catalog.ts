@@ -51,7 +51,7 @@ export class Catalog {
         let contentHandler: ContentHandler = new DOMBuilder();
         let parser: SAXParser = new SAXParser();
         parser.setContentHandler(contentHandler);
-        parser.parse(catalogFile);
+        parser.parseFile(catalogFile);
         let catalogDocument: XMLDocument = (contentHandler as DOMBuilder).getDocument();
         let catalogRoot: XMLElement = catalogDocument.getRoot();
         if (catalogRoot.getName() !== 'catalog') {
@@ -245,8 +245,7 @@ export class Catalog {
 
     matchSystem(systemId: string): string {
         if (systemId) {
-            for (let i: number = 0; i < this.systemRewrites.length; i++) {
-                let pair: string[] = this.systemRewrites[i];
+            for (let pair of this.systemRewrites) {
                 if (systemId.startsWith(pair[0])) {
                     systemId = pair[1] + systemId.substring(pair[0].length);
                 }

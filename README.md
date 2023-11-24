@@ -4,6 +4,7 @@ Open source XML library written in TypeScript
 
 Implements a SAX parser that exposes the these methods from the `ContentHandler` interface:
 
+* initialize(): void;
 * setCatalog(catalog: Catalog): void;
 * startDocument(): void;
 * endDocument(): void;
@@ -53,10 +54,16 @@ export class Test {
             let contentHandler: ContentHandler = new DOMBuilder();
             let xmlParser = new SAXParser();
             xmlParser.setContentHandler(contentHandler);
-            xmlParser.parse("test.xml");
+            xmlParser.parseFile("test.xml");
             let doc: XMLDocument = (contentHandler as DOMBuilder).getDocument();
             let root: XMLElement = doc.getRoot();
             console.log(root.toString());
+
+            //  build the document again, this time from a string
+            xmlParser.parseString(doc.toString());
+            let newDoc = (contentHandler as DOMBuilder).getDocument();
+            console.log(newDoc.getRoot().toString());
+
         } catch (error: any) {
             if (error instanceof Error) {
                 console.log(error.message);

@@ -12,17 +12,17 @@
 
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
+import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
+import { XMLReader } from "./XMLReader";
 import { XMLUtils } from "./XMLUtils";
 
 export class SAXParser {
 
     contentHandler: ContentHandler;
-    reader: FileReader;
+    reader: XMLReader;
     pointer: number;
     buffer: string;
-    fileSize: number;
-    encoding: BufferEncoding;
     elementStack: number;
     characterRun: string;
     rootParsed: boolean;
@@ -38,11 +38,26 @@ export class SAXParser {
         this.contentHandler = contentHandler;
     }
 
-    parse(path: string, encoding?: BufferEncoding): void {
-        this.encoding = encoding ? encoding : FileReader.detectEncoding(path);
+    parseFile(path: string, encoding?: BufferEncoding): void {
+        if (!this.contentHandler) {
+            throw new Error('ContentHandler not set');
+        }
+        if (!encoding) {
+            encoding = FileReader.detectEncoding(path);
+        }
         this.reader = new FileReader(path, encoding);
-        this.fileSize = this.reader.getFileSize();
         this.buffer = this.reader.read();
+        this.contentHandler.initialize();
+        this.readDocument();
+    }
+
+    parseString(string: string): void {
+        if (!this.contentHandler) {
+            throw new Error('ContentHandler not set');
+        }
+        this.reader = new StringReader(string);
+        this.buffer = this.reader.read();
+        this.contentHandler.initialize();
         this.readDocument();
     }
 
