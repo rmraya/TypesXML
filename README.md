@@ -38,6 +38,12 @@ Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tr
 * Support for XML Schemas
 * Support for RelaxNG
 
+## Installation
+
+```bash
+npm install typesxml
+```
+
 ## Example
 
 ```TypeScript
