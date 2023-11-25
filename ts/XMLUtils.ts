@@ -34,7 +34,7 @@ export class XMLUtils {
     }
 
     static normalizeSpaces(text: string): string {
-        return text.replace(/[\r\n\t]/s, ' ');
+        return text.replace(/\s+/g, ' ');
     }
 
     static replaceAll(text: string, search: string, replacement: string): string {
