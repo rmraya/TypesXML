@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { writeFileSync } from "fs";
+import { appendFileSync, writeFileSync } from "fs";
 import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLDocument } from "./XMLDocument";
 
@@ -21,8 +21,15 @@ export class XMLWriter {
             encoding: 'utf8'
         };
         let decl: XMLDeclaration = doc.getXmlDeclaration();
-        if (decl) {
-            options.encoding = decl.getEncoding();
+        if (decl && decl.getEncoding() === 'UTF-16LE') {
+            options.encoding = 'utf16le';
+        }
+        if (options.encoding === 'utf16le') {
+            // write BOM for UTF-16LE
+            const UTF16: Buffer = Buffer.from([-2, -1]);
+            writeFileSync(file, UTF16, options);
+            appendFileSync(file, doc.toString(), options);
+            return;
         }
         writeFileSync(file, doc.toString(), options);
     }
