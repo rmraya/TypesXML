@@ -107,12 +107,12 @@ export class XMLElement implements XMLNode {
         this.attributes.forEach((value: XMLAttribute) => {
             result += ' ' + value.toString();
         });
-        result += (this.content.length > 0) ? '>' : '/>';
+        result += '>';
         return result;
     }
 
     getTail(): string {
-        return (this.content.length > 0) ? '</' + this.name + '>' : '';
+        return '</' + this.name + '>';
     }
 
     toString(): string {
