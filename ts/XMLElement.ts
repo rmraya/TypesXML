@@ -102,6 +102,19 @@ export class XMLElement implements XMLNode {
         return Constants.ELEMENT_NODE;
     }
 
+    getHead(): string {
+        let result: string = '<' + this.name;
+        this.attributes.forEach((value: XMLAttribute) => {
+            result += ' ' + value.toString();
+        });
+        result += (this.content.length > 0) ? '>' : '/>';
+        return result;
+    }
+
+    getTail(): string {
+        return (this.content.length > 0) ? '</' + this.name + '>' : '';
+    }
+
     toString(): string {
         let result: string = '<' + this.name;
         this.attributes.forEach((value: XMLAttribute) => {
