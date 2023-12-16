@@ -2,7 +2,7 @@
 
 Open source XML library written in TypeScript
 
-Implements a SAX parser that exposes the these methods from the `ContentHandler` interface:
+Implements a SAX parser that exposes these methods from the `ContentHandler` interface:
 
 * initialize(): void;
 * setCatalog(catalog: Catalog): void;
@@ -26,7 +26,7 @@ Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tr
 
 ## Features currently in development
 
-* Parsing of the Internal Subset specified in the <!DOCTYPE> declaration
+* Parsing of DTDs and internal subsets from <!DOCTYPE>
 
 ## Limitations
 
