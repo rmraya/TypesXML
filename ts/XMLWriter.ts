@@ -32,7 +32,7 @@ export class XMLWriter {
 
     writeNode(node: XMLNode): void {
         if (node instanceof XMLDeclaration) {
-            let enc: string = (node as XMLDeclaration).getEncoding();
+            let enc: string = node.getEncoding();
             if (enc === 'UTF-16LE') {
                 // write BOM for UTF-16LE
                 this.options.encoding = 'utf16le';

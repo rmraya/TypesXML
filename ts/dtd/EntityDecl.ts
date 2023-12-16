@@ -12,7 +12,6 @@
 
 import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
-import { XMLUtils } from "../XMLUtils";
 
 export class EntityDecl implements XMLNode {
 

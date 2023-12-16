@@ -140,7 +140,6 @@ export class DTDParser {
                     throw new Error('Malformed comment');
                 }
                 // skip comments
-                let comment = this.source.substring(this.pointer, index + '-->'.length);
                 this.pointer = index + '-->'.length;
                 continue;
             }
@@ -168,7 +167,7 @@ export class DTDParser {
                     this.grammar.merge(externalGrammar);
                     this.pointer = index + ';'.length;
                 } else {
-
+                    throw new Error('Parameter entity without value or external subset: ' + entityName);
                 }
                 continue;
             }
@@ -208,7 +207,6 @@ export class DTDParser {
         if (this.hasParameterEntity(keyword)) {
             keyword = this.resolveEntities(keyword);
         }
-
         if ('INCLUDE' === keyword) {
             // jump to the start of the content
             for (; this.pointer < this.source.length; this.pointer++) {
@@ -218,7 +216,6 @@ export class DTDParser {
                 }
             }
             this.pointer++;
-            return;
         } else if ('IGNORE' === keyword) {
             this.skipIgnoreSection();
         } else {
