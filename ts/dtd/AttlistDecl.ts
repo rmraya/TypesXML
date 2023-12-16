@@ -29,7 +29,7 @@ export class AttlistDecl implements XMLNode {
         this.parseAttributes(attributesText);
     }
 
-    getListName(): string {
+    getName(): string {
         return this.name;
     }
 
@@ -67,7 +67,7 @@ export class AttlistDecl implements XMLNode {
     equals(node: XMLNode): boolean {
         if (node instanceof AttlistDecl) {
             let nodeAtts: Map<string, AttDecl> = node.getAttributes();
-            if (this.name !== node.getListName() || this.attributes.size !== nodeAtts.size) {
+            if (this.name !== node.getName() || this.attributes.size !== nodeAtts.size) {
                 return false;
             }
             this.attributes.forEach((value: AttDecl, key: string) => {

@@ -40,17 +40,32 @@ export class EntityDecl implements XMLNode {
         return this.value;
     }
 
+    getSystemId(): string {
+        return this.systemId;
+    }
+
+    getPublicId(): string {
+        return this.publicId;
+    }
+
     getNodeType(): number {
         return Constants.ENTITY_DECL_NODE;
     }
 
     toString(): string {
-        // TODO support SYTEM and PUBLIC
-        return '<!ENTITY ' + this.name + ' "' + XMLUtils.unquote(XMLUtils.cleanString(this.value)) + '">'
+        let result = '<!ENTITY ' + (this.parameterEntity ? '% ' : '') + this.name;
+        if (this.publicId !== '' && this.systemId !== '') {
+            result += ' PUBLIC "' + this.publicId + '" "' + this.systemId + '">';
+        } else if (this.systemId !== '') {
+            result += ' SYSTEM "' + this.systemId + '">';
+        } else {
+            result += ' "' + this.value + '">';
+        }
+        return result;
     }
 
     equals(node: XMLNode): boolean {
-     // TODO
+        // TODO
         return false;
     }
 }

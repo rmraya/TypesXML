@@ -84,7 +84,7 @@ export class Catalog {
                     let uri: string = this.makeAbsolute(child.getAttribute("uri").getValue());
                     if (existsSync(uri)) {
                         this.publicCatalog.set(publicId, uri);
-                        if (uri.endsWith(".dtd")) {
+                        if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
                             let name: string = path.basename(uri);
                             if (!this.dtdCatalog.has(name)) {
                                 this.dtdCatalog.set(name, uri);
@@ -135,25 +135,25 @@ export class Catalog {
                 let nextCatalog: string = this.makeAbsolute(child.getAttribute("catalog").getValue());
                 let catalog: Catalog = new Catalog(nextCatalog);
                 let map: Map<string, string> = catalog.getSystemCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.systemCatalog.has(key)) {
                         this.systemCatalog.set(key, value);
                     }
                 });
                 map = catalog.getPublicCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.publicCatalog.has(key)) {
                         this.publicCatalog.set(key, value);
                     }
                 });
                 map = catalog.getUriCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.uriCatalog.has(key)) {
                         this.uriCatalog.set(key, value);
                     }
                 });
                 map = catalog.getDtdCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.dtdCatalog.has(key)) {
                         this.dtdCatalog.set(key, value);
                     }
