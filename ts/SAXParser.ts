@@ -88,10 +88,6 @@ export class SAXParser {
                 this.startCDATA();
                 continue;
             }
-            if (this.lookingAt('<![')) {
-                // TODO parse conditional section INCLUDE or IGNORE
-                continue;
-            }
             if (this.lookingAt(']]>')) {
                 this.endCDATA();
                 continue;
