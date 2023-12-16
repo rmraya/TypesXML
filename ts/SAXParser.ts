@@ -65,7 +65,7 @@ export class SAXParser {
         this.contentHandler.startDocument();
         while (this.pointer < this.buffer.length) {
             if (this.lookingAt('<?xml ') || this.lookingAt('<?xml\t') || this.lookingAt('<?xml\r') || this.lookingAt('<?xml\n')) {
-                this.parseXMLDecl();
+                this.parseXMLDeclaration();
                 continue;
             }
             if (this.lookingAt('<!DOCTYPE')) {
@@ -86,6 +86,10 @@ export class SAXParser {
             }
             if (this.lookingAt('<![CDATA[')) {
                 this.startCDATA();
+                continue;
+            }
+            if (this.lookingAt('<![')) {
+                // TODO parse conditional section INCLUDE or IGNORE
                 continue;
             }
             if (this.lookingAt(']]>')) {
@@ -274,147 +278,187 @@ export class SAXParser {
     }
 
     parseDoctype() {
-        let declaration: string = '';
+        this.cleanCharacterRun();
         this.pointer += 9; // skip '<!DOCTYPE'
-        let i: number = 0;
         // skip spaces before root name
-        for (; i < this.buffer.length; i++) {
-            let char: string = this.buffer.charAt(this.pointer + i);
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.pointer + i + 1 >= this.buffer.length && this.reader.dataAvailable()) {
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
                 this.buffer += this.reader.read();
             }
         }
-        this.pointer += i;
-        i = 0;
         // read name
         let name: string = '';
-        for (; i < this.buffer.length; i++) {
-            let char: string = this.buffer.charAt(this.pointer + i);
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char: string = this.buffer.charAt(this.pointer);
             if (XMLUtils.isXmlSpace(char)) {
                 break;
             }
             name += char;
-            if (this.pointer + i + 1 >= this.buffer.length && this.reader.dataAvailable()) {
+            if (this.pointer + 1 >= this.buffer.length && this.reader.dataAvailable()) {
                 this.buffer += this.reader.read();
             }
         }
-        this.pointer += i;
-        i = 0;
         // skip spaces after root name
-        for (; i < this.buffer.length; i++) {
-            let char: string = this.buffer.charAt(this.pointer + i);
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.pointer + i + 1 >= this.buffer.length && this.reader.dataAvailable()) {
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
                 this.buffer += this.reader.read();
             }
         }
-        this.pointer += i;
-        // read the rest of the declaration
-        let stack: number = 1;
+        // read external identifiers
+        let systemId: string = '';
+        if (this.lookingAt('SYSTEM')) {
+            this.parseSystemDeclaration();
+        }
+        let publicId: string = '';
+        if (this.lookingAt('PUBLIC')) {
+            let pair: string[] = this.parsePublicDeclaration();
+            publicId = pair[0];
+            systemId = pair[1];
+        }
+        this.contentHandler.startDTD(name, publicId, systemId);
+        // skip spaces after SYSTEM or PUBLIC
         for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char: string = this.buffer[this.pointer];
-            if ('<' === char) {
-                stack++;
+            let char = this.buffer[this.pointer];
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
             }
-            if ('>' === char) {
-                stack--;
-                if (stack === 0) {
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                this.buffer += this.reader.read();
+            }
+        }
+        // check internal subset
+        let internalSubset: string = '';
+        if (this.lookingAt('[')) {
+            this.pointer++; // skip '['
+            for (; this.pointer < this.buffer.length; this.pointer++) {
+                let char: string = this.buffer[this.pointer];
+                if (']' === char) {
                     break;
                 }
+                internalSubset += char;
+                if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                    this.buffer += this.reader.read();
+                }
             }
-            declaration += char;
+        }
+        // skip spaces after internal subset
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
+            }
             if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
                 this.buffer += this.reader.read();
             }
         }
         this.buffer = this.buffer.substring(this.pointer + 1); // skip '>'
         this.pointer = 0;
-        let systemId: string = this.extractSystem(declaration);
-        let publicId: string = this.extractPublic(declaration);
-        let internalSubset: string = this.extractInternal(declaration);
-        this.contentHandler.startDTD(name, publicId, systemId);
         if (internalSubset !== '') {
             this.contentHandler.internalSubset(internalSubset);
         }
         this.contentHandler.endDTD();
     }
 
-    extractInternal(declaration: string): string {
-        let index = declaration.indexOf('[');
-        if (index === -1) {
-            return '';
-        }
-        let end = declaration.indexOf(']');
-        if (end === -1) {
-            return '';
-        }
-        return declaration.substring(index + 1, end);
-    }
-
-    extractPublic(declaration: string): string {
-        let index = declaration.indexOf('PUBLIC');
-        if (index === -1) {
-            return '';
-        }
+    parsePublicDeclaration(): string[] {
+        this.pointer += 6; // skip 'PUBLIC'
         // skip spaces after PUBLIC
-        let i: number = 6;
-        for (; i < declaration.length; i++) {
-            let char = declaration[i];
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
+            }
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                this.buffer += this.reader.read();
             }
         }
         let separator: string = '';
         let publicId: string = '';
-        for (; i < declaration.length; i++) {
-            let char = declaration[i];
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
             if (separator === '' && ('\'' === char || '"' === char)) {
                 separator = char;
                 continue;
             }
             if (char === separator) {
+                this.pointer++; // skip separator
                 break;
             }
             publicId += char;
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                this.buffer += this.reader.read();
+            }
         }
-        return publicId;
-    }
-
-    extractSystem(declaration: string): string {
-        let index: number = declaration.indexOf('SYSTEM');
-        if (index === -1) {
-            return '';
-        }
-        // skip spaces after SYSTEM
-        let i: number = 6;
-        for (; i < declaration.length; i++) {
-            let char = declaration[i];
+        // skip spaces after publicId
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
+            }
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                this.buffer += this.reader.read();
+            }
+        }
+        separator = '';
+        let systemIdId: string = '';
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
+            if (separator === '' && ('\'' === char || '"' === char)) {
+                separator = char;
+                continue;
+            }
+            if (char === separator) {
+                this.pointer++; // skip separator
+                break;
+            }
+            systemIdId += char;
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                this.buffer += this.reader.read();
+            }
+        }
+        return [publicId, systemIdId];
+    }
+
+    parseSystemDeclaration(): string {
+        this.pointer += 6; // skip 'SYSTEM'
+        // skip spaces after SYSTEM
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
+            if (!XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                this.buffer += this.reader.read();
             }
         }
         let separator: string = '';
         let systemId: string = '';
-        for (; i < declaration.length; i++) {
-            let char = declaration[i];
+        for (; this.pointer < this.buffer.length; this.pointer++) {
+            let char = this.buffer[this.pointer];
             if (separator === '' && ('\'' === char || '"' === char)) {
                 separator = char;
                 continue;
             }
             if (char === separator) {
+                this.pointer++; // skip separator
                 break;
             }
             systemId += char;
+            if (this.pointer + 1 > this.buffer.length && this.reader.dataAvailable()) {
+                this.buffer += this.reader.read();
+            }
         }
         return systemId;
     }
 
-    parseXMLDecl() {
+    parseXMLDeclaration() {
         let declarationText: string = '';
         this.pointer += 6; // skip '<?xml '
         while (!this.lookingAt('?>')) {
