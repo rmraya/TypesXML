@@ -345,6 +345,7 @@ export class SAXParser {
                 }
             }
         }
+        this.pointer++; // skip ']'
         // skip spaces after internal subset
         for (; this.pointer < this.buffer.length; this.pointer++) {
             let char = this.buffer[this.pointer];
@@ -355,7 +356,8 @@ export class SAXParser {
                 this.buffer += this.reader.read();
             }
         }
-        this.buffer = this.buffer.substring(this.pointer + 1); // skip '>'
+        this.pointer++; // skip '>'
+        this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
         if (internalSubset !== '') {
             this.contentHandler.internalSubset(internalSubset);
