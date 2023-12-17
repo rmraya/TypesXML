@@ -36,6 +36,12 @@ export class DTDParser {
         this.catalog = catalog;
     }
 
+    parseDTD(file: string) : Grammar{
+        this.parseFile(file);
+        this.grammar.processModels();
+        return this.grammar;
+    }
+
     parseFile(file: string): Grammar {
         this.source = '';
         let stats: Stats = statSync(file, { bigint: false, throwIfNoEntry: true });
@@ -54,7 +60,9 @@ export class DTDParser {
 
     parseString(source: string): Grammar {
         this.source = source;
-        return this.parse();
+        this.parse();
+        this.grammar.processModels();
+        return this.grammar;
     }
 
     parse(): Grammar {
@@ -69,9 +77,6 @@ export class DTDParser {
                 }
                 let elementText: string = this.source.substring(this.pointer, index + '>'.length);
                 let length = elementText.length;
-                if (this.hasParameterEntity(elementText)) {
-                    elementText = this.resolveEntities(elementText);
-                }
                 let elementDecl: ElementDecl = this.parseElementDeclaration(elementText);
                 this.grammar.addElement(elementDecl);
                 this.pointer += length;
@@ -84,9 +89,6 @@ export class DTDParser {
                 }
                 let attListText: string = this.source.substring(this.pointer, index + '>'.length);
                 let length = attListText.length;
-                if (this.hasParameterEntity(attListText)) {
-                    attListText = this.resolveEntities(attListText);
-                }
                 let attList: AttlistDecl = this.parseAttributesListDeclaration(attListText);
                 this.grammar.addAttributesList(attList);
                 this.pointer += length;
@@ -109,7 +111,7 @@ export class DTDParser {
                     throw new Error('Malformed notation declaration');
                 }
                 let notationDeclText: string = this.source.substring(this.pointer, index + '>'.length);
-                if (this.hasParameterEntity(notationDeclText)) {
+                if (XMLUtils.hasParameterEntity(notationDeclText)) {
                     notationDeclText = this.resolveEntities(notationDeclText);
                 }
                 let notation: NotationDecl = this.parseNotationDeclaration(notationDeclText);
@@ -204,7 +206,7 @@ export class DTDParser {
             }
             keyword += char;
         }
-        if (this.hasParameterEntity(keyword)) {
+        if (XMLUtils.hasParameterEntity(keyword)) {
             keyword = this.resolveEntities(keyword);
         }
         if ('INCLUDE' === keyword) {
@@ -241,12 +243,8 @@ export class DTDParser {
         }
     }
 
-    hasParameterEntity(fragment: string) {
-        return fragment.indexOf('%') !== -1 && fragment.indexOf(';') !== -1;
-    }
-
     resolveEntities(fragment: string): string {
-        while (this.hasParameterEntity(fragment)) {
+        while (XMLUtils.hasParameterEntity(fragment)) {
             let start = fragment.indexOf('%');
             let end = fragment.indexOf(';');
             let entityName = fragment.substring(start + '%'.length, end);
@@ -290,7 +288,7 @@ export class DTDParser {
             }
             name += char;
         }
-        if (this.hasParameterEntity(name)) {
+        if (XMLUtils.hasParameterEntity(name)) {
             name = this.resolveEntities(name);
         }
         // skip spaces before entity value or external id
@@ -311,18 +309,19 @@ export class DTDParser {
                         break;
                     }
                 }
+                let separator: string = declaration.charAt(i);
                 i++; // skip opening "
                 // get public id
                 let publicId: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     publicId += char;
                 }
                 i++; // skip closing "
-                if (this.hasParameterEntity(publicId)) {
+                if (XMLUtils.hasParameterEntity(publicId)) {
                     publicId = this.resolveEntities(publicId);
                 }
                 // skip spaces before system id
@@ -332,17 +331,18 @@ export class DTDParser {
                         break;
                     }
                 }
+                separator = declaration.charAt(i);
                 i++; // skip opening "
                 // get system id
                 let systemId: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     systemId += char;
                 }
-                if (this.hasParameterEntity(systemId)) {
+                if (XMLUtils.hasParameterEntity(systemId)) {
                     systemId = this.resolveEntities(systemId);
                 }
                 return new EntityDecl(name, parameterEntity, '', systemId, publicId, '');
@@ -355,33 +355,32 @@ export class DTDParser {
                         break;
                     }
                 }
+                let separator: string = declaration.charAt(i);
                 i++; // skip opening "
                 // get system id
                 let systemId: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     systemId += char;
                 }
-                if (this.hasParameterEntity(systemId)) {
+                if (XMLUtils.hasParameterEntity(systemId)) {
                     systemId = this.resolveEntities(systemId);
                 }
                 return new EntityDecl(name, parameterEntity, '', systemId, '', '');
             } else {
                 // get entity value
+                let separator: string = declaration.charAt(i);
                 i++; // skip opening "
                 let value: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     value += char;
-                }
-                if (this.hasParameterEntity(value)) {
-                    value = this.resolveEntities(value);
                 }
                 return new EntityDecl(name, parameterEntity, value, '', '', '');
             }
@@ -396,18 +395,19 @@ export class DTDParser {
                         break;
                     }
                 }
+                let separator: string = declaration.charAt(i);
                 i++; // skip "
                 // get public id
                 let publicId: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     publicId += char;
                 }
                 i++; // skip closing "
-                if (this.hasParameterEntity(publicId)) {
+                if (XMLUtils.hasParameterEntity(publicId)) {
                     publicId = this.resolveEntities(publicId);
                 }
                 // skip spaces before system id
@@ -417,18 +417,19 @@ export class DTDParser {
                         break;
                     }
                 }
+                separator = declaration.charAt(i);
                 i++; // skip "
                 // get system id
                 let systemId: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     systemId += char;
                 }
                 i++; // skip closing "
-                if (this.hasParameterEntity(systemId)) {
+                if (XMLUtils.hasParameterEntity(systemId)) {
                     systemId = this.resolveEntities(systemId);
                 }
                 // skip spaces before NDATA
@@ -456,7 +457,7 @@ export class DTDParser {
                         }
                         ndata += char;
                     }
-                    if (this.hasParameterEntity(ndata)) {
+                    if (XMLUtils.hasParameterEntity(ndata)) {
                         ndata = this.resolveEntities(ndata);
                     }
                     return new EntityDecl(name, parameterEntity, '', systemId, publicId, ndata);
@@ -471,17 +472,18 @@ export class DTDParser {
                         break;
                     }
                 }
+                let separator: string = declaration.charAt(i);
                 i++; // skip "
                 // get system id
                 let systemId: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     systemId += char;
                 }
-                if (this.hasParameterEntity(systemId)) {
+                if (XMLUtils.hasParameterEntity(systemId)) {
                     systemId = this.resolveEntities(systemId);
                 }
                 // skip spaces before NDATA
@@ -509,7 +511,7 @@ export class DTDParser {
                         }
                         ndata += char;
                     }
-                    if (this.hasParameterEntity(ndata)) {
+                    if (XMLUtils.hasParameterEntity(ndata)) {
                         ndata = this.resolveEntities(ndata);
                     }
                     return new EntityDecl(name, parameterEntity, '', systemId, '', ndata);
@@ -517,17 +519,15 @@ export class DTDParser {
                 return new EntityDecl(name, parameterEntity, '', systemId, '', '');
             } else {
                 // get entity value
+                let separator: string = declaration.charAt(i);
                 i++; // skip "
                 let value: string = '';
                 for (; i < declaration.length; i++) {
                     char = declaration.charAt(i);
-                    if (char === '"') {
+                    if (char === separator) {
                         break;
                     }
                     value += char;
-                }
-                if (this.hasParameterEntity(value)) {
-                    value = this.resolveEntities(value);
                 }
                 return new EntityDecl(name, parameterEntity, value, '', '', '');
             }
@@ -536,7 +536,7 @@ export class DTDParser {
 
     parseNotationDeclaration(declaration: string): NotationDecl {
         let name: string = '';
-        let i: number = '<!ATTLIST'.length;
+        let i: number = '<!NOTATION'.length;
         let char: string = declaration.charAt(i);
         // skip spaces before notation name
         for (; i < declaration.length; i++) {
@@ -560,34 +560,68 @@ export class DTDParser {
                 break;
             }
         }
-        // get external id
-        let externalId: string = '';
-        for (; i < declaration.length; i++) {
-            char = declaration.charAt(i);
-            if (char === '>') {
-                break;
-            }
-            externalId += char;
-        }
         let publicId: string = '';
         let systemId: string = '';
-        if (XMLUtils.lookingAt('PUBLIC', externalId, 0)) {
-            let index: number = externalId.indexOf('"', 'PUBLIC'.length);
-            if (index === -1) {
-                throw new Error('Malformed notation declaration');
+        if (XMLUtils.lookingAt('PUBLIC', declaration, i)) {
+            i += 'PUBLIC'.length;
+            // skip spaces before public id
+            for (; i < declaration.length; i++) {
+                char = declaration.charAt(i);
+                if (!XMLUtils.isXmlSpace(char)) {
+                    break;
+                }
             }
-            publicId = externalId.substring('PUBLIC'.length, index);
-            index = externalId.indexOf('"', index + '"'.length);
-            if (index === -1) {
-                throw new Error('Malformed notation declaration');
+            let separator: string = declaration.charAt(i);
+            i++; // skip opening "
+            // get public id
+            for (; i < declaration.length; i++) {
+                char = declaration.charAt(i);
+                if (char === separator) {
+                    break;
+                }
+                publicId += char;
             }
-            systemId = externalId.substring(index + '"'.length);
-        } else if (XMLUtils.lookingAt('SYSTEM', externalId, 0)) {
-            let index: number = externalId.indexOf('"', 'SYSTEM'.length);
-            if (index === -1) {
-                throw new Error('Malformed notation declaration');
+            i++; // skip closing "
+            if (XMLUtils.hasParameterEntity(publicId)) {
+                publicId = this.resolveEntities(publicId);
             }
-            systemId = externalId.substring('SYSTEM'.length, index);
+            // skip spaces before system id
+            for (; i < declaration.length; i++) {
+                char = declaration.charAt(i);
+                if (!XMLUtils.isXmlSpace(char)) {
+                    break;
+                }
+            }
+            separator = declaration.charAt(i);
+            i++; // skip opening "
+            // get system id
+            for (; i < declaration.length; i++) {
+                char = declaration.charAt(i);
+                if (char === separator) {
+                    break;
+                }
+                systemId += char;
+            }
+            
+        } else if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
+            i += 'SYSTEM'.length;
+            // skip spaces before system id
+            for (; i < declaration.length; i++) {
+                char = declaration.charAt(i);
+                if (!XMLUtils.isXmlSpace(char)) {
+                    break;
+                }
+            }
+            let separator: string = declaration.charAt(i);
+            i++; // skip opening "
+            // get system id
+            for (; i < declaration.length; i++) {
+                char = declaration.charAt(i);
+                if (char === separator) {
+                    break;
+                }
+                systemId += char;
+            }
         } else {
             throw new Error('Malformed notation declaration');
         }
@@ -595,7 +629,6 @@ export class DTDParser {
     }
 
     parseAttributesListDeclaration(declaration: string): AttlistDecl {
-        let name: string = '';
         let i: number = '<!ATTLIST'.length;
         let char: string = declaration.charAt(i);
         // skip spaces before list name
@@ -605,6 +638,15 @@ export class DTDParser {
                 break;
             }
         }
+        // get list name
+        let name: string = '';
+        for (; i < declaration.length; i++) {
+            char = declaration.charAt(i);
+            if (XMLUtils.isXmlSpace(char)) {
+                break;
+            }
+            name += char;
+        }
         // skip spaces before attributes declaration
         for (; i < declaration.length; i++) {
             char = declaration.charAt(i);
@@ -612,7 +654,14 @@ export class DTDParser {
                 break;
             }
         }
-        let atttibutesText: string = declaration.substring(i).trim();
+        let atttibutesText: string = '';
+        for (; i < declaration.length; i++) {
+            char = declaration.charAt(i);
+            if (char === '>') {
+                break;
+            }
+            atttibutesText += char;
+        }
         return new AttlistDecl(name, atttibutesText);
     }
 

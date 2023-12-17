@@ -38,6 +38,7 @@ export class AttlistDecl implements XMLNode {
     }
 
     parseAttributes(text: string) {
+        // TODO parse attributes
         let parts: string[] = text.split(/[ \t\r\n]/); // (#x20 | #x9 | #xD | #xA)
         let index: number = 0;
         while (index < parts.length) {
@@ -49,7 +50,6 @@ export class AttlistDecl implements XMLNode {
                 defaultValue = parts[index++];
             }
         }
-
     }
 
     getNodeType(): number {

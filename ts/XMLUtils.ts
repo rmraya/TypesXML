@@ -33,6 +33,24 @@ export class XMLUtils {
         return this.SPACES.indexOf(char) > -1;
     }
 
+    static hasParameterEntity(text: string) {
+        let index: number = text.indexOf('%');
+        if (index === -1) {
+            return false;
+        }
+        let length: number = text.length;
+        for (let i = index + 1; i < length; i++) {
+            let c: string = text.charAt(i);
+            if (this.isXmlSpace(c)  ) {
+                return false;
+            }
+            if (c === ';') {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static normalizeSpaces(text: string): string {
         return text.replace(/\s+/g, ' ');
     }

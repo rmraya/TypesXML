@@ -10,12 +10,23 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { AttDecl } from "../dtd/AttDecl";
+
 export class ContentModel {
-
+    
     private name: string;
+    private attributes: Map<string, AttDecl>;   
 
-    constructor(name: string) {
+    constructor(name: string, contentSpec: string) {
         this.name = name;
+    }
+
+    addAttributes(attributes: Map<string, AttDecl>) {
+        this.attributes = attributes;
+    }
+
+    getAttributes(): Map<string, AttDecl> {
+        return this.attributes;
     }
 
     toString(): string {

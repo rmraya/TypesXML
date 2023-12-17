@@ -10,6 +10,8 @@ import { CData } from "./CData";
 import { XMLDocumentType } from "./XMLDocumentType";
 import { Catalog } from "./Catalog";
 import { XMLUtils } from "./XMLUtils";
+import { DTDParser } from "./dtd/DTDParser";
+import { Grammar } from "./grammar/Grammar";
 
 export class DOMBuilder implements ContentHandler {
 
@@ -18,7 +20,9 @@ export class DOMBuilder implements ContentHandler {
     document: XMLDocument;
     stack: Array<XMLElement>;
     catalog: Catalog;
+    dtdParser: DTDParser;
     grammarUrl: string;
+    grammar: Grammar;
 
     initialize(): void {
         this.document = new XMLDocument();
@@ -28,6 +32,10 @@ export class DOMBuilder implements ContentHandler {
 
     setCatalog(catalog: Catalog): void {
         this.catalog = catalog;
+    }
+
+    setDTDParser(dtdParser: DTDParser): void {
+        this.dtdParser = dtdParser;
     }
 
     getDocument(): XMLDocument {
@@ -175,6 +183,12 @@ export class DOMBuilder implements ContentHandler {
         this.document.setDocumentType(docType);
         if (this.catalog) {
             this.grammarUrl = this.catalog.resolveEntity(publicId, systemId);
+            if (this.dtdParser && this.grammarUrl) {
+                let dtdGrammar :Grammar = this.dtdParser.parseDTD(this.grammarUrl);
+                if (dtdGrammar) {
+                    this.grammar = dtdGrammar;
+                }
+            }
         }
     }
 
