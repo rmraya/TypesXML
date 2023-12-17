@@ -109,7 +109,7 @@ export class Catalog {
                 let uri: string = this.makeAbsolute(child.getAttribute("uri").getValue());
                 if (existsSync(uri)) {
                     this.uriCatalog.set(child.getAttribute("name").getValue(), uri);
-                    if (uri.endsWith(".dtd")) {
+                    if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
                         let name: string = path.basename(uri);
                         if (!this.dtdCatalog.has(name)) {
                             this.dtdCatalog.set(name, uri);

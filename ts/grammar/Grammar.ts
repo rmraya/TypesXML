@@ -98,10 +98,26 @@ export class Grammar {
     }
 
     merge(grammar: Grammar): void {
-        this.entitiesMap = new Map([...this.entitiesMap, ...grammar.getEntitiesMap()]);
-        this.attributeListMap = new Map([...this.attributeListMap, ...grammar.getAttributeListMap()]);
-        this.elementDeclMap = new Map([...this.elementDeclMap, ...grammar.getElementDeclMap()]);
-        this.notationsMap = new Map([...this.notationsMap, ...grammar.getNotationsMap()]);
+        grammar.getEntitiesMap().forEach((value: EntityDecl, key: string) => {
+            if (!this.entitiesMap.has(key)) {
+                this.entitiesMap.set(key, value);
+            }
+        });
+        grammar.getAttributeListMap().forEach((value: AttlistDecl, key: string) => {
+            if (!this.attributeListMap.has(key)) {
+                this.attributeListMap.set(key, value);
+            }
+        });
+        grammar.getElementDeclMap().forEach((value: ElementDecl, key: string) => {
+            if (!this.elementDeclMap.has(key)) {
+                this.elementDeclMap.set(key, value);
+            }
+        });
+        grammar.getNotationsMap().forEach((value: NotationDecl, key: string) => {
+            if (!this.notationsMap.has(key)) {
+                this.notationsMap.set(key, value);
+            }
+        });
     }
 
     getNotationsMap(): Map<string, NotationDecl> {

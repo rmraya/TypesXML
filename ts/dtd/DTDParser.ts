@@ -11,13 +11,14 @@
  *******************************************************************************/
 
 import { Stats, closeSync, openSync, readSync, statSync } from "fs";
+import { Catalog } from "../Catalog";
 import { XMLUtils } from "../XMLUtils";
 import { Grammar } from "../grammar/Grammar";
 import { AttlistDecl } from "./AttlistDecl";
 import { ElementDecl } from "./ElementDecl";
 import { EntityDecl } from "./EntityDecl";
 import { NotationDecl } from "./NotationDecl";
-import { Catalog } from "../Catalog";
+
 import path = require("path");
 
 export class DTDParser {
@@ -28,15 +29,20 @@ export class DTDParser {
     private source: string;
     private currentFile: string;
 
-    constructor() {
+    constructor(grammar?: Grammar) {
         this.currentFile = '';
+        if (grammar) {
+            this.grammar = grammar;
+        } else {
+            this.grammar = new Grammar();
+        }
     }
 
     setCatalog(catalog: Catalog) {
         this.catalog = catalog;
     }
 
-    parseDTD(file: string) : Grammar{
+    parseDTD(file: string): Grammar {
         this.parseFile(file);
         this.grammar.processModels();
         return this.grammar;
@@ -67,8 +73,6 @@ export class DTDParser {
 
     parse(): Grammar {
         this.pointer = 0;
-        this.grammar = new Grammar();
-
         while (this.pointer < this.source.length) {
             if (this.lookingAt('<!ELEMENT')) {
                 let index: number = this.source.indexOf('>', this.pointer);
@@ -163,13 +167,14 @@ export class DTDParser {
                     this.pointer += value.length;
                 } else if (entity.getSystemId() !== '' || entity.getPublicId() !== '') {
                     let location = this.resolveEntity(entity.getPublicId(), entity.getSystemId());
-                    let parser: DTDParser = new DTDParser();
+                    let parser: DTDParser = new DTDParser(this.grammar);
                     parser.setCatalog(this.catalog);
                     let externalGrammar: Grammar = parser.parseFile(location);
                     this.grammar.merge(externalGrammar);
                     this.pointer = index + ';'.length;
                 } else {
-                    throw new Error('Parameter entity without value or external subset: ' + entityName);
+                    // empty entity, ignore
+                    this.pointer = index + ';'.length;
                 }
                 continue;
             }
@@ -602,7 +607,6 @@ export class DTDParser {
                 }
                 systemId += char;
             }
-            
         } else if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
             i += 'SYSTEM'.length;
             // skip spaces before system id
@@ -718,13 +722,16 @@ export class DTDParser {
 
     resolveEntity(publicId: string, systemId: string): string {
         let location: string = this.catalog.resolveEntity(publicId, systemId);
-        if (!location && systemId !== '') {
+        if (!location && systemId !== '' && !systemId.startsWith('http')) {
             location = this.makeAbsolute(systemId);
         }
         if (location) {
             return location;
         }
-        throw new Error('Entity not found: ' + publicId + ' ' + systemId);
+        if (systemId.startsWith('http')) {
+            return systemId;
+        }
+        throw new Error('Entity not found: "' + publicId + '" "' + systemId + '"');
     }
 
     makeAbsolute(uri: string): string {
@@ -734,5 +741,5 @@ export class DTDParser {
 
     getGrammar(): Grammar {
         return this.grammar;
-    }   
+    }
 }

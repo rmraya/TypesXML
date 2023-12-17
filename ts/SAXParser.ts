@@ -186,6 +186,7 @@ export class SAXParser {
             this.rootParsed = true;
         }
         if (this.lookingAt('/>')) {
+            this.cleanCharacterRun();
             this.contentHandler.endElement(name);
             this.elementStack--;
             this.pointer += 2; // skip '/>'
