@@ -10,8 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import path = require("path");
 import { existsSync } from "fs";
+import * as path from "node:path";
 import { ContentHandler } from "./ContentHandler";
 import { DOMBuilder } from "./DOMBuilder";
 import { SAXParser } from "./SAXParser";

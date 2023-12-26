@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { Stats, closeSync, openSync, readSync, statSync } from "fs";
+import * as path from "node:path";
 import { Catalog } from "../Catalog";
 import { XMLUtils } from "../XMLUtils";
 import { Grammar } from "../grammar/Grammar";
@@ -18,8 +19,6 @@ import { AttlistDecl } from "./AttlistDecl";
 import { ElementDecl } from "./ElementDecl";
 import { EntityDecl } from "./EntityDecl";
 import { NotationDecl } from "./NotationDecl";
-
-import path = require("path");
 
 export class DTDParser {
 
