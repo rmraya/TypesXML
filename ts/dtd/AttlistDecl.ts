@@ -49,8 +49,11 @@ export class AttListDecl implements XMLNode {
                     defaultValue = parts[index++];
                 }
             } else {
-                // TODO could be a NOTATION or an ennumeration
-                defaultValue = parts[index++];
+                if (attType === 'NOTATION') {
+                   // TODO parse the notations in the ennumeration that follows
+                } else {
+                    defaultValue = parts[index++];
+                }
             }
             let att: AttDecl = new AttDecl(name, attType, defaultDecl, defaultValue);
             this.attributes.set(name, att);
@@ -62,6 +65,16 @@ export class AttListDecl implements XMLNode {
         let word: string = '';
         for (let i = 0; i < text.length; i++) {
             let c: string = text.charAt(i);
+            if (c === '(') {
+                // starts an enumeration
+                let enumeration: string = '(';
+                while (c !== ')') {
+                    c = text.charAt(++i);
+                    enumeration += c;
+                }
+                result.push(enumeration);
+                continue;
+            }
             if (c === ' ' || c === '\n' || c === '\r' || c === '\t') {
                 if (word.length > 0) {
                     result.push(word);
