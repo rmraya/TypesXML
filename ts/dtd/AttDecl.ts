@@ -16,12 +16,15 @@ import { XMLNode } from "../XMLNode";
 export class AttDecl implements XMLNode {
 
     private name: string;
-    private type: string;
-    private defaultType: string;
+    private attType: string;
+    private defaultDecl: string;
     private defaultValue: string;
 
-    constructor() {
-        // TODO
+    constructor(name: string, attType: string, defaultDecl: string, defaultValue: string) {
+        this.name = name;
+        this.attType = attType;
+        this.defaultDecl = defaultDecl;
+        this.defaultValue = defaultValue;
     }
 
     getNodeType(): number {
@@ -30,13 +33,12 @@ export class AttDecl implements XMLNode {
 
     equals(node: XMLNode): boolean {
         if (node instanceof AttDecl) {
-            return this.name === node.name && this.type === node.type && this.defaultType === node.defaultType && this.defaultValue === node.defaultValue;
+            return this.name === node.name && this.attType === node.attType && this.defaultDecl === node.defaultDecl && this.defaultValue === node.defaultValue;
         }
         return false;
     }
 
     toString(): string {
-        // TODO
-        return this.name;
+        return (this.name + ' ' + this.attType + ' ' + this.defaultDecl + ' ' + this.defaultValue).trim();
     }
 }

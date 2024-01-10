@@ -11,7 +11,7 @@
  *******************************************************************************/
 
 import { XMLUtils } from "../XMLUtils";
-import { AttlistDecl } from "../dtd/AttlistDecl";
+import { AttListDecl } from "../dtd/AttListDecl";
 import { ElementDecl } from "../dtd/ElementDecl";
 import { EntityDecl } from "../dtd/EntityDecl";
 import { NotationDecl } from "../dtd/NotationDecl";
@@ -22,7 +22,7 @@ export class Grammar {
     private models: Map<string, ContentModel>;
 
     private entitiesMap: Map<string, EntityDecl>;
-    private attributeListMap: Map<string, AttlistDecl>;
+    private attributeListMap: Map<string, AttListDecl>;
     private elementDeclMap: Map<string, ElementDecl>;
     private notationsMap: Map<string, NotationDecl>;
 
@@ -75,7 +75,7 @@ export class Grammar {
         return text;
     }
 
-    addAttributesList(attList: AttlistDecl) {
+    addAttributesList(attList: AttListDecl) {
         if (!this.attributeListMap.has(attList.getName())) {
             this.attributeListMap.set(attList.getName(), attList);
         }
@@ -103,7 +103,7 @@ export class Grammar {
                 this.entitiesMap.set(key, value);
             }
         });
-        grammar.getAttributeListMap().forEach((value: AttlistDecl, key: string) => {
+        grammar.getAttributeListMap().forEach((value: AttListDecl, key: string) => {
             if (!this.attributeListMap.has(key)) {
                 this.attributeListMap.set(key, value);
             }
@@ -128,7 +128,7 @@ export class Grammar {
         return this.elementDeclMap;
     }
 
-    getAttributeListMap(): Map<string, AttlistDecl> {
+    getAttributeListMap(): Map<string, AttListDecl> {
         return this.attributeListMap;
     }
 
@@ -149,7 +149,7 @@ export class Grammar {
             let model: ContentModel = new ContentModel(name, contentSpec);
             this.models.set(name, model);
         });
-        this.attributeListMap.forEach((attList: AttlistDecl) => {
+        this.attributeListMap.forEach((attList: AttListDecl) => {
             let name: string = attList.getName();
             if (XMLUtils.hasParameterEntity(name)) {
                 name = this.resolveParameterEntities(name);

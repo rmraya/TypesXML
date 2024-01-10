@@ -177,6 +177,7 @@ export class SAXParser {
         let attributesMap: Map<string, string> = this.parseAttributes(rest);
         let attributes: Array<XMLAttribute> = [];
         attributesMap.forEach((value: string, key: string) => {
+            // TODO https://www.w3.org/TR/REC-xml/#AVNormalize
             let attribute: XMLAttribute = new XMLAttribute(key, value);
             attributes.push(attribute);
         });

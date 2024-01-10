@@ -15,7 +15,7 @@ import * as path from "node:path";
 import { Catalog } from "../Catalog";
 import { XMLUtils } from "../XMLUtils";
 import { Grammar } from "../grammar/Grammar";
-import { AttlistDecl } from "./AttlistDecl";
+import { AttListDecl } from "./AttListDecl";
 import { ElementDecl } from "./ElementDecl";
 import { EntityDecl } from "./EntityDecl";
 import { NotationDecl } from "./NotationDecl";
@@ -92,7 +92,7 @@ export class DTDParser {
                 }
                 let attListText: string = this.source.substring(this.pointer, index + '>'.length);
                 let length = attListText.length;
-                let attList: AttlistDecl = this.parseAttributesListDeclaration(attListText);
+                let attList: AttListDecl = this.parseAttributesListDeclaration(attListText);
                 this.grammar.addAttributesList(attList);
                 this.pointer += length;
                 continue;
@@ -631,7 +631,7 @@ export class DTDParser {
         return new NotationDecl(name, publicId, systemId);
     }
 
-    parseAttributesListDeclaration(declaration: string): AttlistDecl {
+    parseAttributesListDeclaration(declaration: string): AttListDecl {
         let i: number = '<!ATTLIST'.length;
         let char: string = declaration.charAt(i);
         // skip spaces before list name
@@ -657,15 +657,16 @@ export class DTDParser {
                 break;
             }
         }
-        let atttibutesText: string = '';
+        let attributesText: string = '';
         for (; i < declaration.length; i++) {
             char = declaration.charAt(i);
             if (char === '>') {
                 break;
             }
-            atttibutesText += char;
+            attributesText += char;
         }
-        return new AttlistDecl(name, atttibutesText);
+        let list: AttListDecl = new AttListDecl(name, attributesText)
+        return list;
     }
 
     parseElementDeclaration(declaration: string): ElementDecl {

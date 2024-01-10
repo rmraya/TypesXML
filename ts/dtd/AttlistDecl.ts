@@ -14,17 +14,15 @@ import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
 import { AttDecl } from "./AttDecl";
 
-export class AttlistDecl implements XMLNode {
+export class AttListDecl implements XMLNode {
 
     private name: string;
-    private atttibutesText: string;
     private attributes: Map<string, AttDecl>;
 
-    private attTypes: string[] = ['CDATA', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'NMTOKEN', 'NMTOKENS'];
+    static attTypes: string[] = ['CDATA', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'NMTOKEN', 'NMTOKENS'];
 
     constructor(name: string, attributesText: string) {
         this.name = name;
-        this.atttibutesText = attributesText;
         this.attributes = new Map<string, AttDecl>();
         this.parseAttributes(attributesText);
     }
@@ -38,18 +36,45 @@ export class AttlistDecl implements XMLNode {
     }
 
     parseAttributes(text: string) {
-        // TODO parse attributes
-        let parts: string[] = text.split(/[ \t\r\n]/); // (#x20 | #x9 | #xD | #xA)
+        let parts: string[] = this.split(text);
         let index: number = 0;
         while (index < parts.length) {
             let name: string = parts[index++];
-            let type: string = parts[index++];
-            let defaultType: string = parts[index++];
+            let attType: string = parts[index++];
+            let defaultDecl: string = '';
             let defaultValue: string = '';
-            if ('#FIXED' === defaultType) {
+            if (AttListDecl.attTypes.includes(attType)) {
+                defaultDecl = parts[index++];
+                if (defaultDecl === '#FIXED') {
+                    defaultValue = parts[index++];
+                }
+            } else {
+                // TODO could be a NOTATION or an ennumeration
                 defaultValue = parts[index++];
             }
+            let att: AttDecl = new AttDecl(name, attType, defaultDecl, defaultValue);
+            this.attributes.set(name, att);
         }
+    }
+
+    split(text: string): string[] {
+        let result: string[] = [];
+        let word: string = '';
+        for (let i = 0; i < text.length; i++) {
+            let c: string = text.charAt(i);
+            if (c === ' ' || c === '\n' || c === '\r' || c === '\t') {
+                if (word.length > 0) {
+                    result.push(word);
+                    word = '';
+                }
+            } else {
+                word += c;
+            }
+        }
+        if (word.length > 0) {
+            result.push(word);
+        }
+        return result;
     }
 
     getNodeType(): number {
@@ -57,7 +82,7 @@ export class AttlistDecl implements XMLNode {
     }
 
     toString(): string {
-        let result: string = '<!ATTLIST ' + this.name;
+        let result: string = '<!ATTLIST ' + this.name + '\n';
         this.attributes.forEach((a: AttDecl) => {
             result += ' ' + a.toString() + '\n';
         });
@@ -65,7 +90,7 @@ export class AttlistDecl implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof AttlistDecl) {
+        if (node instanceof AttListDecl) {
             let nodeAtts: Map<string, AttDecl> = node.getAttributes();
             if (this.name !== node.getName() || this.attributes.size !== nodeAtts.size) {
                 return false;
