@@ -3,6 +3,13 @@
   "productName": "TypesXML",
   "version": "1.2.1",
   "description": "Open source XML library written in TypeScript",
+  "keywords": [
+    "XML",
+    "Parser",
+    "DOM",
+    "SAX",
+    "DTD"
+  ],
   "scripts": {
     "build": "tsc"
   },
