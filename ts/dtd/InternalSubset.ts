@@ -10,38 +10,32 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Constants } from "./Constants";
-import { XMLNode } from "./XMLNode";
+import { Grammar } from "../grammar/Grammar";
+import { Constants } from "../Constants";
+import { XMLNode } from "../XMLNode";
+import { DTDParser } from "./DTDParser";
 
-export class CData implements XMLNode {
+export class InternalSubset implements XMLNode {
 
-    private value: string;
+    declarationText: string;
+    grammar: Grammar;
 
-    constructor(value: string) {
-        this.value = value;
-    }
-
-    setValue(value: string) {
-        this.value = value;
-    }
-
-    getValue(): string {
-        return this.value;
+    constructor(declaration: string) {
+        this.declarationText = declaration;
+        let parser:DTDParser = new DTDParser();
+        this.grammar = parser.parseString(declaration.substring(1, declaration.length - 1));
     }
 
     getNodeType(): number {
-        return Constants.CDATA_SECTION_NODE;
+        return Constants.INTERNAL_SUBSET_NODE;
     }
 
     toString(): string {
-        return '<![CDATA[' + this.value + ']]>';
+        return this.declarationText;
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof CData) {
-            return this.value === node.value;
-        }
+        // TODO Auto-generated method stub
         return false;
     }
-
 }

@@ -10,7 +10,26 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-export interface XMLReader {
-    dataAvailable(): boolean;
-    read(): string;
+import { AttDecl } from "../dtd/AttDecl";
+
+export class ContentModel {
+    
+    private name: string;
+    private attributes: Map<string, AttDecl>;   
+
+    constructor(name: string, contentSpec: string) {
+        this.name = name;
+    }
+
+    addAttributes(attributes: Map<string, AttDecl>) {
+        this.attributes = attributes;
+    }
+
+    getAttributes(): Map<string, AttDecl> {
+        return this.attributes;
+    }
+
+    toString(): string {
+        return this.name;
+    }
 }

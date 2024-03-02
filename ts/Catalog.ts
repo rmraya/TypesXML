@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 Maxprograms.
+ * Copyright (c) 2023 - 2024 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -10,8 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import path = require("path");
 import { existsSync } from "fs";
+import * as path from "node:path";
 import { ContentHandler } from "./ContentHandler";
 import { DOMBuilder } from "./DOMBuilder";
 import { SAXParser } from "./SAXParser";
@@ -84,7 +84,7 @@ export class Catalog {
                     let uri: string = this.makeAbsolute(child.getAttribute("uri").getValue());
                     if (existsSync(uri)) {
                         this.publicCatalog.set(publicId, uri);
-                        if (uri.endsWith(".dtd")) {
+                        if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
                             let name: string = path.basename(uri);
                             if (!this.dtdCatalog.has(name)) {
                                 this.dtdCatalog.set(name, uri);
@@ -109,7 +109,7 @@ export class Catalog {
                 let uri: string = this.makeAbsolute(child.getAttribute("uri").getValue());
                 if (existsSync(uri)) {
                     this.uriCatalog.set(child.getAttribute("name").getValue(), uri);
-                    if (uri.endsWith(".dtd")) {
+                    if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
                         let name: string = path.basename(uri);
                         if (!this.dtdCatalog.has(name)) {
                             this.dtdCatalog.set(name, uri);
@@ -135,25 +135,25 @@ export class Catalog {
                 let nextCatalog: string = this.makeAbsolute(child.getAttribute("catalog").getValue());
                 let catalog: Catalog = new Catalog(nextCatalog);
                 let map: Map<string, string> = catalog.getSystemCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.systemCatalog.has(key)) {
                         this.systemCatalog.set(key, value);
                     }
                 });
                 map = catalog.getPublicCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.publicCatalog.has(key)) {
                         this.publicCatalog.set(key, value);
                     }
                 });
                 map = catalog.getUriCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.uriCatalog.has(key)) {
                         this.uriCatalog.set(key, value);
                     }
                 });
                 map = catalog.getDtdCatalog();
-                map.forEach((key, value) => {
+                map.forEach((value, key) => {
                     if (!this.dtdCatalog.has(key)) {
                         this.dtdCatalog.set(key, value);
                     }

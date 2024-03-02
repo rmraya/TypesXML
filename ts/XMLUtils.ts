@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 Maxprograms.
+ * Copyright (c) 2023 - 2024 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -31,6 +31,24 @@ export class XMLUtils {
 
     static isXmlSpace(char: string): boolean {
         return this.SPACES.indexOf(char) > -1;
+    }
+
+    static hasParameterEntity(text: string) {
+        let index: number = text.indexOf('%');
+        if (index === -1) {
+            return false;
+        }
+        let length: number = text.length;
+        for (let i = index + 1; i < length; i++) {
+            let c: string = text.charAt(i);
+            if (this.isXmlSpace(c)  ) {
+                return false;
+            }
+            if (c === ';') {
+                return true;
+            }
+        }
+        return false;
     }
 
     static normalizeSpaces(text: string): string {

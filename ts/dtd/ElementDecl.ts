@@ -10,38 +10,37 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Constants } from "./Constants";
-import { XMLNode } from "./XMLNode";
+import { Constants } from "../Constants";
+import { XMLNode } from "../XMLNode";
 
-export class CData implements XMLNode {
+export class ElementDecl implements XMLNode {
 
-    private value: string;
+    private name: string;
+    contentSpec: string;
 
-    constructor(value: string) {
-        this.value = value;
+    constructor(name: string, contentSpec: string) {
+        this.name = name;
+        this.contentSpec = contentSpec;
     }
 
-    setValue(value: string) {
-        this.value = value;
+    getName(): string {
+        return this.name;
     }
 
-    getValue(): string {
-        return this.value;
+    getContentSpec(): string {
+        return this.contentSpec;
     }
-
+    
     getNodeType(): number {
-        return Constants.CDATA_SECTION_NODE;
+        return Constants.ELEMENT_DECL_NODE;
     }
 
     toString(): string {
-        return '<![CDATA[' + this.value + ']]>';
+        return '<!ELEMENT ' + this.name + ' ' + this.contentSpec + '>';
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof CData) {
-            return this.value === node.value;
-        }
-        return false;
+        // TODO
+        throw new Error("Method not implemented.");
     }
-
 }

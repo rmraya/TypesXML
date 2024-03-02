@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 Maxprograms.
+ * Copyright (c) 2023 - 2024 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -100,6 +100,19 @@ export class XMLElement implements XMLNode {
 
     getNodeType(): number {
         return Constants.ELEMENT_NODE;
+    }
+
+    getHead(): string {
+        let result: string = '<' + this.name;
+        this.attributes.forEach((value: XMLAttribute) => {
+            result += ' ' + value.toString();
+        });
+        result += '>';
+        return result;
+    }
+
+    getTail(): string {
+        return '</' + this.name + '>';
     }
 
     toString(): string {
