@@ -183,6 +183,7 @@ export class DOMBuilder implements ContentHandler {
         this.document.setDocumentType(docType);
         if (this.catalog) {
             this.grammarUrl = this.catalog.resolveEntity(publicId, systemId);
+            // TODO check grammar type (DTD, XDS or RelaxNG) and use the ritght parser
             if (this.dtdParser && this.grammarUrl) {
                 let dtdGrammar :Grammar = this.dtdParser.parseDTD(this.grammarUrl);
                 if (dtdGrammar) {
