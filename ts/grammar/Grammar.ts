@@ -11,25 +11,24 @@
  *******************************************************************************/
 
 import { XMLUtils } from "../XMLUtils";
-import { AttListDecl } from "../dtd/AttListDecl";
+import { AttDecl } from "../dtd/AttDecl";
 import { ElementDecl } from "../dtd/ElementDecl";
 import { EntityDecl } from "../dtd/EntityDecl";
 import { NotationDecl } from "../dtd/NotationDecl";
 import { ContentModel } from "./ContentModel";
 
 export class Grammar {
-
     private models: Map<string, ContentModel>;
 
     private entitiesMap: Map<string, EntityDecl>;
-    private attributeListMap: Map<string, AttListDecl>;
+    private attributesMap: Map<string, Map<string, AttDecl>>;
     private elementDeclMap: Map<string, ElementDecl>;
     private notationsMap: Map<string, NotationDecl>;
 
     constructor() {
         this.models = new Map();
         this.elementDeclMap = new Map();
-        this.attributeListMap = new Map();
+        this.attributesMap = new Map();
         this.entitiesMap = new Map();
         this.notationsMap = new Map();
         this.addPredefinedEntities();
@@ -61,6 +60,10 @@ export class Grammar {
         }
     }
 
+    addAttributes(element: string, attributes: Map<string, AttDecl>) {
+        this.attributesMap.set(element, attributes);
+    }
+
     resolveParameterEntities(text: string): string {
         while (XMLUtils.hasParameterEntity(text)) {
             let start = text.indexOf('%');
@@ -73,12 +76,6 @@ export class Grammar {
             text = text.replace('%' + entityName + ';', entity.getValue());
         }
         return text;
-    }
-
-    addAttributesList(attList: AttListDecl) {
-        if (!this.attributeListMap.has(attList.getName())) {
-            this.attributeListMap.set(attList.getName(), attList);
-        }
     }
 
     addEntity(entityDecl: EntityDecl) {
@@ -103,9 +100,9 @@ export class Grammar {
                 this.entitiesMap.set(key, value);
             }
         });
-        grammar.getAttributeListMap().forEach((value: AttListDecl, key: string) => {
-            if (!this.attributeListMap.has(key)) {
-                this.attributeListMap.set(key, value);
+        grammar.getAttributesMap().forEach((value: Map<string, AttDecl>, key: string) => {
+            if (!this.attributesMap.has(key)) {
+                this.attributesMap.set(key, value);
             }
         });
         grammar.getElementDeclMap().forEach((value: ElementDecl, key: string) => {
@@ -128,10 +125,6 @@ export class Grammar {
         return this.elementDeclMap;
     }
 
-    getAttributeListMap(): Map<string, AttListDecl> {
-        return this.attributeListMap;
-    }
-
     getEntitiesMap(): Map<string, EntityDecl> {
         return this.entitiesMap
     }
@@ -146,20 +139,17 @@ export class Grammar {
             if (XMLUtils.hasParameterEntity(contentSpec)) {
                 contentSpec = this.resolveParameterEntities(contentSpec);
             }
-            let model: ContentModel = new ContentModel(name, contentSpec);
+            let model: ContentModel = new ContentModel(this, name, contentSpec);
             this.models.set(name, model);
         });
-        this.attributeListMap.forEach((attList: AttListDecl) => {
-            let name: string = attList.getName();
-            if (XMLUtils.hasParameterEntity(name)) {
-                name = this.resolveParameterEntities(name);
-            }
-            let model: ContentModel = this.models.get(name);
-            if (model) {
-                model.addAttributes(attList.getAttributes());
-            }
-            this.models.set(name, model);
-        });
+    }
+
+    getAttributesMap(): Map<string, Map<string, AttDecl>> {
+        return this.attributesMap;
+    }
+
+    getElementAttributesMap(element: string): Map<string, AttDecl> {
+        return this.attributesMap.get(element);
     }
 
 }

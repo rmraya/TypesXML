@@ -93,7 +93,7 @@ export class DTDParser {
                 let attListText: string = this.source.substring(this.pointer, index + '>'.length);
                 let length = attListText.length;
                 let attList: AttListDecl = this.parseAttributesListDeclaration(attListText);
-                this.grammar.addAttributesList(attList);
+                this.grammar.addAttributes(attList.getName(), attList.getAttributes());
                 this.pointer += length;
                 continue;
             }

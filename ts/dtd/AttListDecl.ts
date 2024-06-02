@@ -19,7 +19,7 @@ export class AttListDecl implements XMLNode {
     private name: string;
     private attributes: Map<string, AttDecl>;
 
-    static attTypes: string[] = ['CDATA', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'NMTOKEN', 'NMTOKENS'];
+    static readonly attTypes: string[] = ['CDATA', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'NMTOKEN', 'NMTOKENS'];
 
     constructor(name: string, attributesText: string) {
         this.name = name;
@@ -50,7 +50,7 @@ export class AttListDecl implements XMLNode {
                 }
             } else {
                 if (attType === 'NOTATION') {
-                   // TODO parse the notations in the ennumeration that follows
+                    // TODO parse the notations in the ennumeration that follows
                 } else {
                     defaultValue = parts[index++];
                 }

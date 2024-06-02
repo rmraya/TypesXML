@@ -17,7 +17,7 @@ import { XMLNode } from "./XMLNode";
 
 export class XMLWriter {
 
-    static UTF16: Buffer = Buffer.from([-2, -1]);
+    static readonly UTF16: Buffer = Buffer.from([-2, -1]);
 
     file: string;
     options: any = {

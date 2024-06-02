@@ -12,7 +12,7 @@
 
 export class XMLUtils {
 
-    static SPACES: string = ' \t\r\n';
+    static readonly SPACES: string = ' \t\r\n';
 
     static cleanString(text: string): string {
         let result: string = XMLUtils.replaceAll(text, '&', '&amp;');
@@ -41,7 +41,7 @@ export class XMLUtils {
         let length: number = text.length;
         for (let i = index + 1; i < length; i++) {
             let c: string = text.charAt(i);
-            if (this.isXmlSpace(c)  ) {
+            if (this.isXmlSpace(c)) {
                 return false;
             }
             if (c === ';') {

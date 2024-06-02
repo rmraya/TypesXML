@@ -1,14 +1,14 @@
+import { CData } from "./CData";
+import { Catalog } from "./Catalog";
 import { ContentHandler } from "./ContentHandler";
+import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLComment } from "./XMLComment";
 import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLDocument } from "./XMLDocument";
-import { XMLElement } from "./XMLElement";
-import { ProcessingInstruction } from "./ProcessingInstruction";
-import { CData } from "./CData";
 import { XMLDocumentType } from "./XMLDocumentType";
-import { Catalog } from "./Catalog";
+import { XMLElement } from "./XMLElement";
 import { XMLUtils } from "./XMLUtils";
 import { DTDParser } from "./dtd/DTDParser";
 import { Grammar } from "./grammar/Grammar";
@@ -185,7 +185,7 @@ export class DOMBuilder implements ContentHandler {
             this.grammarUrl = this.catalog.resolveEntity(publicId, systemId);
             // TODO check grammar type (DTD, XDS or RelaxNG) and use the ritght parser
             if (this.dtdParser && this.grammarUrl) {
-                let dtdGrammar :Grammar = this.dtdParser.parseDTD(this.grammarUrl);
+                let dtdGrammar: Grammar = this.dtdParser.parseDTD(this.grammarUrl);
                 if (dtdGrammar) {
                     this.grammar = dtdGrammar;
                 }
@@ -198,6 +198,7 @@ export class DOMBuilder implements ContentHandler {
     }
 
     skippedEntity(name: string): void {
+        // TODO
         throw new Error("Method not implemented.");
     }
 }

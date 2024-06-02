@@ -14,7 +14,6 @@ import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
 
 export class AttDecl implements XMLNode {
-
     private name: string;
     private attType: string;
     private defaultDecl: string;
@@ -40,5 +39,10 @@ export class AttDecl implements XMLNode {
 
     toString(): string {
         return (this.name + ' ' + this.attType + ' ' + this.defaultDecl + ' ' + this.defaultValue).trim();
+    }
+
+    isValid(value: string): boolean {
+        // TODO: Implement validation
+        return true;
     }
 }
