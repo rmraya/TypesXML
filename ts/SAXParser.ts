@@ -15,13 +15,12 @@ import { tmpdir } from "os";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { XMLAttribute } from "./XMLAttribute";
-import { XMLReader } from "./XMLReader";
 import { XMLUtils } from "./XMLUtils";
 
 export class SAXParser {
 
     contentHandler: ContentHandler;
-    reader: XMLReader;
+    reader: FileReader;
     pointer: number;
     buffer: string;
     elementStack: number;
@@ -53,6 +52,7 @@ export class SAXParser {
         this.buffer = this.reader.read();
         this.contentHandler.initialize();
         this.readDocument();
+        this.reader.closeFile();
     }
 
     parseString(data: string): void {

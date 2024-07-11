@@ -11,9 +11,8 @@
  *******************************************************************************/
 
 import { Stats, closeSync, openSync, readSync, statSync } from "fs";
-import { XMLReader } from "./XMLReader";
 
-export class FileReader implements XMLReader {
+export class FileReader {
 
     fileHandle: number;
     encoding: BufferEncoding;

@@ -27,7 +27,6 @@ export { XMLDocument } from "./XMLDocument";
 export { XMLDocumentType } from "./XMLDocumentType";
 export { XMLElement } from "./XMLElement";
 export { XMLNode } from "./XMLNode";
-export { XMLReader } from "./XMLReader";
 export { XMLUtils } from "./XMLUtils";
 export { XMLWriter } from "./XMLWriter";
 
