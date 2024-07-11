@@ -19,7 +19,6 @@ export { FileReader } from "./FileReader";
 export { Indenter } from "./Indenter";
 export { ProcessingInstruction } from "./ProcessingInstruction";
 export { SAXParser } from "./SAXParser";
-export { StringReader } from "./StringReader";
 export { TextNode } from "./TextNode";
 export { XMLAttribute } from "./XMLAttribute";
 export { XMLComment } from "./XMLComment";

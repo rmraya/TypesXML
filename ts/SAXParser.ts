@@ -10,9 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { unlinkSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
-import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLReader } from "./XMLReader";
 import { XMLUtils } from "./XMLUtils";
@@ -28,6 +29,7 @@ export class SAXParser {
     rootParsed: boolean;
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
+    static path = require('path');
 
     constructor() {
         this.characterRun = '';
@@ -53,14 +55,22 @@ export class SAXParser {
         this.readDocument();
     }
 
-    parseString(string: string): void {
+    parseString(data: string): void {
         if (!this.contentHandler) {
             throw new Error('ContentHandler not set');
         }
-        this.reader = new StringReader(string);
-        this.buffer = this.reader.read();
-        this.contentHandler.initialize();
-        this.readDocument();
+        const letters: string = 'abcdefghijklmnopqrstuvxyz';
+        let name: string = '';
+        for (let i: number = 0; i < 8; i++) {
+            const randomNumber = Math.floor(Math.random() * 24);
+            let letter = letters.charAt(randomNumber);
+            name += letter;
+        }
+        name = name + '.xml';
+        let tempFile: string = SAXParser.path.join(tmpdir(), name);
+        writeFileSync(tempFile, data, { encoding: 'utf8' });
+        this.parseFile(tempFile, 'utf8');
+        unlinkSync(tempFile);
     }
 
     readDocument(): void {
