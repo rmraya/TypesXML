@@ -26,6 +26,7 @@ export class SAXParser {
     elementStack: number;
     characterRun: string;
     rootParsed: boolean;
+    xmlVersion: string;
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
     static path = require('path');
@@ -35,6 +36,7 @@ export class SAXParser {
         this.elementStack = 0;
         this.pointer = 0;
         this.rootParsed = false;
+        this.xmlVersion = '1.0';
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -156,10 +158,12 @@ export class SAXParser {
             this.contentHandler.characters('"');
         } else if (name.startsWith('#x')) {
             let code: number = parseInt(name.substring(2), 16);
-            this.contentHandler.characters(String.fromCharCode(code));
+            let char: string = String.fromCharCode(code);
+            this.contentHandler.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
         } else if (name.startsWith('#')) {
             let code: number = parseInt(name.substring(1));
-            this.contentHandler.characters(String.fromCharCode(code));
+            let char: string = String.fromCharCode(code);
+            this.contentHandler.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
         } else {
             this.contentHandler.skippedEntity(name);
         }
@@ -480,6 +484,7 @@ export class SAXParser {
         let attributes: Map<string, string> = this.parseAttributes(declarationText);
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
+        this.xmlVersion = attributes.get('version');
         this.contentHandler.xmlDeclaration(attributes.get('version'), attributes.get('encoding'), attributes.get('standalone'));
     }
 

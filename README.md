@@ -60,15 +60,17 @@ export class Test {
             let contentHandler: ContentHandler = new DOMBuilder();
             let xmlParser = new SAXParser();
             xmlParser.setContentHandler(contentHandler);
+
+            // build the document from a file
             xmlParser.parseFile("test.xml");
             let doc: XMLDocument = (contentHandler as DOMBuilder).getDocument();
             let root: XMLElement = doc.getRoot();
-            console.log(root.toString());
+            console.log(doc.toString());
 
             //  build the document again, this time from a string
             xmlParser.parseString(doc.toString());
             let newDoc = (contentHandler as DOMBuilder).getDocument();
-            console.log(newDoc.getRoot().toString());
+            console.log(newDoc.toString());
 
         } catch (error: any) {
             if (error instanceof Error) {
