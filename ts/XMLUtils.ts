@@ -52,11 +52,11 @@ export class XMLUtils {
     }
 
     static normalizeSpaces(text: string): string {
-        return text.replace(/\s+/g, ' ');
+        return String(text).replace(/\s+/g, ' ');
     }
 
     static replaceAll(text: string, search: string, replacement: string): string {
-        return text.split(search).join(replacement);
+        return String(text).split(search).join(replacement);
     }
 
     static escapeRegExpChars(text: string): string {
