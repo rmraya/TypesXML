@@ -56,8 +56,7 @@ export class XMLUtils {
     }
 
     static replaceAll(text: string, search: string, replacement: string): string {
-        let re: RegExp = new RegExp(XMLUtils.escapeRegExpChars(search), 'g');
-        return text.replace(re, replacement);
+        return text.split(search).join(replacement);
     }
 
     static escapeRegExpChars(text: string): string {
