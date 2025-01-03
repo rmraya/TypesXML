@@ -17,8 +17,6 @@ import { XMLNode } from "./XMLNode";
 
 export class XMLWriter {
 
-    static readonly UTF16: Buffer = Buffer.from([-2, -1]);
-
     file: string;
     options: any = {
         encoding: 'utf8'
@@ -34,10 +32,12 @@ export class XMLWriter {
         if (node instanceof XMLDeclaration) {
             let enc: string = node.getEncoding();
             if (enc === 'UTF-16LE') {
-                // write BOM for UTF-16LE
                 this.options.encoding = 'utf16le';
-                writeFileSync(this.file, XMLWriter.UTF16, this.options);
-                this.started = true;
+                if (!this.started) {
+                    // write BOM for UTF-16LE
+                    writeFileSync(this.file, '\ufeff', this.options);
+                    this.started = true;
+                }
             }
         }
         if (!this.started) {
@@ -67,8 +67,7 @@ export class XMLWriter {
         }
         if (options.encoding === 'utf16le') {
             // write BOM for UTF-16LE
-            writeFileSync(file, XMLWriter.UTF16, options);
-            appendFileSync(file, doc.toString(), options);
+            writeFileSync(file, '\ufeff' + doc.toString(), options);
             return;
         }
         writeFileSync(file, doc.toString(), options);

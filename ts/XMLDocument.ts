@@ -46,7 +46,15 @@ export class XMLDocument implements XMLNode {
     }
 
     setDocumentType(documentType: XMLDocumentType): void {
-        this.content.push(documentType);
+        if (this.content.length > 0) {
+            let firstNode: XMLNode = this.content[0];
+            if (firstNode instanceof XMLDeclaration) {
+                this.content.splice(1, 0, new TextNode('\n'));
+                this.content.splice(2, 0, documentType);
+                return;
+            }
+        }
+        this.content.splice(0, 0, documentType);
     }
 
     getDocumentType(): XMLDocumentType | undefined {
