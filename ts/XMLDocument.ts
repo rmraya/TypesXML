@@ -23,6 +23,7 @@ import { XMLUtils } from "./XMLUtils";
 export class XMLDocument implements XMLNode {
 
     private content: Array<XMLNode>;
+    documentType: XMLDocumentType;
 
     constructor() {
         this.content = new Array();
@@ -46,22 +47,13 @@ export class XMLDocument implements XMLNode {
     }
 
     setDocumentType(documentType: XMLDocumentType): void {
-        if (this.content.length > 0) {
-            let firstNode: XMLNode = this.content[0];
-            if (firstNode instanceof XMLDeclaration) {
-                this.content.splice(1, 0, new TextNode('\n'));
-                this.content.splice(2, 0, documentType);
-                return;
-            }
-        }
-        this.content.splice(0, 0, documentType);
+        this.documentType = documentType;
+        this.content.push(documentType);
     }
 
     getDocumentType(): XMLDocumentType | undefined {
-        for (let node of this.content) {
-            if (node instanceof XMLDocumentType) {
-                return node;
-            }
+        if (this.documentType) {
+            return this.documentType;
         }
         return undefined;
     }
