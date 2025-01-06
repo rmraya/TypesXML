@@ -53,6 +53,17 @@ export class XMLElement implements XMLNode {
         this.attributes.set(attribute.getName(), attribute);
     }
 
+    removeArribute(name: string): void {
+        this.attributes.delete(name);
+    }
+
+    setAttributes(array: Array<XMLAttribute>): void {
+        this.attributes.clear();
+        array.forEach((attribute: XMLAttribute) => {
+            this.attributes.set(attribute.getName(), attribute);
+        });
+    }
+
     getAttributes(): Array<XMLAttribute> {
         let result: Array<XMLAttribute> = new Array();
         this.attributes.forEach((value) => {
