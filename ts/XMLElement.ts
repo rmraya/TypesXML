@@ -53,7 +53,7 @@ export class XMLElement implements XMLNode {
         this.attributes.set(attribute.getName(), attribute);
     }
 
-    removeArribute(name: string): void {
+    removeAttribute(name: string): void {
         this.attributes.delete(name);
     }
 
