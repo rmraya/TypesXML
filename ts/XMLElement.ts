@@ -191,6 +191,19 @@ export class XMLElement implements XMLNode {
         return result;
     }
 
+    removeChild(child: XMLElement): void {
+        let length: number = this.content.length;
+        for (let i: number = 0; i < length; i++) {
+            let node: XMLNode = this.content[i];
+            if (node instanceof XMLElement) {
+                if (node.equals(child)) {
+                    this.content.splice(i, 1);
+                    break;
+                }
+            }
+        }
+    }
+
     getText(): string {
         let result: string = '';
         this.content.forEach((node: XMLNode) => {
