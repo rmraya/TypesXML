@@ -14,7 +14,8 @@
             "*": [
                 "node_modules/*"
             ]
-        }
+        },
+        "strict": true
     },
     "include": [
         "ts/**/*"

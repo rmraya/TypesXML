@@ -63,7 +63,7 @@ export class AttListDecl implements XMLNode {
     split(text: string): string[] {
         let result: string[] = [];
         let word: string = '';
-        for (let i = 0; i < text.length; i++) {
+        for (let i: number = 0; i < text.length; i++) {
             let c: string = text.charAt(i);
             if (c === '(') {
                 // starts an enumeration
@@ -109,7 +109,11 @@ export class AttListDecl implements XMLNode {
                 return false;
             }
             this.attributes.forEach((value: AttDecl, key: string) => {
-                if (!value.equals(nodeAtts.get(key))) {
+                let att: AttDecl | undefined = nodeAtts.get(key);
+                if (att === undefined) {
+                    return false;
+                }
+                if (!value.equals(att)) {
                     return false;
                 }
             });

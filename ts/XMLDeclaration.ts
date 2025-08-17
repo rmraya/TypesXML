@@ -17,7 +17,7 @@ export class XMLDeclaration implements XMLNode {
 
     private version: string;
     private encoding: string;
-    private standalone: string;
+    private standalone: string | undefined;
 
     constructor(version: string, encoding: string, standalone?: string) {
         if (version !== '' && !('1.0' === version || '1.1' === version)) {
@@ -25,7 +25,7 @@ export class XMLDeclaration implements XMLNode {
         }
         this.version = version;
         this.encoding = encoding;
-        if ( standalone !== undefined) {
+        if (standalone !== undefined) {
             if (!('yes' === standalone || 'no' === standalone)) {
                 throw new Error('Incorrect "standalone" value');
             }
@@ -49,7 +49,7 @@ export class XMLDeclaration implements XMLNode {
         this.encoding = encoding;
     }
 
-    getStandalone(): string {
+    getStandalone(): string | undefined {
         return this.standalone;
     }
 

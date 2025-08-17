@@ -61,7 +61,7 @@ export class XMLWriter {
         let options: any = {
             encoding: 'utf8'
         };
-        let decl: XMLDeclaration = doc.getXmlDeclaration();
+        let decl: XMLDeclaration | undefined = doc.getXmlDeclaration();
         if (decl && decl.getEncoding() === 'UTF-16LE') {
             options.encoding = 'utf16le';
         }

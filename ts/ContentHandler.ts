@@ -21,7 +21,7 @@ export interface ContentHandler {
     startDocument(): void;
     endDocument(): void;
 
-    xmlDeclaration(version: string, encoding: string, standalone: string): void;
+    xmlDeclaration(version: string, encoding: string, standalone: string | undefined): void;
 
     startElement(name: string, atts: Array<XMLAttribute>): void;
     endElement(name: string): void;

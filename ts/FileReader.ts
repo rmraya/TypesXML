@@ -37,7 +37,7 @@ export class FileReader {
 
     static detectEncoding(path: string): BufferEncoding {
         const fd = openSync(path, 'r');
-        let buffer = Buffer.alloc(3);
+        let buffer: Buffer = Buffer.alloc(3);
         let bytesRead: number = readSync(fd, buffer, 0, 3, 0);
         closeSync(fd);
 

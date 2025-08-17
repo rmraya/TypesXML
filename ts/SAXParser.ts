@@ -19,10 +19,10 @@ import { XMLUtils } from "./XMLUtils";
 
 export class SAXParser {
 
-    contentHandler: ContentHandler;
-    reader: FileReader;
+    contentHandler: ContentHandler | undefined;
+    reader: FileReader | undefined;
     pointer: number;
-    buffer: string;
+    buffer: string = '';
     elementStack: number;
     characterRun: string;
     rootParsed: boolean;
@@ -64,8 +64,8 @@ export class SAXParser {
         const letters: string = 'abcdefghijklmnopqrstuvxyz';
         let name: string = '';
         for (let i: number = 0; i < 8; i++) {
-            const randomNumber = Math.floor(Math.random() * 24);
-            let letter = letters.charAt(randomNumber);
+            const randomNumber: number = Math.floor(Math.random() * 24);
+            let letter: string = letters.charAt(randomNumber);
             name += letter;
         }
         name = name + '.xml';
@@ -76,7 +76,7 @@ export class SAXParser {
     }
 
     readDocument(): void {
-        this.contentHandler.startDocument();
+        this.contentHandler?.startDocument();
         while (this.pointer < this.buffer.length) {
             if (this.lookingAt('<?xml ') || this.lookingAt('<?xml\t') || this.lookingAt('<?xml\r') || this.lookingAt('<?xml\n')) {
                 this.parseXMLDeclaration();
@@ -123,11 +123,11 @@ export class SAXParser {
             }
             this.characterRun += char;
             this.pointer++;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
             if (this.rootParsed && this.elementStack === 0) {
-                this.contentHandler.endDocument();
+                this.contentHandler?.endDocument();
             }
         }
         if (this.elementStack !== 0) {
@@ -142,30 +142,30 @@ export class SAXParser {
         let name: string = '';
         while (!this.lookingAt(';')) {
             name += this.buffer.charAt(this.pointer++);
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         if (name === 'lt') {
-            this.contentHandler.characters('<');
+            this.contentHandler?.characters('<');
         } else if (name === 'gt') {
-            this.contentHandler.characters('>');
+            this.contentHandler?.characters('>');
         } else if (name === 'amp') {
-            this.contentHandler.characters('&');
+            this.contentHandler?.characters('&');
         } else if (name === 'apos') {
-            this.contentHandler.characters('\'');
+            this.contentHandler?.characters('\'');
         } else if (name === 'quot') {
-            this.contentHandler.characters('"');
+            this.contentHandler?.characters('"');
         } else if (name.startsWith('#x')) {
             let code: number = parseInt(name.substring(2), 16);
             let char: string = String.fromCharCode(code);
-            this.contentHandler.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
+            this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
         } else if (name.startsWith('#')) {
             let code: number = parseInt(name.substring(1));
             let char: string = String.fromCharCode(code);
-            this.contentHandler.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
+            this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
         } else {
-            this.contentHandler.skippedEntity(name);
+            this.contentHandler?.skippedEntity(name);
         }
         this.pointer++; // skip ';'
         this.buffer = this.buffer.substring(this.pointer);
@@ -178,15 +178,15 @@ export class SAXParser {
         let name: string = '';
         while (!XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer)) && !this.lookingAt('>') && !this.lookingAt('/>')) {
             name += this.buffer.charAt(this.pointer++);
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         let rest: string = '';
         while (!this.lookingAt('>') && !this.lookingAt('/>')) {
             rest += this.buffer.charAt(this.pointer++);
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         rest = rest.trim();
@@ -197,14 +197,14 @@ export class SAXParser {
             let attribute: XMLAttribute = new XMLAttribute(key, value);
             attributes.push(attribute);
         });
-        this.contentHandler.startElement(name, attributes);
+        this.contentHandler?.startElement(name, attributes);
         this.elementStack++;
         if (!this.rootParsed) {
             this.rootParsed = true;
         }
         if (this.lookingAt('/>')) {
             this.cleanCharacterRun();
-            this.contentHandler.endElement(name);
+            this.contentHandler?.endElement(name);
             this.elementStack--;
             this.pointer += 2; // skip '/>'
         } else {
@@ -221,7 +221,7 @@ export class SAXParser {
         while (!this.lookingAt('>')) {
             name += this.buffer.charAt(this.pointer++);
         }
-        this.contentHandler.endElement(name);
+        this.contentHandler?.endElement(name);
         this.elementStack--;
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
@@ -233,14 +233,14 @@ export class SAXParser {
             if (this.rootParsed) {
                 if (this.elementStack === 0) {
                     // document ended
-                    this.contentHandler.ignorableWhitespace(this.characterRun);
+                    this.contentHandler?.ignorableWhitespace(this.characterRun);
                 } else {
                     // in an element
-                    this.contentHandler.characters(this.characterRun);
+                    this.contentHandler?.characters(this.characterRun);
                 }
             } else {
                 // in prolog
-                this.contentHandler.ignorableWhitespace(this.characterRun);
+                this.contentHandler?.ignorableWhitespace(this.characterRun);
             }
             this.characterRun = '';
         }
@@ -255,7 +255,7 @@ export class SAXParser {
         }
         this.buffer = this.buffer.substring(this.pointer + 3); // skip '-->'
         this.pointer = 0;
-        this.contentHandler.comment(comment);
+        this.contentHandler?.comment(comment);
     }
 
     parseProcessingInstruction(): void {
@@ -288,7 +288,7 @@ export class SAXParser {
         data = instructionText.substring(i);
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
-        this.contentHandler.processingInstruction(target, data);
+        this.contentHandler?.processingInstruction(target, data);
     }
 
     parseDoctype() {
@@ -296,12 +296,12 @@ export class SAXParser {
         this.pointer += 9; // skip '<!DOCTYPE'
         // skip spaces before root name
         for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
+            let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         // read name
@@ -312,8 +312,8 @@ export class SAXParser {
                 break;
             }
             name += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         // skip spaces after root name
@@ -322,8 +322,8 @@ export class SAXParser {
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         // read external identifiers
@@ -337,15 +337,15 @@ export class SAXParser {
             publicId = pair[0];
             systemId = pair[1];
         }
-        this.contentHandler.startDTD(name, publicId, systemId);
+        this.contentHandler?.startDTD(name, publicId, systemId);
         // skip spaces after SYSTEM or PUBLIC
         for (; this.pointer < this.buffer.length; this.pointer++) {
             let char = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         // check internal subset
@@ -358,8 +358,8 @@ export class SAXParser {
                     break;
                 }
                 internalSubset += char;
-                if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                    this.buffer += this.reader.read();
+                if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                    this.buffer += this.reader?.read();
                 }
             }
             this.pointer++; // skip ']'
@@ -370,17 +370,17 @@ export class SAXParser {
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
         if (internalSubset !== '') {
-            this.contentHandler.internalSubset(internalSubset);
+            this.contentHandler?.internalSubset(internalSubset);
         }
-        this.contentHandler.endDTD();
+        this.contentHandler?.endDTD();
     }
 
     parsePublicDeclaration(): string[] {
@@ -391,8 +391,8 @@ export class SAXParser {
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         let separator: string = '';
@@ -408,8 +408,8 @@ export class SAXParser {
                 break;
             }
             publicId += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         // skip spaces after publicId
@@ -418,8 +418,8 @@ export class SAXParser {
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         separator = '';
@@ -435,8 +435,8 @@ export class SAXParser {
                 break;
             }
             systemIdId += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         return [publicId, systemIdId];
@@ -450,8 +450,8 @@ export class SAXParser {
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         let separator: string = '';
@@ -467,8 +467,8 @@ export class SAXParser {
                 break;
             }
             systemId += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-                this.buffer += this.reader.read();
+            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+                this.buffer += this.reader?.read();
             }
         }
         return systemId;
@@ -484,19 +484,21 @@ export class SAXParser {
         let attributes: Map<string, string> = this.parseAttributes(declarationText);
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
-        this.xmlVersion = attributes.get('version');
-        this.contentHandler.xmlDeclaration(attributes.get('version'), attributes.get('encoding'), attributes.get('standalone'));
+        let version: string = attributes.get('version') || '1.0';
+        this.xmlVersion = version;
+        let encoding: string = attributes.get('encoding') || 'UTF-8';
+        this.contentHandler?.xmlDeclaration(version, encoding, attributes.get('standalone'));
     }
 
     lookingAt(text: string): boolean {
         let length: number = text.length;
-        if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader.dataAvailable()) {
-            this.buffer += this.reader.read();
+        if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
+            this.buffer += this.reader?.read();
         }
         if (this.pointer + length > this.buffer.length) {
             return false;
         }
-        for (let i = 0; i < length; i++) {
+        for (let i: number = 0; i < length; i++) {
             if (this.buffer[this.pointer + i] !== text[i]) {
                 return false;
             }
@@ -505,13 +507,13 @@ export class SAXParser {
     }
 
     parseAttributes(text: string): Map<string, string> {
-        let map = new Map<string, string>();
+        let map: Map<string, string> = new Map<string, string>();
         let pairs: string[] = [];
         let separator: string = '';
         while (text.indexOf('=') != -1) {
             let i: number = 0;
             for (; i < text.length; i++) {
-                let char = text[i];
+                let char: string = text[i];
                 if (XMLUtils.isXmlSpace(char) || '=' === char) {
                     break;
                 }
@@ -549,7 +551,7 @@ export class SAXParser {
         this.pointer += 9; // skip '<![CDATA['
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
-        this.contentHandler.startCDATA();
+        this.contentHandler?.startCDATA();
     }
 
     endCDATA() {
@@ -557,6 +559,6 @@ export class SAXParser {
         this.pointer += 3; // skip ']]>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
-        this.contentHandler.endCDATA();
+        this.contentHandler?.endCDATA();
     }
 }

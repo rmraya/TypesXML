@@ -69,7 +69,7 @@ export class Test {
 
             //  build the document again, this time from a string
             xmlParser.parseString(doc.toString());
-            let newDoc = (contentHandler as DOMBuilder).getDocument();
+            let newDoc : XMLDocument = (contentHandler as DOMBuilder).getDocument();
             console.log(newDoc.toString());
 
         } catch (error: any) {

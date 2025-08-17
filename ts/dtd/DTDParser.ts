@@ -23,12 +23,13 @@ import { NotationDecl } from "./NotationDecl";
 export class DTDParser {
 
     private grammar: Grammar;
-    private catalog: Catalog;
+    private catalog: Catalog | undefined;
     private pointer: number = 0;
     private source: string;
     private currentFile: string;
 
     constructor(grammar?: Grammar) {
+        this.source = '';
         this.currentFile = '';
         if (grammar) {
             this.grammar = grammar;
@@ -154,7 +155,7 @@ export class DTDParser {
                     throw new Error('Malformed entity reference');
                 }
                 let entityName: string = this.source.substring(this.pointer + '%'.length, index);
-                let entity: EntityDecl = this.grammar.getEntity(entityName);
+                let entity: EntityDecl | undefined = this.grammar.getEntity(entityName);
                 if (entity === undefined) {
                     throw new Error('Unknown entity: ' + entityName);
                 }
@@ -167,7 +168,9 @@ export class DTDParser {
                 } else if (entity.getSystemId() !== '' || entity.getPublicId() !== '') {
                     let location = this.resolveEntity(entity.getPublicId(), entity.getSystemId());
                     let parser: DTDParser = new DTDParser(this.grammar);
-                    parser.setCatalog(this.catalog);
+                    if (this.catalog) {
+                        parser.setCatalog(this.catalog);
+                    }
                     let externalGrammar: Grammar = parser.parseFile(location);
                     this.grammar.merge(externalGrammar);
                     this.pointer = index + ';'.length;
@@ -252,7 +255,7 @@ export class DTDParser {
             let start = fragment.indexOf('%');
             let end = fragment.indexOf(';');
             let entityName = fragment.substring(start + '%'.length, end);
-            let entity: EntityDecl = this.grammar.getEntity(entityName);
+            let entity: EntityDecl | undefined = this.grammar.getEntity(entityName);
             if (entity === undefined) {
                 throw new Error('Unknown entity: ' + entityName);
             }
@@ -721,7 +724,7 @@ export class DTDParser {
     }
 
     resolveEntity(publicId: string, systemId: string): string {
-        let location: string = this.catalog.resolveEntity(publicId, systemId);
+        let location: string | undefined = this.catalog?.resolveEntity(publicId, systemId);
         if (!location && systemId !== '' && !systemId.startsWith('http')) {
             location = this.makeAbsolute(systemId);
         }

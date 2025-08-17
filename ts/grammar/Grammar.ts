@@ -42,12 +42,12 @@ export class Grammar {
         this.addEntity(new EntityDecl('quot', false, '"', '', '', ''));
     }
 
-    getContentModel(elementName: string): ContentModel {
+    getContentModel(elementName: string): ContentModel | undefined {
         return this.models.get(elementName);
     }
 
     toString(): string {
-        let result: string;
+        let result: string = '';
         this.models.forEach((value: ContentModel) => {
             result = result + value.toString() + '\n';
         });
@@ -66,10 +66,10 @@ export class Grammar {
 
     resolveParameterEntities(text: string): string {
         while (XMLUtils.hasParameterEntity(text)) {
-            let start = text.indexOf('%');
-            let end = text.indexOf(';');
-            let entityName = text.substring(start + '%'.length, end);
-            let entity: EntityDecl = this.getEntity(entityName);
+            let start: number = text.indexOf('%');
+            let end: number = text.indexOf(';');
+            let entityName: string = text.substring(start + '%'.length, end);
+            let entity: EntityDecl | undefined = this.getEntity(entityName);
             if (entity === undefined) {
                 throw new Error('Unknown entity: ' + entityName);
             }
@@ -84,7 +84,7 @@ export class Grammar {
         }
     }
 
-    getEntity(entityName: string): EntityDecl {
+    getEntity(entityName: string): EntityDecl | undefined {
         return this.entitiesMap.get(entityName);
     }
 
@@ -148,7 +148,7 @@ export class Grammar {
         return this.attributesMap;
     }
 
-    getElementAttributesMap(element: string): Map<string, AttDecl> {
+    getElementAttributesMap(element: string): Map<string, AttDecl> | undefined {
         return this.attributesMap.get(element);
     }
 

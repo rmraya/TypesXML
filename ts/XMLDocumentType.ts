@@ -18,7 +18,7 @@ export class XMLDocumentType implements XMLNode {
     private name: string;
     private systemId: string;
     private publicId: string;
-    private internalSubset: string;
+    private internalSubset: string | undefined;
 
     constructor(name: string, publicId: string, systemId: string) {
         this.name = name;
@@ -46,7 +46,7 @@ export class XMLDocumentType implements XMLNode {
         this.internalSubset = subset;
     }
 
-    getInternalSubset(): string {
+    getInternalSubset(): string | undefined {
         return this.internalSubset;
     }
 

@@ -12,9 +12,9 @@
 
 import { existsSync } from "fs";
 import * as path from "node:path";
-import { ContentHandler } from "./ContentHandler";
 import { DOMBuilder } from "./DOMBuilder";
 import { SAXParser } from "./SAXParser";
+import { XMLAttribute } from "./XMLAttribute";
 import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
 import { XMLUtils } from "./XMLUtils";
@@ -48,12 +48,18 @@ export class Catalog {
         this.workDir = path.dirname(catalogFile);
         this.base = '';
 
-        let contentHandler: ContentHandler = new DOMBuilder();
+        let contentHandler: DOMBuilder = new DOMBuilder();
         let parser: SAXParser = new SAXParser();
         parser.setContentHandler(contentHandler);
         parser.parseFile(catalogFile);
-        let catalogDocument: XMLDocument = (contentHandler as DOMBuilder).getDocument();
-        let catalogRoot: XMLElement = catalogDocument.getRoot();
+        let catalogDocument: XMLDocument | undefined = contentHandler.getDocument();
+        if (!catalogDocument) {
+            throw new Error('Catalog file ' + catalogFile + ' is empty');
+        }
+        let catalogRoot: XMLElement | undefined = catalogDocument.getRoot();
+        if (!catalogRoot) {
+            throw new Error('Catalog file ' + catalogFile + ' is empty');
+        }
         if (catalogRoot.getName() !== 'catalog') {
             throw new Error('Catalog root element must be <catalog>');
         }
@@ -63,8 +69,9 @@ export class Catalog {
     recurse(catalogRoot: XMLElement) {
         for (let child of catalogRoot.getChildren()) {
             let currentBase: string = this.base;
-            if (child.hasAttribute('xml:base') && child.getAttribute("xml:base").getValue() !== '') {
-                this.base = child.getAttribute("xml:base").getValue();
+            let xmlBase: XMLAttribute | undefined = child.getAttribute("xml:base");
+            if (xmlBase) {
+                this.base = xmlBase.getValue();
                 if (!this.base.endsWith('/')) {
                     this.base += '/';
                 }
@@ -76,12 +83,20 @@ export class Catalog {
                 }
             }
             if (child.getName() === 'public') {
-                let publicId: string = child.getAttribute("publicId").getValue();
+                let publicIdAttribute: XMLAttribute | undefined = child.getAttribute("publicId");
+                if (!publicIdAttribute) {
+                    throw new Error('publicId attribute is required for <public>');
+                }
+                let publicId: string = publicIdAttribute.getValue();
                 if (publicId.startsWith("urn:publicid:")) {
                     publicId = this.unwrapUrn(publicId);
                 }
                 if (!this.publicCatalog.has(publicId)) {
-                    let uri: string = this.makeAbsolute(child.getAttribute("uri").getValue());
+                    let uriAttribute: XMLAttribute | undefined = child.getAttribute("uri");
+                    if (!uriAttribute) {
+                        throw new Error('uri attribute is required for <public>');
+                    }
+                    let uri: string = this.makeAbsolute(uriAttribute.getValue());
                     if (existsSync(uri)) {
                         this.publicCatalog.set(publicId, uri);
                         if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
@@ -94,9 +109,17 @@ export class Catalog {
                 }
             }
             if (child.getName() === 'system') {
-                let uri: string = this.makeAbsolute(child.getAttribute("uri").getValue());
+                let uriAttribute: XMLAttribute | undefined = child.getAttribute("uri");
+                if (!uriAttribute) {
+                    throw new Error('uri attribute is required for <system>');
+                }
+                let uri: string = this.makeAbsolute(uriAttribute.getValue());
                 if (existsSync(uri)) {
-                    this.systemCatalog.set(child.getAttribute("systemId").getValue(), uri);
+                    let systemId: XMLAttribute | undefined = child.getAttribute("systemId");
+                    if (!systemId) {
+                        throw new Error('systemId attribute is required for <system>');
+                    }
+                    this.systemCatalog.set(systemId.getValue(), uri);
                     if (uri.endsWith(".dtd")) {
                         let name: string = path.basename(uri);
                         if (!this.dtdCatalog.has(name)) {
@@ -106,9 +129,17 @@ export class Catalog {
                 }
             }
             if (child.getName() === 'uri') {
-                let uri: string = this.makeAbsolute(child.getAttribute("uri").getValue());
+                let uriAttribute: XMLAttribute | undefined = child.getAttribute("uri");
+                if (!uriAttribute) {
+                    throw new Error('uri attribute is required for <uri>');
+                }
+                let uri: string = this.makeAbsolute(uriAttribute.getValue());
                 if (existsSync(uri)) {
-                    this.uriCatalog.set(child.getAttribute("name").getValue(), uri);
+                    let nameAttribute: XMLAttribute | undefined = child.getAttribute("name");
+                    if (!nameAttribute) {
+                        throw new Error('name attribute is required for <uri>');
+                    }
+                    this.uriCatalog.set(nameAttribute.getValue(), uri);
                     if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
                         let name: string = path.basename(uri);
                         if (!this.dtdCatalog.has(name)) {
@@ -118,21 +149,41 @@ export class Catalog {
                 }
             }
             if (child.getName() === 'rewriteURI') {
-                let uri: string = this.makeAbsolute(child.getAttribute("rewritePrefix").getValue());
-                let pair: string[] = [child.getAttribute("uriStartString").getValue(), uri];
+                let rewritePrefix: XMLAttribute | undefined = child.getAttribute("rewritePrefix");
+                if (!rewritePrefix) {
+                    throw new Error('rewritePrefix attribute is required for <rewriteURI>');
+                }
+                let uri: string = this.makeAbsolute(rewritePrefix.getValue());
+                let uriStartString: XMLAttribute | undefined = child.getAttribute("uriStartString");
+                if (!uriStartString) {
+                    throw new Error('uriStartString attribute is required for <rewriteURI>');
+                }
+                let pair: string[] = [uriStartString.getValue(), uri];
                 if (!this.uriRewrites.includes(pair)) {
                     this.uriRewrites.push(pair);
                 }
             }
             if (child.getName() === 'rewriteSystem') {
-                let uri: string = this.makeAbsolute(child.getAttribute("rewritePrefix").getValue());
-                let pair: string[] = [child.getAttribute("systemIdStartString").getValue(), uri];
+                let rewritePrefix: XMLAttribute | undefined = child.getAttribute("rewritePrefix");
+                if (!rewritePrefix) {
+                    throw new Error('rewritePrefix attribute is required for <rewriteSystem>');
+                }
+                let uri: string = this.makeAbsolute(rewritePrefix.getValue());
+                let systemIdStartString: XMLAttribute | undefined = child.getAttribute("systemIdStartString");
+                if (!systemIdStartString) {
+                    throw new Error('systemIdStartString attribute is required for <rewriteSystem>');
+                }
+                let pair: string[] = [systemIdStartString.getValue(), uri];
                 if (!this.systemRewrites.includes(pair)) {
                     this.systemRewrites.push(pair);
                 }
             }
             if (child.getName() === 'nextCatalog') {
-                let nextCatalog: string = this.makeAbsolute(child.getAttribute("catalog").getValue());
+                let catalogAttribute: XMLAttribute | undefined = child.getAttribute("catalog");
+                if (!catalogAttribute) {
+                    throw new Error('catalog attribute is required for <nextCatalog>');
+                }
+                let nextCatalog: string = this.makeAbsolute(catalogAttribute.getValue());
                 let catalog: Catalog = new Catalog(nextCatalog);
                 let map: Map<string, string> = catalog.getSystemCatalog();
                 map.forEach((value, key) => {
@@ -229,21 +280,17 @@ export class Catalog {
         return this.systemRewrites;
     }
 
-    resolveEntity(publicId: string, systemId: string): string {
+    resolveEntity(publicId: string, systemId: string): string | undefined {
         if (publicId) {
-            let location: string = this.matchPublic(publicId);
+            let location: string | undefined = this.matchPublic(publicId);
             if (location) {
                 return location;
             }
         }
-        let location: string = this.matchSystem(systemId);
-        if (location) {
-            return location;
-        }
-        return undefined;
+        return this.matchSystem(systemId);
     }
 
-    matchSystem(systemId: string): string {
+    matchSystem(systemId: string): string | undefined {
         if (systemId) {
             for (let pair of this.systemRewrites) {
                 if (systemId.startsWith(pair[0])) {
@@ -261,7 +308,7 @@ export class Catalog {
         return undefined;
     }
 
-    matchPublic(publicId: string): string {
+    matchPublic(publicId: string): string | undefined {
         if (publicId.startsWith("urn:publicid:")) {
             publicId = this.unwrapUrn(publicId);
         }

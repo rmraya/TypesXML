@@ -15,14 +15,14 @@ import { Grammar } from "./grammar/Grammar";
 
 export class DOMBuilder implements ContentHandler {
 
-    inCdData: boolean;
-    currentCData: CData;
-    document: XMLDocument;
-    stack: Array<XMLElement>;
-    catalog: Catalog;
-    dtdParser: DTDParser;
-    grammarUrl: string;
-    grammar: Grammar;
+    inCdData: boolean = false;
+    currentCData: CData = new CData('');
+    document: XMLDocument | undefined;
+    stack: Array<XMLElement> = [];
+    catalog: Catalog | undefined;
+    dtdParser: DTDParser | undefined;
+    grammarUrl: string | undefined;
+    grammar: Grammar | undefined;
 
     initialize(): void {
         this.document = new XMLDocument();
@@ -38,7 +38,7 @@ export class DOMBuilder implements ContentHandler {
         this.dtdParser = dtdParser;
     }
 
-    getDocument(): XMLDocument {
+    getDocument(): XMLDocument | undefined {
         return this.document;
     }
 
@@ -52,7 +52,7 @@ export class DOMBuilder implements ContentHandler {
 
     xmlDeclaration(version: string, encoding: string, standalone: string): void {
         let xmlDclaration = new XMLDeclaration(version, encoding, standalone);
-        this.document.setXmlDeclaration(xmlDclaration);
+        this.document?.setXmlDeclaration(xmlDclaration);
     }
 
     startElement(name: string, atts: XMLAttribute[]): void {
@@ -63,7 +63,7 @@ export class DOMBuilder implements ContentHandler {
         if (this.stack.length > 0) {
             this.stack[this.stack.length - 1].addElement(element);
         } else {
-            this.document.setRoot(element);
+            this.document?.setRoot(element);
         }
         this.stack.push(element);
     }
@@ -73,7 +73,7 @@ export class DOMBuilder implements ContentHandler {
     }
 
     internalSubset(declaration: string): void {
-        let docType: XMLDocumentType = this.document.getDocumentType();
+        let docType: XMLDocumentType | undefined = this.document?.getDocumentType();
         if (docType) {
             docType.setInternalSubset(declaration);
         }
@@ -88,7 +88,7 @@ export class DOMBuilder implements ContentHandler {
         if (this.stack.length > 0) {
             this.stack[this.stack.length - 1].addTextNode(textNode);
         } else {
-            this.document.addTextNode(textNode);
+            this.document?.addTextNode(textNode);
         }
     }
 
@@ -97,7 +97,7 @@ export class DOMBuilder implements ContentHandler {
         if (this.stack.length > 0) {
             this.stack[this.stack.length - 1].addTextNode(textNode);
         } else {
-            this.document.addTextNode(textNode);
+            this.document?.addTextNode(textNode);
         }
     }
 
@@ -106,7 +106,7 @@ export class DOMBuilder implements ContentHandler {
         if (this.stack.length > 0) {
             this.stack[this.stack.length - 1].addComment(comment);
         } else {
-            this.document.addComment(comment);
+            this.document?.addComment(comment);
         }
     }
 
@@ -115,12 +115,15 @@ export class DOMBuilder implements ContentHandler {
         if (this.stack.length > 0) {
             this.stack[this.stack.length - 1].addProcessingInstruction(pi);
         } else {
-            this.document.addProcessingInstruction(pi);
+            this.document?.addProcessingInstruction(pi);
         }
         if (target === 'xml-model' && this.catalog) {
+            // TODO process the xml-model 
+            /*
             let atts: Map<string, string> = this.parseXmlModel(data);
             let href: string = atts.get('href');
             let schematypens: string = atts.get('schematypens');
+            */
         }
     }
 
@@ -180,14 +183,17 @@ export class DOMBuilder implements ContentHandler {
 
     startDTD(name: string, publicId: string, systemId: string): void {
         let docType: XMLDocumentType = new XMLDocumentType(name, publicId, systemId);
-        this.document.setDocumentType(docType);
+        this.document?.setDocumentType(docType);
         if (this.catalog) {
-            this.grammarUrl = this.catalog.resolveEntity(publicId, systemId);
-            // TODO check grammar type (DTD, XDS or RelaxNG) and use the ritght parser
-            if (this.dtdParser && this.grammarUrl) {
-                let dtdGrammar: Grammar = this.dtdParser.parseDTD(this.grammarUrl);
-                if (dtdGrammar) {
-                    this.grammar = dtdGrammar;
+            let url = this.catalog.resolveEntity(publicId, systemId);
+            if (url) {
+                this.grammarUrl = url;
+                // TODO check grammar type (DTD, XSD or RelaxNG) and use the ritght parser
+                if (this.dtdParser && this.grammarUrl) {
+                    let dtdGrammar: Grammar = this.dtdParser.parseDTD(this.grammarUrl);
+                    if (dtdGrammar) {
+                        this.grammar = dtdGrammar;
+                    }
                 }
             }
         }

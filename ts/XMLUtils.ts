@@ -39,7 +39,7 @@ export class XMLUtils {
             return false;
         }
         let length: number = text.length;
-        for (let i = index + 1; i < length; i++) {
+        for (let i: number = index + 1; i < length; i++) {
             let c: string = text.charAt(i);
             if (this.isXmlSpace(c)) {
                 return false;
@@ -62,7 +62,7 @@ export class XMLUtils {
     static escapeRegExpChars(text: string): string {
         let result: string = '';
         let length: number = text.length;
-        for (let i = 0; i < length; i++) {
+        for (let i: number = 0; i < length; i++) {
             let c: string = text.charAt(i);
             if ('[]{}()^$?*+.'.indexOf(c) > -1) {
                 result += '\\';
@@ -75,7 +75,7 @@ export class XMLUtils {
     static validXml10Chars(text: string): string {
         let result: string = '';
         let length: number = text.length;
-        for (let i = 0; i < length; i++) {
+        for (let i: number = 0; i < length; i++) {
             let c: number = text.charCodeAt(i);
             if (XMLUtils.isValidXml10Char(c)) {
                 result += String.fromCharCode(c);

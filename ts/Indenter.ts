@@ -12,6 +12,7 @@
 
 import { Constants } from "./Constants";
 import { TextNode } from "./TextNode";
+import { XMLAttribute } from "./XMLAttribute";
 import { XMLElement } from "./XMLElement";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
@@ -39,7 +40,8 @@ export class Indenter {
     }
 
     indent(e: XMLElement): void {
-        if (e.hasAttribute('xml:space') && 'preserve' === e.getAttribute('xml:space').getValue()) {
+        let space: XMLAttribute | undefined = e.getAttribute('xml:space');
+        if (space && 'preserve' === space.getValue()) {
             return;
         }
         if (!this.hasText(e)) {
@@ -56,10 +58,10 @@ export class Indenter {
     private indentElement(e: XMLElement) {
         let start: string = '\n';
         let end: string = '\n';
-        for (let i = 0; i < (this.indentLevel * this.numSpaces); i++) {
+        for (let i: number = 0; i < (this.indentLevel * this.numSpaces); i++) {
             start += ' ';
         }
-        for (let i = 0; i < ((this.indentLevel - 1) * this.numSpaces); i++) {
+        for (let i: number = 0; i < ((this.indentLevel - 1) * this.numSpaces); i++) {
             end += ' ';
         }
         let content: Array<XMLNode> = new Array<XMLNode>();

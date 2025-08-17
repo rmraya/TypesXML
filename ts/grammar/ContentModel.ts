@@ -30,7 +30,7 @@ export class ContentModel {
     private mixed: boolean;
 
     contentTypes: string[] = ['EMPTY', 'ANY', 'MIXED', 'CHILDREN'];
-    contentType: string;
+    contentType: string = '';
 
     model: Array<any>
 
@@ -79,12 +79,15 @@ export class ContentModel {
     }
 
     isValid(element: XMLElement): boolean {
-        let attList: Map<string, AttDecl> = this.grammar.getElementAttributesMap(element.getName());
+        let attList: Map<string, AttDecl> | undefined = this.grammar.getElementAttributesMap(element.getName());
         let attributes: XMLAttribute[] = element.getAttributes();
-        for (let i = 0; i < attributes.length; i++) {
+        if (attList === undefined) {
+            throw new Error('Element \'' + element.getName() + '\' not declared');
+        }
+        for (let i: number = 0; i < attributes.length; i++) {
             let attribute: XMLAttribute = attributes[i];
             let name: string = attribute.getName();
-            let attDecl: AttDecl = attList.get(name);
+            let attDecl: AttDecl | undefined = attList.get(name);
             if (attDecl) {
                 if (!attDecl.isValid(attribute.getValue())) {
                     return false;
@@ -101,7 +104,7 @@ export class ContentModel {
             return true;
         }
         if (content) {
-            for (let i = 0; i < content.length; i++) {
+            for (let i: number = 0; i < content.length; i++) {
                 let node: XMLNode = content[i];
                 if (node.getNodeType() === Constants.TEXT_NODE) {
                     let text: string = node.toString();

@@ -52,7 +52,7 @@ export class EntityDecl implements XMLNode {
     }
 
     toString(): string {
-        let result = '<!ENTITY ' + (this.parameterEntity ? '% ' : '') + this.name;
+        let result: string = '<!ENTITY ' + (this.parameterEntity ? '% ' : '') + this.name;
         if (this.publicId !== '' && this.systemId !== '') {
             result += ' PUBLIC "' + this.publicId + '" "' + this.systemId + '">';
         } else if (this.systemId !== '') {

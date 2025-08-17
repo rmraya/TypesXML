@@ -148,7 +148,7 @@ export class XMLElement implements XMLNode {
             }
             let sameAttributes: boolean = true;
             this.attributes.forEach((att: XMLAttribute, key: string) => {
-                let other: XMLAttribute = node.getAttribute(key);
+                let other: XMLAttribute | undefined = node.getAttribute(key);
                 if (other === undefined || att.getValue() !== other.getValue()) {
                     sameAttributes = false;
                 }
@@ -156,7 +156,7 @@ export class XMLElement implements XMLNode {
             if (!sameAttributes) {
                 return false;
             }
-            for (let i = 0; i < this.content.length; i++) {
+            for (let i: number = 0; i < this.content.length; i++) {
                 if (!this.content[i].equals(node.content[i])) {
                     return false;
                 }
@@ -177,7 +177,7 @@ export class XMLElement implements XMLNode {
     }
 
     getChild(childName: string): XMLElement | undefined {
-        let result: XMLElement = undefined;
+        let result: XMLElement | undefined = undefined;
         let length: number = this.content.length;
         for (let i: number = 0; i < length; i++) {
             let node: XMLNode = this.content[i];
@@ -218,7 +218,7 @@ export class XMLElement implements XMLNode {
     }
 
     getPI(target: string): ProcessingInstruction | undefined {
-        let result: ProcessingInstruction = undefined;
+        let result: ProcessingInstruction | undefined = undefined;
         let length: number = this.content.length;
         for (let i: number = 0; i < length; i++) {
             let node: XMLNode = this.content[i];
