@@ -126,14 +126,14 @@ export class SAXParser {
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
                 this.buffer += this.reader?.read();
             }
-            if (this.rootParsed && this.elementStack === 0) {
-                this.contentHandler?.endDocument();
-            }
         }
         if (this.elementStack !== 0) {
             throw new Error('Malformed XML document: unclosed elements');
         }
         this.cleanCharacterRun();
+        if (this.rootParsed) {
+            this.contentHandler?.endDocument();
+        }
     }
 
     parseEntityReference() {
