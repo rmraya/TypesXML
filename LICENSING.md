@@ -105,5 +105,5 @@ For organizations that cannot comply with AGPL-3.0 requirements, we offer commer
 
 - **Copyright:** © 2023-2025 Maxprograms
 - **Open Source License:** [GNU AGPL-3.0](./LICENSE)
-- **Commercial License:** [Commercial Terms](./LICENSE-COMMERCIAL)
+- **Commercial License:** [Commercial Terms](./LICENSE-COMMERCIAL.md)
 - **Trademark:** TypesXML is a trademark of Maxprograms

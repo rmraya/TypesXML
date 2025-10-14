@@ -47,7 +47,7 @@ TypesXML is available under a **dual licensing model**:
 
 **📞 Commercial Licensing:** [sales@maxprograms.com](mailto:sales@maxprograms.com)
 
-**📄 License Details:** [AGPL-3.0](./LICENSE) | [Commercial License](./LICENSE-COMMERCIAL)
+**📄 License Details:** [AGPL-3.0](./LICENSE) | [Commercial License](./LICENSE-COMMERCIAL.md)
 
 ## Overview
 
