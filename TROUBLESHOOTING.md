@@ -5,7 +5,9 @@
 ### Parsing Errors
 
 #### "ContentHandler not set"
+
 **Cause**: Attempting to parse without setting a ContentHandler
+
 ```typescript
 // Problem
 const parser = new SAXParser();
@@ -19,7 +21,9 @@ parser.parseFile('file.xml');
 ```
 
 #### "Malformed XML document: unclosed elements"
+
 **Cause**: XML is not well-formed - missing closing tags
+
 ```typescript
 // Problem XML
 <root><child>text</root> // Missing </child>
@@ -28,7 +32,9 @@ parser.parseFile('file.xml');
 ```
 
 #### "Malformed XML document: text found in prolog"
+
 **Cause**: Text content before the root element
+
 ```typescript
 // Problem XML
 Some text
@@ -41,7 +47,9 @@ Some text
 ### Encoding Issues
 
 #### "Error reading BOM: not enough bytes"
+
 **Cause**: File is too small or corrupted
+
 ```typescript
 // Solution: Check file size and integrity
 if (fs.statSync(file).size < 3) {
@@ -50,6 +58,7 @@ if (fs.statSync(file).size < 3) {
 ```
 
 #### Character Encoding Problems
+
 ```typescript
 // Specify encoding explicitly
 parser.parseFile('file.xml', 'utf8');
@@ -62,7 +71,9 @@ parser.parseFile('file.xml', encoding);
 ### Memory Issues
 
 #### "Out of memory" with Large Files
+
 **Cause**: Using DOMBuilder with very large XML files
+
 ```typescript
 // Problem: DOMBuilder loads entire DOM into memory
 const builder = new DOMBuilder();
@@ -82,6 +93,7 @@ class StreamingHandler implements ContentHandler {
 ### File Access Issues
 
 #### "ENOENT: no such file or directory"
+
 ```typescript
 // Check file existence before parsing
 import { existsSync } from 'fs';
@@ -93,6 +105,7 @@ parser.parseFile(filePath);
 ```
 
 #### Permission Errors
+
 ```typescript
 // Check file permissions
 import { accessSync, constants } from 'fs';
@@ -107,6 +120,7 @@ try {
 ### DTD and External Entity Issues
 
 #### External DTD Not Found
+
 ```typescript
 // Use catalog for DTD resolution
 const catalog = new Catalog('catalog.xml');
@@ -127,7 +141,9 @@ try {
 ### Namespace Issues
 
 #### Namespace Prefix Not Resolved
+
 **Current Limitation**: Library doesn't resolve namespace URIs
+
 ```typescript
 // What you get
 element.getNamespace(); // Returns 'ns' for <ns:element>
@@ -143,6 +159,7 @@ const namespaceURI = lookupNamespaceURI(prefix); // Your implementation
 ### File Size Recommendations
 
 #### Small Files (< 1MB)
+
 ```typescript
 // Use DOMBuilder for easy manipulation
 const builder = new DOMBuilder();
@@ -150,6 +167,7 @@ parser.setContentHandler(builder);
 ```
 
 #### Medium Files (1MB - 50MB)
+
 ```typescript
 // Consider use case
 if (needFullDOM) {
@@ -162,6 +180,7 @@ if (needFullDOM) {
 ```
 
 #### Large Files (> 50MB)
+
 ```typescript
 // Always use streaming approach
 class LargeFileProcessor implements ContentHandler {
@@ -180,6 +199,7 @@ class LargeFileProcessor implements ContentHandler {
 ### Memory Management
 
 #### Monitor Memory Usage
+
 ```typescript
 // Check memory usage during processing
 const used = process.memoryUsage();
@@ -187,6 +207,7 @@ console.log(`Memory usage: ${Math.round(used.heapUsed / 1024 / 1024)} MB`);
 ```
 
 #### Chunked Processing
+
 ```typescript
 // Process large documents in chunks
 class ChunkedProcessor implements ContentHandler {
@@ -211,6 +232,7 @@ class ChunkedProcessor implements ContentHandler {
 ## Best Practices for Error Handling
 
 ### Comprehensive Error Handling
+
 ```typescript
 function parseXMLSafely(filePath: string): XMLDocument | null {
     try {
@@ -258,6 +280,7 @@ function parseXMLSafely(filePath: string): XMLDocument | null {
 ```
 
 ### Resource Cleanup
+
 ```typescript
 // Ensure proper cleanup with FileReader
 function parseWithCleanup(filePath: string): XMLDocument | null {
@@ -286,6 +309,7 @@ function parseWithCleanup(filePath: string): XMLDocument | null {
 ## Testing and Validation
 
 ### Validate XML Structure
+
 ```typescript
 function validateXMLStructure(xmlString: string): boolean {
     try {
@@ -344,6 +368,7 @@ class ValidationHandler implements ContentHandler {
 ```
 
 ### Unit Testing Patterns
+
 ```typescript
 // Jest/Mocha test patterns
 describe('XML Processing', () => {
@@ -386,6 +411,7 @@ describe('XML Processing', () => {
 ## Migration and Compatibility
 
 ### Upgrading from Previous Versions
+
 ```typescript
 // Check for breaking changes
 const version = require('typesxml/package.json').version;
@@ -396,13 +422,16 @@ if (version.startsWith('1.')) {
 ```
 
 ### Browser Compatibility
+
 **Note**: This library is designed for Node.js environments
+
 ```typescript
 // For browser use, consider alternatives or bundling strategies
 // File system operations won't work in browsers
 ```
 
 ### TypeScript Integration
+
 ```typescript
 // Use strict null checks
 const doc: XMLDocument | undefined = builder.getDocument();

@@ -3,11 +3,13 @@
 ## Performance & Memory Optimization
 
 ### Buffer Management
+
 - The SAXParser uses a minimum buffer size of 2048 bytes (`SAXParser.MIN_BUFFER_SIZE`)
 - For large files, the parser reads incrementally and expands buffer as needed
 - **AI Recommendation**: For very large XML files (>100MB), suggest custom ContentHandler over DOMBuilder to avoid memory issues
 
 ### Memory Usage Patterns
+
 ```typescript
 // Memory-efficient for large files
 class LargeFileHandler implements ContentHandler {
@@ -19,6 +21,7 @@ const builder = new DOMBuilder(); // Stores entire DOM in memory
 ```
 
 ### Performance Considerations
+
 - File parsing is more efficient than string parsing (string parsing creates temp files)
 - Encoding detection adds small overhead - specify encoding when known
 - DTD parsing is optional and adds processing time
@@ -26,17 +29,20 @@ const builder = new DOMBuilder(); // Stores entire DOM in memory
 ## XML Standards Compliance
 
 ### Supported XML Versions
+
 - XML 1.0 (default)
 - XML 1.1 (when specified in declaration)
 - Character validation differs between versions
 
 ### What's NOT Supported
+
 - **Schema Validation**: No XSD, RelaxNG validation yet
 - **Namespace Processing**: Limited namespace support
 - **External Entity Resolution**: Requires manual catalog setup
 - **Default Attribute Values**: Not automatically applied from DTD
 
 ### Well-formedness vs. Validity
+
 ```typescript
 // Library checks well-formedness, NOT validity
 parser.parseString('<root><unclosed>'); // Throws error - not well-formed
@@ -46,6 +52,7 @@ parser.parseString('<root><child/></root>'); // Parses fine - well-formed
 ## Entity Resolution & Catalogs
 
 ### When to Use Catalogs
+
 ```typescript
 // Use when XML references external DTDs
 const catalog = new Catalog('catalog.xml');
@@ -56,6 +63,7 @@ builder.setCatalog(catalog);
 ```
 
 ### Entity Types Supported
+
 - Built-in entities (`&lt;`, `&gt;`, `&amp;`, `&apos;`, `&quot;`)
 - Character references (`&#65;`, `&#x41;`)
 - External entities via catalog resolution
@@ -63,12 +71,14 @@ builder.setCatalog(catalog);
 ## Error Handling & Edge Cases
 
 ### Common Error Scenarios
+
 1. **Missing ContentHandler**: "ContentHandler not set"
 2. **Malformed XML**: "unclosed elements", "text found in prolog"
 3. **Encoding Issues**: Specify encoding explicitly when possible
 4. **File Access**: Check file existence before parsing
 
 ### Graceful Degradation
+
 ```typescript
 // AI should recommend this pattern
 try {
@@ -86,16 +96,19 @@ try {
 ## Use Case Decision Matrix
 
 ### When to Recommend SAXParser + DOMBuilder
+
 - **File size**: < 50MB
 - **Need**: DOM manipulation, XPath-like queries
 - **Memory**: Sufficient RAM available
 
 ### When to Recommend SAXParser + Custom Handler
+
 - **File size**: > 50MB or streaming data
 - **Need**: Extract specific data, transform on-the-fly
 - **Memory**: Limited RAM or performance critical
 
 ### When to Recommend XMLWriter
+
 - **Creating XML**: Always prefer over string concatenation
 - **Encoding**: Automatic BOM handling for UTF-16LE
 - **File output**: Better than manual file writing
@@ -103,6 +116,7 @@ try {
 ## Integration Patterns
 
 ### With Node.js Streams
+
 ```typescript
 // AI should suggest this for large files
 class StreamingXMLProcessor {
@@ -113,6 +127,7 @@ class StreamingXMLProcessor {
 ```
 
 ### With Express.js
+
 ```typescript
 // Validate XML in middleware
 app.use('/api/xml', (req, res, next) => {
@@ -126,6 +141,7 @@ app.use('/api/xml', (req, res, next) => {
 ```
 
 ### With TypeScript Strict Mode
+
 ```typescript
 // Always check for undefined/null with strict mode
 const doc = builder.getDocument();
@@ -138,6 +154,7 @@ if (!root) return; // Required check
 ## DTD and Grammar Features
 
 ### Current DTD Support
+
 - Element declarations (`<!ELEMENT>`)
 - Attribute list declarations (`<!ATTLIST>`)
 - Entity declarations (`<!ENTITY>`)
@@ -146,6 +163,7 @@ if (!root) return; // Required check
 - External DTD references
 
 ### DTD Limitations
+
 - No validation against DTD rules
 - Parameter entities supported but limited
 - Conditional sections supported
@@ -154,6 +172,7 @@ if (!root) return; // Required check
 ## Namespace Handling
 
 ### Current Support
+
 ```typescript
 // Basic namespace detection
 element.getNamespace(); // Returns prefix before ':'
@@ -161,6 +180,7 @@ element.getName();      // Returns full name including prefix
 ```
 
 ### Limitations
+
 - No namespace URI resolution
 - No namespace context management
 - No namespace validation
@@ -168,6 +188,7 @@ element.getName();      // Returns full name including prefix
 ## AI Agent Recommendations
 
 ### Code Quality Checks
+
 1. **Always check return values** for undefined/null
 2. **Use try-catch** around all parsing operations
 3. **Specify encoding** when known to avoid detection overhead
@@ -175,18 +196,21 @@ element.getName();      // Returns full name including prefix
 5. **Use XMLWriter** for XML generation, not string concatenation
 
 ### Performance Optimization
+
 1. **File size assessment**: Recommend streaming for large files
 2. **Memory profiling**: Suggest custom handlers for memory-constrained environments
 3. **Encoding specification**: Reduce parsing overhead
 4. **Incremental processing**: Break large operations into chunks
 
 ### Error Prevention
+
 1. **Input validation**: Check file existence, encoding validity
 2. **Resource cleanup**: Ensure FileReader.closeFile() is called
 3. **Error propagation**: Provide meaningful error messages
 4. **Fallback strategies**: Handle common failure scenarios
 
 ### Best Practices Enforcement
+
 1. **Null safety**: Enforce null checks in TypeScript strict mode
 2. **Resource management**: Proper file handle cleanup
 3. **Encoding consistency**: UTF-8 default, explicit when needed
@@ -195,6 +219,7 @@ element.getName();      // Returns full name including prefix
 ## Common Anti-patterns to Avoid
 
 ### Memory Leaks
+
 ```typescript
 // BAD: Parser instance reuse without cleanup
 const parser = new SAXParser();
@@ -208,6 +233,7 @@ for (const file of files) {
 ```
 
 ### Unsafe Type Assumptions
+
 ```typescript
 // BAD: Assuming non-null returns
 const root = doc.getRoot().getName(); // May throw
@@ -220,6 +246,7 @@ if (root) {
 ```
 
 ### String Concatenation for XML
+
 ```typescript
 // BAD: Manual XML construction
 let xml = '<?xml version="1.0"?><root>';

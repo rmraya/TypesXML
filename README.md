@@ -17,12 +17,14 @@ TypesXML is available under a **dual licensing model**:
 ### 🆓 Open Source License (AGPL-3.0)
 
 **Free for:**
+
 - ✅ **Open source projects** (AGPL-compatible)
 - ✅ **Personal and educational use**
 - ✅ **Internal business tools** (with source sharing)
 - ✅ **Research and development**
 
 **Requirements under AGPL:**
+
 - 📝 **Share source code** of your application
 - 📝 **Use AGPL-compatible license** for your project
 - 📝 **Provide source to users** (including SaaS users)
@@ -30,12 +32,14 @@ TypesXML is available under a **dual licensing model**:
 ### 💼 Commercial License
 
 **Required for:**
+
 - ❌ **Proprietary software** distribution
 - ❌ **SaaS applications** without source sharing
 - ❌ **Commercial products** embedding TypesXML
 - ❌ **Closed-source applications**
 
 **Commercial license includes:**
+
 - ✅ **No source sharing requirements**
 - ✅ **Professional support and SLA**
 - ✅ **Legal protection and indemnification**
@@ -49,39 +53,39 @@ TypesXML is available under a **dual licensing model**:
 
 Implements a SAX parser that exposes these methods from the `ContentHandler` interface:
 
-* initialize(): void;
-* setCatalog(catalog: Catalog): void;
-* startDocument(): void;
-* endDocument(): void;
-* xmlDeclaration(version: string, encoding: string, standalone: string): void;
-* startElement(name: string, atts: Array\<XMLAttribute>): void;
-* endElement(name: string): void;
-* internalSubset(declaration: string): void;
-* characters(ch: string): void;
-* ignorableWhitespace(ch: string): void;
-* comment(ch: string): void;
-* processingInstruction(target: string, data: string): void;
-* startCDATA(): void;
-* endCDATA(): void;
-* startDTD(name: string, publicId: string, systemId: string): void;
-* endDTD(): void;
-* skippedEntity(name: string): void;
+- initialize(): void;
+- setCatalog(catalog: Catalog): void;
+- startDocument(): void;
+- endDocument(): void;
+- xmlDeclaration(version: string, encoding: string, standalone: string): void;
+- startElement(name: string, atts: Array\<XMLAttribute>): void;
+- endElement(name: string): void;
+- internalSubset(declaration: string): void;
+- characters(ch: string): void;
+- ignorableWhitespace(ch: string): void;
+- comment(ch: string): void;
+- processingInstruction(target: string, data: string): void;
+- startCDATA(): void;
+- endCDATA(): void;
+- startDTD(name: string, publicId: string, systemId: string): void;
+- endDTD(): void;
+- skippedEntity(name: string): void;
 
 Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tree from an XML document.
 
 ## Features currently in development
 
-* Parsing of DTDs and internal subsets from <!DOCTYPE>
+- Parsing of DTDs and internal subsets from <!DOCTYPE>
 
 ## Limitations
 
-* Validation not supported yet
-* Default values for attributes are not set when parsing an element
+- Validation not supported yet
+- Default values for attributes are not set when parsing an element
 
 ## On the Roadmap
 
-* Support for XML Schemas
-* Support for RelaxNG
+- Support for XML Schemas
+- Support for RelaxNG
 
 ## Installation
 
