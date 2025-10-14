@@ -2,6 +2,51 @@
 
 Open source XML library written in TypeScript
 
+## Documentation
+
+- **[Complete API Documentation](./API_DOCUMENTATION.md)** - Comprehensive guide with examples and API reference
+- **[Quick Reference Guide](./QUICK_REFERENCE.md)** - Cheat sheet for common operations and usage patterns
+- **[AI Agent Guidelines](./AI_AGENT_GUIDELINES.md)** - Performance, memory, and best practice guidelines for AI assistants
+- **[Troubleshooting Guide](./TROUBLESHOOTING.md)** - Common issues, solutions, and debugging techniques
+- **[Type Definitions](./API_TYPES.d.ts)** - TypeScript type definitions for better IDE support
+
+## Licensing
+
+TypesXML is available under a **dual licensing model**:
+
+### 🆓 Open Source License (AGPL-3.0)
+
+**Free for:**
+- ✅ **Open source projects** (AGPL-compatible)
+- ✅ **Personal and educational use**
+- ✅ **Internal business tools** (with source sharing)
+- ✅ **Research and development**
+
+**Requirements under AGPL:**
+- 📝 **Share source code** of your application
+- 📝 **Use AGPL-compatible license** for your project
+- 📝 **Provide source to users** (including SaaS users)
+
+### 💼 Commercial License
+
+**Required for:**
+- ❌ **Proprietary software** distribution
+- ❌ **SaaS applications** without source sharing
+- ❌ **Commercial products** embedding TypesXML
+- ❌ **Closed-source applications**
+
+**Commercial license includes:**
+- ✅ **No source sharing requirements**
+- ✅ **Professional support and SLA**
+- ✅ **Legal protection and indemnification**
+- ✅ **Priority access to new features**
+
+**📞 Commercial Licensing:** [sales@maxprograms.com](mailto:sales@maxprograms.com)
+
+**📄 License Details:** [AGPL-3.0](./LICENSE) | [Commercial License](./LICENSE-COMMERCIAL)
+
+## Overview
+
 Implements a SAX parser that exposes these methods from the `ContentHandler` interface:
 
 * initialize(): void;

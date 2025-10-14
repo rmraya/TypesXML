@@ -1,0 +1,296 @@
+# TypesXML Quick Reference
+
+## Quick Start Cheat Sheet
+
+
+### 1. Basic Parsing (String)
+
+```typescript
+import { SAXParser, DOMBuilder } from 'typesxml';
+
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+parser.setContentHandler(builder);
+parser.parseString('<root><child>text</child></root>');
+const doc = builder.getDocument();
+```
+
+
+### 2. Basic Parsing (File)
+
+```typescript
+import { SAXParser, DOMBuilder } from 'typesxml';
+
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+parser.setContentHandler(builder);
+parser.parseFile('document.xml');
+const doc = builder.getDocument();
+```
+
+
+### 3. Creating XML from Scratch
+
+```typescript
+import { XMLDocument, XMLElement, XMLAttribute, XMLDeclaration } from 'typesxml';
+
+const doc = new XMLDocument();
+doc.setXmlDeclaration(new XMLDeclaration('1.0', 'UTF-8'));
+
+const root = new XMLElement('catalog');
+root.setAttribute(new XMLAttribute('version', '1.0'));
+
+const item = new XMLElement('item');
+item.setAttribute(new XMLAttribute('id', '123'));
+item.addString('Item Text');
+root.addElement(item);
+
+doc.setRoot(root);
+console.log(doc.toString());
+```
+
+
+### 4. Writing to File
+
+```typescript
+import { XMLWriter } from 'typesxml';
+
+// Write complete document
+XMLWriter.writeDocument(document, 'output.xml');
+
+// Or incremental writing
+const writer = new XMLWriter('output.xml');
+writer.writeNode(element);
+writer.writeString('\n');
+```
+
+## Common Operations
+
+### Working with Elements
+
+```typescript
+// Create element
+const element = new XMLElement('book');
+
+// Add attributes
+element.setAttribute(new XMLAttribute('id', '123'));
+element.setAttribute(new XMLAttribute('lang', 'en'));
+
+// Add text content
+element.addString('Book Title');
+
+// Add child elements
+const author = new XMLElement('author');
+author.addString('John Doe');
+element.addElement(author);
+
+// Get children
+const children = element.getChildren();
+const firstChild = element.getChild('author');
+
+// Get attributes
+const id = element.getAttribute('id')?.getValue();
+const allAttributes = element.getAttributes();
+
+// Get text content (recursive)
+const textContent = element.getText();
+```
+
+### Working with Documents
+
+```typescript
+// Access document parts
+const root = document.getRoot();
+const declaration = document.getXmlDeclaration();
+const docType = document.getDocumentType();
+
+// Add document-level content
+document.addComment(new XMLComment('This is a comment'));
+document.addProcessingInstruction(new ProcessingInstruction('target', 'data'));
+```
+
+### Navigation and Searching
+
+```typescript
+// Find elements by name
+const root = document.getRoot();
+const children = root?.getChildren();
+const specificChild = root?.getChild('targetElement');
+
+// Remove elements
+root?.removeChild(specificChild);
+
+// Check for attributes
+if (element.hasAttribute('id')) {
+    const id = element.getAttribute('id')?.getValue();
+}
+```
+
+## Error Handling Patterns
+
+```typescript
+try {
+    parser.parseFile('document.xml');
+    const doc = builder.getDocument();
+    if (!doc) {
+        throw new Error('Failed to build document');
+    }
+    // Process document...
+} catch (error) {
+    if (error instanceof Error) {
+        console.error('Parse error:', error.message);
+    }
+}
+```
+
+## Common Use Cases
+
+
+### 1. Configuration File Processing
+
+```typescript
+function updateConfig(file: string, key: string, value: string) {
+    const parser = new SAXParser();
+    const builder = new DOMBuilder();
+    parser.setContentHandler(builder);
+    parser.parseFile(file);
+    
+    const doc = builder.getDocument();
+    const root = doc?.getRoot();
+    
+    // Find or create setting
+    let setting = root?.getChild('setting');
+    if (!setting) {
+        setting = new XMLElement('setting');
+        root?.addElement(setting);
+    }
+    
+    setting.setAttribute(new XMLAttribute('key', key));
+    setting.setAttribute(new XMLAttribute('value', value));
+    
+    XMLWriter.writeDocument(doc!, file);
+}
+```
+
+
+### 2. Data Transformation
+
+```typescript
+function transformXML(inputFile: string, outputFile: string) {
+    const parser = new SAXParser();
+    const builder = new DOMBuilder();
+    parser.setContentHandler(builder);
+    parser.parseFile(inputFile);
+    
+    const doc = builder.getDocument();
+    const root = doc?.getRoot();
+    
+    // Transform data
+    root?.getChildren().forEach(child => {
+        if (child.getName() === 'oldElement') {
+            child.setAttribute(new XMLAttribute('transformed', 'true'));
+        }
+    });
+    
+    XMLWriter.writeDocument(doc!, outputFile);
+}
+```
+
+
+### 3. XML Validation/Inspection
+
+```typescript
+function validateStructure(xmlString: string): boolean {
+    try {
+        const parser = new SAXParser();
+        const builder = new DOMBuilder();
+        parser.setContentHandler(builder);
+        parser.parseString(xmlString);
+        
+        const doc = builder.getDocument();
+        const root = doc?.getRoot();
+        
+        // Check required structure
+        return root?.getName() === 'expectedRoot' && 
+               root?.getChild('requiredChild') !== undefined;
+    } catch {
+        return false;
+    }
+}
+```
+
+## Node Type Constants
+
+```typescript
+import { Constants } from 'typesxml';
+
+switch (node.getNodeType()) {
+    case Constants.ELEMENT_NODE:
+        // Handle element
+        break;
+    case Constants.TEXT_NODE:
+        // Handle text
+        break;
+    case Constants.COMMENT_NODE:
+        // Handle comment
+        break;
+    // ... other types
+}
+```
+
+## Utility Functions
+
+```typescript
+import { XMLUtils } from 'typesxml';
+
+// Clean strings for XML
+const cleaned = XMLUtils.cleanString(userInput);
+
+// Check whitespace
+if (XMLUtils.isXmlSpace(char)) {
+    // Handle whitespace
+}
+
+// Validate characters
+const validText = XMLUtils.validXml10Chars(text);
+```
+
+## Best Practices
+
+1. **Always check for null/undefined**:
+   ```typescript
+   const doc = builder.getDocument();
+   if (doc) {
+       const root = doc.getRoot();
+       if (root) {
+           // Safe to use root
+       }
+   }
+   ```
+
+2. **Use try-catch for parsing**:
+   ```typescript
+   try {
+       parser.parseFile('file.xml');
+   } catch (error) {
+       console.error('Parse failed:', error.message);
+   }
+   ```
+
+3. **Prefer DOMBuilder for most use cases**:
+   - Use DOMBuilder when you need to manipulate the XML
+   - Use custom ContentHandler only for streaming/large files
+
+4. **Use XMLWriter for output**:
+   ```typescript
+   // Preferred
+   XMLWriter.writeDocument(doc, 'output.xml');
+   
+   // Instead of
+   fs.writeFileSync('output.xml', doc.toString());
+   ```
+
+5. **Handle encodings explicitly**:
+   ```typescript
+   parser.parseFile('file.xml', 'utf8');
+   ```
