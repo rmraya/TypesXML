@@ -87,7 +87,7 @@ export class Grammar {
             let start: number = text.indexOf('%');
             let end: number = text.indexOf(';');
             let entityName: string = text.substring(start + '%'.length, end);
-            let entity: EntityDecl | undefined = this.getEntity(entityName);
+            let entity: EntityDecl | undefined = this.getParameterEntity(entityName);
             if (entity === undefined) {
                 throw new Error('Unknown entity: ' + entityName);
             }
@@ -97,13 +97,21 @@ export class Grammar {
     }
 
     addEntity(entityDecl: EntityDecl) {
-        if (!this.entitiesMap.has(entityDecl.getName())) {
-            this.entitiesMap.set(entityDecl.getName(), entityDecl);
+        // Use different keys for parameter entities vs general entities to avoid conflicts
+        const key = entityDecl.isParameterEntity() ? `%${entityDecl.getName()}` : entityDecl.getName();
+        if (!this.entitiesMap.has(key)) {
+            this.entitiesMap.set(key, entityDecl);
         }
     }
 
     getEntity(entityName: string): EntityDecl | undefined {
+        // Only look up general entities (not parameter entities) when called from entity references
         return this.entitiesMap.get(entityName);
+    }
+
+    getParameterEntity(entityName: string): EntityDecl | undefined {
+        // Look up parameter entities specifically
+        return this.entitiesMap.get(`%${entityName}`);
     }
 
     addNotation(notation: NotationDecl) {

@@ -44,6 +44,10 @@ export class EntityDecl implements XMLNode {
         return this.value;
     }
 
+    isParameterEntity(): boolean {
+        return this.parameterEntity;
+    }
+
     getSystemId(): string {
         return this.systemId;
     }
