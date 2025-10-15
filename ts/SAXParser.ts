@@ -173,8 +173,8 @@ export class SAXParser {
             }
             let char: string = this.buffer.charAt(this.pointer);
 
-            // Well-formedness check: validate XML characters
-            let charCode = char.charCodeAt(0);
+            // Well-formedness check: validate XML characters - handle surrogate pairs
+            let charCode = this.buffer.codePointAt(this.pointer);
             if (charCode !== undefined) {
                 const isValid = this.xmlVersion === '1.0' ?
                     XMLUtils.isValidXml10Char(charCode) :
@@ -182,6 +182,9 @@ export class SAXParser {
                 if (!isValid) {
                     throw new Error(`Invalid XML character: U+${charCode.toString(16).toUpperCase().padStart(4, '0')} is not allowed in XML ${this.xmlVersion}`);
                 }
+                
+                // Get the complete character (handles surrogate pairs)
+                char = String.fromCodePoint(charCode);
             } else {
                 throw new Error('Invalid character: undefined character code encountered');
             }
@@ -193,7 +196,10 @@ export class SAXParser {
                 throw new Error('Malformed XML document: text found after root element');
             }
             this.characterRun += char;
-            this.pointer++;
+            
+            // Advance pointer correctly for surrogate pairs
+            this.pointer += (charCode! > 0xFFFF) ? 2 : 1;
+            
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
                 this.buffer += this.reader?.read();
             }
@@ -410,8 +416,18 @@ export class SAXParser {
         this.cleanCharacterRun();
         this.pointer += 2; // skip '</'
         let name: string = '';
+        
+        // Read tag name until '>'
         while (!this.lookingAt('>')) {
-            name += this.buffer.charAt(this.pointer++);
+            let char = this.buffer.charAt(this.pointer);
+            
+            // Well-formedness check: no whitespace allowed between name and '>' in end tags
+            if (XMLUtils.isXmlSpace(char)) {
+                throw new Error(`Well-formedness error: whitespace is not allowed between element name and '>' in end tag "</${name}"`);
+            }
+            
+            name += char;
+            this.pointer++;
         }
 
         // Well-formedness check: mismatched element tags
@@ -436,16 +452,22 @@ export class SAXParser {
             if (this.rootParsed) {
                 if (this.elementStack === 0) {
                     // document ended
-                    this.contentHandler!.ignorableWhitespace(this.characterRun);
+                    // Normalize line endings per XML 1.0 spec section 2.11
+                    const normalizedContent = XMLUtils.normalizeLines(this.characterRun);
+                    this.contentHandler!.ignorableWhitespace(normalizedContent);
                 } else {
                     // in an element - check xml:space
                     const preserveWhitespace = this.isXmlSpacePreserve();
                     if (preserveWhitespace || !this.isWhitespaceOnly(this.characterRun)) {
                         // Preserve whitespace or contains non-whitespace - treat as significant
-                        this.contentHandler!.characters(this.characterRun);
+                        // Normalize line endings per XML 1.0 spec section 2.11
+                        const normalizedContent = XMLUtils.normalizeLines(this.characterRun);
+                        this.contentHandler!.characters(normalizedContent);
                     } else {
                         // Default mode and only whitespace - treat as ignorable
-                        this.contentHandler!.ignorableWhitespace(this.characterRun);
+                        // Normalize line endings per XML 1.0 spec section 2.11
+                        const normalizedContent = XMLUtils.normalizeLines(this.characterRun);
+                        this.contentHandler!.ignorableWhitespace(normalizedContent);
                     }
                 }
             } else {
@@ -1027,17 +1049,21 @@ export class SAXParser {
                 result += char;
                 i = endPos + 1;
             } else {
-                let char = text.charAt(i);
-                // Well-formedness check: validate character
-                let code = char.codePointAt(0)!;
+                // Well-formedness check: validate character(s) - handle surrogate pairs
+                let code = text.codePointAt(i)!;
                 const isValid = this.xmlVersion === '1.0' ? 
                     XMLUtils.isValidXml10Char(code) : 
                     XMLUtils.isValidXml11Char(code);
                 if (!isValid) {
                     throw new Error(`Invalid character in entity value: U+${code.toString(16).toUpperCase().padStart(4, '0')} is not allowed in XML ${this.xmlVersion}`);
                 }
+                
+                // Add the complete character (may be 1 or 2 UTF-16 code units for surrogate pairs)
+                let char = String.fromCodePoint(code);
                 result += char;
-                i++;
+                
+                // Skip the correct number of UTF-16 code units
+                i += (code > 0xFFFF) ? 2 : 1;
             }
         }
 
@@ -1106,17 +1132,21 @@ export class SAXParser {
                 
                 i = endPos + 1;
             } else {
-                let char = text.charAt(i);
-                // Well-formedness check: validate character
-                let code = char.codePointAt(0)!;
+                // Well-formedness check: validate character(s) - handle surrogate pairs
+                let code = text.codePointAt(i)!;
                 const isValid = this.xmlVersion === '1.0' ? 
                     XMLUtils.isValidXml10Char(code) : 
                     XMLUtils.isValidXml11Char(code);
                 if (!isValid) {
                     throw new Error(`Invalid character in entity value: U+${code.toString(16).toUpperCase().padStart(4, '0')} is not allowed in XML ${this.xmlVersion}`);
                 }
+                
+                // Add the complete character (may be 1 or 2 UTF-16 code units for surrogate pairs)
+                let char = String.fromCodePoint(code);
                 result += char;
-                i++;
+                
+                // Skip the correct number of UTF-16 code units
+                i += (code > 0xFFFF) ? 2 : 1;
             }
         }
 
@@ -1130,19 +1160,19 @@ export class SAXParser {
 
         let result = text;
 
-        // Expand predefined entities in the correct order
+        // First expand custom entities from DTD grammar
+        result = this.expandCustomEntities(result);
+
+        // Then expand character references
+        result = this.expandCharacterReferences(result);
+
+        // Finally expand predefined entities in the correct order
         // Important: &amp; must be expanded LAST to avoid interfering with other entities
         result = result.replace(/&quot;/g, '"');
         result = result.replace(/&apos;/g, "'");
         result = result.replace(/&lt;/g, '<');
         result = result.replace(/&gt;/g, '>');
         result = result.replace(/&amp;/g, '&');  // This must be last!
-
-        // Then expand character references
-        result = this.expandCharacterReferences(result);
-
-        // Expand custom entities from DTD grammar
-        result = this.expandCustomEntities(result);
 
         return result;
     }
