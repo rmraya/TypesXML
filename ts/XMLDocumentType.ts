@@ -47,6 +47,10 @@ export class XMLDocumentType implements XMLNode {
         return this.publicId;
     }
 
+    getName(): string {
+        return this.name;
+    }
+
     setInternalSubset(subset: string): void {
         this.internalSubset = subset;
     }

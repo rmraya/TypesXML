@@ -48,25 +48,78 @@ export class AttListDecl implements XMLNode {
             let attType: string = parts[index++];
             let defaultDecl: string = '';
             let defaultValue: string = '';
+            
             if (AttListDecl.attTypes.includes(attType)) {
-                defaultDecl = parts[index++];
-                if (defaultDecl === '#FIXED') {
-                    defaultValue = parts[index++];
+                // Standard attribute type
+                if (index < parts.length) {
+                    let nextPart = parts[index++];
+                    if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
+                        defaultDecl = nextPart;
+                    } else if (nextPart === '#FIXED') {
+                        defaultDecl = nextPart;
+                        if (index < parts.length) {
+                            defaultValue = parts[index++];
+                            if (defaultValue.startsWith('"') && defaultValue.endsWith('"')) {
+                                defaultValue = defaultValue.substring(1, defaultValue.length - 1);
+                            }
+                        }
+                    } else if (nextPart && nextPart.startsWith('"') && nextPart.endsWith('"')) {
+                        // Direct default value
+                        defaultDecl = nextPart;
+                        defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes
+                    } else {
+                        // Fallback
+                        defaultDecl = nextPart || '';
+                    }
                 }
             } else {
                 if (attType === 'NOTATION') {
                     // Parse the notations in the enumeration that follows
-                    let notations = parts[index++]; // This should be like "(notation1|notation2|notation3)"
-                    attType = 'NOTATION ' + notations; // Store the full notation enumeration as the type
-                    defaultDecl = parts[index++];
-                    if (defaultDecl === '#FIXED') {
-                        defaultValue = parts[index++];
+                    if (index < parts.length) {
+                        let notations = parts[index++]; // This should be like "(notation1|notation2|notation3)"
+                        attType = 'NOTATION ' + notations; // Store the full notation enumeration as the type
+                        if (index < parts.length) {
+                            let nextPart = parts[index++];
+                            if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
+                                defaultDecl = nextPart;
+                            } else if (nextPart === '#FIXED') {
+                                defaultDecl = nextPart;
+                                if (index < parts.length) {
+                                    defaultValue = parts[index++];
+                                    if (defaultValue.startsWith('"') && defaultValue.endsWith('"')) {
+                                        defaultValue = defaultValue.substring(1, defaultValue.length - 1);
+                                    }
+                                }
+                            } else if (nextPart && nextPart.startsWith('"') && nextPart.endsWith('"')) {
+                                // Direct default value
+                                defaultDecl = nextPart;
+                                defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes
+                            } else {
+                                defaultDecl = nextPart || '';
+                            }
+                        }
                     }
                 } else {
                     // Handle other enumeration types (values in parentheses)
-                    defaultDecl = parts[index++];
-                    if (defaultDecl === '#FIXED') {
-                        defaultValue = parts[index++];
+                    if (index < parts.length) {
+                        let nextPart = parts[index++];
+                        if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
+                            defaultDecl = nextPart;
+                        } else if (nextPart === '#FIXED') {
+                            defaultDecl = nextPart;
+                            if (index < parts.length) {
+                                defaultValue = parts[index++];
+                                if (defaultValue.startsWith('"') && defaultValue.endsWith('"')) {
+                                    defaultValue = defaultValue.substring(1, defaultValue.length - 1);
+                                }
+                            }
+                        } else if (nextPart && nextPart.startsWith('"') && nextPart.endsWith('"')) {
+                            // Direct default value
+                            defaultDecl = nextPart;
+                            defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes
+                        } else {
+                            defaultDecl = nextPart || '';
+                        }
                     }
                 }
             }
@@ -78,30 +131,52 @@ export class AttListDecl implements XMLNode {
     split(text: string): string[] {
         let result: string[] = [];
         let word: string = '';
+        let inQuotes: boolean = false;
+        
         for (let i: number = 0; i < text.length; i++) {
             let c: string = text.charAt(i);
-            if (c === '(') {
-                // starts an enumeration
+            
+            if (c === '"' && !inQuotes) {
+                // Start of quoted string
+                inQuotes = true;
+                word += c;
+            } else if (c === '"' && inQuotes) {
+                // End of quoted string
+                inQuotes = false;
+                word += c;
+                // Complete the quoted word
+                if (word.length > 0) {
+                    result.push(word);
+                    word = '';
+                }
+            } else if (c === '(' && !inQuotes) {
+                // Start of enumeration
+                if (word.length > 0) {
+                    result.push(word);
+                    word = '';
+                }
                 let enumeration: string = '(';
                 while (c !== ')') {
                     c = text.charAt(++i);
                     enumeration += c;
                 }
                 result.push(enumeration);
-                continue;
-            }
-            if (c === ' ' || c === '\n' || c === '\r' || c === '\t') {
+            } else if ((c === ' ' || c === '\n' || c === '\r' || c === '\t') && !inQuotes) {
+                // Whitespace outside quotes
                 if (word.length > 0) {
                     result.push(word);
                     word = '';
                 }
             } else {
+                // Regular character
                 word += c;
             }
         }
+        
         if (word.length > 0) {
             result.push(word);
         }
+        
         return result;
     }
 

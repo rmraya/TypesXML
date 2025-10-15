@@ -14,13 +14,14 @@
 
 ## Overview
 
-TypesXML is an open-source XML library written in TypeScript that provides both SAX (event-driven) and DOM (tree-based) parsing capabilities. It implements a complete XML 1.0/1.1 parser with support for DTD parsing and validation features.
+TypesXML is an open-source XML library written in TypeScript that provides both SAX (event-driven) and DOM (tree-based) parsing capabilities. It implements a complete XML 1.0/1.1 parser with full DTD validation and processing features.
 
 ### Key Features
 
 - **SAX Parser**: Event-driven parsing for memory-efficient processing of large XML files
 - **DOM Builder**: Creates an in-memory tree representation of XML documents
-- **DTD Support**: Parsing of Document Type Definitions and internal subsets
+- **Complete DTD Support**: Full parsing and validation of Document Type Definitions
+- **DTD Validation**: Strict validation against DTD constraints including sequences, choices, and cardinality
 - **XML Writer**: Utilities for writing XML documents to files
 - **Encoding Support**: Handles various character encodings including UTF-8, UTF-16LE
 - **Entity Resolution**: Built-in support for XML entities and catalog-based resolution
@@ -71,6 +72,7 @@ new SAXParser()
 | Method | Description | Parameters | Returns |
 |--------|-------------|------------|---------|
 | `setContentHandler(handler)` | Sets the content handler to receive parsing events | `handler: ContentHandler` | `void` |
+| `setValidating(validating)` | Enable/disable DTD validation mode | `validating: boolean` | `void` |
 | `parseFile(path, encoding?)` | Parses XML from a file | `path: string, encoding?: BufferEncoding` | `void` |
 | `parseString(data)` | Parses XML from a string | `data: string` | `void` |
 
@@ -440,7 +442,17 @@ reader.closeFile();
 
 ## DTD Support
 
-The library includes comprehensive DTD (Document Type Definition) support with complete Grammar generation:
+The library includes comprehensive DTD (Document Type Definition) support with complete Grammar generation, full validation, and default attribute processing:
+
+### Key DTD Features
+
+- **Complete DTD Parsing**: Full support for element, attribute, entity, and notation declarations
+- **Full DTD Validation**: Complete validation against DTD constraints including element sequences, choice groups, and cardinality
+- **Flexible Validation Modes**: Strict validation with `setValidating(true)` or helpful processing with `setValidating(false)`
+- **Default Attribute Processing**: Automatic setting of default attribute values from DTD
+- **Content Model Validation**: Complete validation of element content against DTD-declared models
+- **Catalog Support**: XML Catalog resolution for DTD and entity references
+- **Helpful Behavior**: DTD parsing and default attributes work even in non-validating mode
 
 ### DTD Parser and Grammar
 
@@ -453,18 +465,140 @@ import {
     AttListDecl, 
     EntityDecl, 
     NotationDecl,
-    InternalSubset 
+    InternalSubset,
+    SAXParser,
+    DOMBuilder,
+    Catalog
 } from 'typesxml';
 
 // Parse DTD and generate Grammar
 const dtdParser = new DTDParser();
 const grammar = dtdParser.parseDTD('schema.dtd');
 
+// Parse XML with DTD validation and default attributes
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+
+// Optional: Set up catalog for DTD resolution
+const catalog = new Catalog('/path/to/catalog.xml');
+builder.setCatalog(catalog);
+
+// Enable validation (optional - default attributes work in both modes)
+parser.setValidating(true);
+parser.setContentHandler(builder);
+
+// Parse document - default attributes will be automatically added
+parser.parseFile('document.xml');
+const doc = builder.getDocument();
+
 // Access parsed components
 const elementDeclarations = grammar.getElementDeclMap();
 const attributeDeclarations = grammar.getAttributesMap();
 const entities = grammar.getEntitiesMap();
 const notations = grammar.getNotationsMap();
+```
+
+### Validation and Default Attributes
+
+#### Setting Validation Mode
+
+```typescript
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+
+// Enable strict DTD validation - rejects documents that don't conform to DTD
+parser.setValidating(true);
+parser.setContentHandler(builder);
+
+// Helpful mode (default): DTD parsing and default attributes without strict validation
+parser.setValidating(false);
+parser.setContentHandler(builder);
+```
+
+#### DTD Validation Examples
+
+```typescript
+// Example: Strict validation with detailed error reporting
+const invalidXml = `<?xml version="1.0"?>
+<!DOCTYPE book [
+  <!ELEMENT book (title, author+, chapter*)>
+  <!ELEMENT title (#PCDATA)>
+  <!ELEMENT author (#PCDATA)>
+  <!ELEMENT chapter (title, content)>
+  <!ELEMENT content (#PCDATA)>
+]>
+<book>
+  <title>Book Title</title>
+  <!-- Missing required author+ elements - validation will fail -->
+  <chapter>
+    <title>Chapter</title>
+    <content>Content</content>
+  </chapter>
+</book>`;
+
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+parser.setValidating(true); // Enable strict validation
+parser.setContentHandler(builder);
+
+try {
+    parser.parseString(invalidXml);
+    console.log('Document is valid according to DTD');
+} catch (error) {
+    console.log('DTD Validation Error:', error.message);
+    // Output: "Content model validation failed for element 'book': Required content particle '(title,author+,chapter*)' not satisfied"
+}
+```
+
+#### Default Attribute Processing
+
+Default attributes are automatically set based on DTD declarations:
+
+```typescript
+// DTD declares: <!ATTLIST concept class CDATA "- topic/topic concept/concept ">
+// Input XML: <concept id="example">
+// Result:     <concept id="example" class="- topic/topic concept/concept ">
+
+const ditaXml = `<?xml version="1.0"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="example">
+    <title>Example</title>
+</concept>`;
+
+parser.parseString(ditaXml);
+const doc = builder.getDocument();
+const root = doc?.getRoot();
+
+// Default @class attribute is automatically set
+console.log(root?.getAttribute('class')?.getValue()); 
+// Output: "- topic/topic concept/concept "
+```
+
+#### Supported Default Attribute Types
+
+1. **Direct defaults**: `attr CDATA "default-value"`
+2. **Fixed declarations**: `attr CDATA #FIXED "fixed-value"`  
+3. **Enumeration defaults**: `format (html|dita) "dita"`
+4. **Required attributes**: `attr CDATA #REQUIRED` (must be present)
+5. **Implied attributes**: `attr CDATA #IMPLIED` (no default set)
+
+#### DITA Processing Support
+
+Perfect for DITA workflows where `@class` attributes are essential:
+
+```typescript
+// All DITA elements automatically get proper @class attributes
+const ditaElements = doc?.getElementsByTagName('*');
+ditaElements?.forEach(element => {
+    const classAttr = element.getAttribute('class');
+    if (classAttr) {
+        console.log(`${element.getName()}: ${classAttr.getValue()}`);
+    }
+});
+// Output:
+// concept: - topic/topic concept/concept 
+// title: - topic/title 
+// p: - topic/p 
 ```
 
 ### Grammar Class

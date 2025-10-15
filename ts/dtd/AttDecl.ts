@@ -59,7 +59,16 @@ export class AttDecl implements XMLNode {
     }
 
     toString(): string {
-        return (this.name + ' ' + this.attType + ' ' + this.defaultDecl + ' ' + this.defaultValue).trim();
+        let result = this.name + ' ' + this.attType + ' ' + this.defaultDecl;
+        if (this.defaultValue) {
+            // Quote the default value if it contains spaces or is not already quoted
+            if (this.defaultValue.includes(' ') && !this.defaultValue.startsWith('"')) {
+                result += ' "' + this.defaultValue + '"';
+            } else {
+                result += ' ' + this.defaultValue;
+            }
+        }
+        return result.trim();
     }
 
     isValid(value: string): boolean {

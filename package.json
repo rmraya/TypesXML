@@ -1,14 +1,18 @@
 {
   "name": "typesxml",
   "productName": "TypesXML",
-  "version": "1.10.0",
-  "description": "Open source XML library written in TypeScript",
+  "version": "1.11.0",
+  "description": "Open source XML library written in TypeScript with DTD validation and default attribute support",
   "keywords": [
     "XML",
     "Parser",
     "DOM",
     "SAX",
-    "DTD"
+    "DTD",
+    "Validation",
+    "DITA",
+    "Catalog",
+    "Default Attributes"
   ],
   "scripts": {
     "build": "tsc"

@@ -248,6 +248,111 @@ if (XMLUtils.isXmlSpace(char)) {
 const validText = XMLUtils.validXml10Chars(text);
 ```
 
+## DTD Validation and Default Attributes
+
+### Basic Setup with DTD Support
+
+```typescript
+import { SAXParser, DOMBuilder, Catalog } from 'typesxml';
+
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+
+// Optional: Set up catalog for DTD resolution
+const catalog = new Catalog('/path/to/catalog.xml');
+builder.setCatalog(catalog);
+
+// Choose validation mode
+parser.setValidating(true);  // Strict DTD validation - rejects invalid documents
+// OR
+parser.setValidating(false); // Helpful mode: DTD parsing + default attributes without strict validation
+
+parser.setContentHandler(builder);
+```
+
+### Default Attributes Example
+
+```typescript
+// DTD declares: <!ATTLIST concept class CDATA "- topic/topic concept/concept ">
+// Input XML: <concept id="example">
+// Result:    <concept id="example" class="- topic/topic concept/concept ">
+
+const ditaXml = `<?xml version="1.0"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="example">
+    <title>Example Topic</title>
+</concept>`;
+
+parser.parseString(ditaXml);
+const doc = builder.getDocument();
+const root = doc?.getRoot();
+
+// Default @class attribute is automatically set
+console.log(root?.getAttribute('class')?.getValue()); 
+// Output: "- topic/topic concept/concept "
+```
+
+### Validation Error Handling
+
+```typescript
+try {
+    parser.setValidating(true);
+    parser.parseString(xmlWithErrors);
+} catch (error) {
+    if (error.message.includes('validation')) {
+        console.error('DTD validation failed:', error.message);
+    } else {
+        console.error('Parse error:', error.message);
+    }
+}
+```
+
+### DTD Validation Example
+
+```typescript
+// Example: Invalid document that fails DTD validation
+const invalidXml = `<?xml version="1.0"?>
+<!DOCTYPE book [
+  <!ELEMENT book (title, author+, chapter*)>
+  <!ELEMENT title (#PCDATA)>
+  <!ELEMENT author (#PCDATA)>
+]>
+<book>
+  <title>Book Title</title>
+  <!-- Missing required author+ elements -->
+</book>`;
+
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+parser.setValidating(true); // Enable strict validation
+parser.setContentHandler(builder);
+
+try {
+    parser.parseString(invalidXml);
+    console.log('Document is valid');
+} catch (error) {
+    console.error('Validation error:', error.message);
+    // Output: "Content model validation failed for element 'book': Required content particle '(title,author+,chapter*)' not satisfied"
+}
+```
+
+### DITA Processing Ready
+
+```typescript
+// All DITA elements automatically get proper @class attributes
+const elements = doc?.getElementsByTagName('*');
+elements?.forEach(element => {
+    const classAttr = element.getAttribute('class');
+    if (classAttr) {
+        console.log(`${element.getName()}: ${classAttr.getValue()}`);
+    }
+});
+// Output:
+// concept: - topic/topic concept/concept 
+// title: - topic/title 
+// p: - topic/p 
+```
+
 ## DTD and Grammar Support
 
 ### Parsing DTD and Creating Grammar

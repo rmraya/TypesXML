@@ -673,6 +673,10 @@ export class DTDParser {
             }
             attributesText += char;
         }
+        
+        // Expand parameter entities in attributes text before parsing
+        attributesText = this.expandParameterEntities(attributesText);
+        
         let list: AttListDecl = new AttListDecl(name, attributesText)
         return list;
     }
@@ -745,6 +749,60 @@ export class DTDParser {
     makeAbsolute(uri: string): string {
         let currentPath: string = path.dirname(this.currentFile);
         return currentPath + path.sep + uri;
+    }
+
+    expandParameterEntities(text: string): string {
+        let result = text;
+        let expandedEntities = new Set<string>(); // Track expanded entities to prevent circular references
+        let maxIterations = 50; // Increase limit for complex DTDs
+        let iteration = 0;
+        
+        while (iteration < maxIterations) {
+            let changed = false;
+            
+            // Find all parameter entity references in current text
+            let entityMatches = result.match(/%[a-zA-Z0-9_.-]+;/g);
+            if (!entityMatches) {
+                break; // No more entities to expand
+            }
+            
+            for (let entityRef of entityMatches) {
+                let entityName = entityRef.substring(1, entityRef.length - 1); // Remove % and ;
+                
+                // Skip if we've already expanded this entity to prevent cycles
+                if (expandedEntities.has(entityName)) {
+                    continue;
+                }
+                
+                let entity = this.grammar.getEntity(entityName);
+                if (entity && entity.getValue()) {
+                    let entityValue = entity.getValue();
+                    
+                    // Only expand if the value doesn't contain the same entity reference (simple cycle detection)
+                    if (!entityValue.includes(entityRef)) {
+                        result = result.replace(new RegExp(this.escapeRegExp(entityRef), 'g'), entityValue);
+                        expandedEntities.add(entityName);
+                        changed = true;
+                    }
+                }
+            }
+            
+            if (!changed) {
+                break; // No more expansions possible
+            }
+            
+            iteration++;
+        }
+        
+        if (iteration >= maxIterations) {
+            console.warn(`Parameter entity expansion reached maximum iterations (${maxIterations}), some entities may not be fully expanded`);
+        }
+        
+        return result;
+    }
+    
+    private escapeRegExp(string: string): string {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     getGrammar(): Grammar {

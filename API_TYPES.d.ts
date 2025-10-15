@@ -1,6 +1,11 @@
 /**
  * TypesXML Type Definitions
  * This file provides TypeScript type definitions for better IDE support and understanding
+ * 
+ * Key Features:
+ * - Complete DTD validation support
+ * - Automatic default attribute processing
+ * - XML Catalog resolution
  */
 
 export interface XMLNode {
@@ -32,6 +37,7 @@ export interface ContentHandler {
 export declare class SAXParser {
     constructor();
     setContentHandler(contentHandler: ContentHandler): void;
+    setValidating(validating: boolean): void;
     parseFile(path: string, encoding?: BufferEncoding): void;
     parseString(data: string): void;
 }
@@ -109,7 +115,7 @@ export declare class XMLAttribute implements XMLNode {
     constructor(name: string, value: string);
     getName(): string;
     getValue(): string;
-    setvalue(value: string): void;
+    setValue(value: string): void;
     getNamespace(): string;
     getNodeType(): number;
     toString(): string;
@@ -223,20 +229,23 @@ export declare class Constants {
 }
 
 export declare class Catalog {
-    constructor();
+    constructor(catalogFile: string);
     resolveEntity(publicId: string, systemId: string): string | undefined;
 }
 
 export declare class Indenter {
-    constructor();
-    indent(doc: XMLDocument, spaces: number): void;
-    indent(element: XMLElement, spaces: number): void;
+    constructor(spaces: number, level?: number);
+    setSpaces(spaces: number): void;
+    setLevel(level: number): void;
+    indent(element: XMLElement): void;
 }
 
 // DTD Classes
 export declare class DTDParser {
     constructor();
+    setCatalog(catalog: Catalog): void;
     parseDTD(path: string): Grammar;
+    parseInternalSubset(subset: string): Grammar;
 }
 
 export declare class Grammar {
@@ -249,33 +258,38 @@ export declare class Grammar {
     getNotationsMap(): Map<string, NotationDecl>;
     getEntity(entityName: string): EntityDecl | undefined;
     addElement(elementDecl: ElementDecl): void;
+    addAttributes(element: string, attributes: Map<string, AttDecl>): void;
     addEntity(entityDecl: EntityDecl): void;
     addNotation(notation: NotationDecl): void;
     merge(grammar: Grammar): void;
 }
 
 export declare class ElementDecl implements XMLNode {
-    constructor(name: string, contentModel: string);
+    constructor(name: string, contentSpec: string);
     getName(): string;
-    getContentModel(): string;
+    getContentSpec(): string;
     getNodeType(): number;
     toString(): string;
     equals(node: XMLNode): boolean;
 }
 
 export declare class AttListDecl implements XMLNode {
-    constructor(element: string);
-    getElement(): string;
+    constructor(name: string, attributesText: string);
+    getName(): string;
+    getAttributes(): Map<string, AttDecl>;
+    parseAttributes(text: string): void;
     getNodeType(): number;
     toString(): string;
     equals(node: XMLNode): boolean;
 }
 
 export declare class AttDecl implements XMLNode {
-    constructor(name: string, type: string, defaultValue: string);
+    constructor(name: string, attType: string, defaultDecl: string, defaultValue: string);
     getName(): string;
     getType(): string;
+    getDefaultDecl(): string;
     getDefaultValue(): string;
+    isValid(value: string): boolean;
     getNodeType(): number;
     toString(): string;
     equals(node: XMLNode): boolean;
@@ -322,31 +336,42 @@ export declare class ContentModel {
 }
 
 export interface ContentParticle {
-    getType(): ContentParticleType;
+    getType(): number;
     addParticle(particle: ContentParticle): void;
-    setCardinality(cardinality: Cardinality): void;
-    getCardinality(): Cardinality;
+    setCardinality(cardinality: number): void;
+    getCardinality(): number;
     getParticles(): Array<ContentParticle>;
     getChildren(): Set<string>;
     toString(): string;
 }
 
+// DTD Constants
+export declare const Cardinality: {
+    readonly NONE: 0;
+    readonly OPTIONAL: 1;
+    readonly ZEROMANY: 2;
+    readonly ONEMANY: 3;
+};
+
+export declare const ContentModelType: {
+    readonly EMPTY: 'EMPTY';
+    readonly ANY: 'ANY';
+    readonly MIXED: 'Mixed';
+    readonly PCDATA: '#PCDATA';
+    readonly CHILDREN: 'Children';
+};
+
+export declare const ContentParticleType: {
+    readonly PCDATA: 0;
+    readonly NAME: 1;
+    readonly SEQUENCE: 2;
+    readonly CHOICE: 3;
+};
+
+// Type aliases for convenience
 export type ContentModelType = 'EMPTY' | 'ANY' | 'Mixed' | '#PCDATA' | 'Children';
 export type ContentParticleType = 0 | 1 | 2 | 3; // PCDATA | NAME | SEQUENCE | CHOICE
 export type Cardinality = 0 | 1 | 2 | 3; // NONE | OPTIONAL | ZEROMANY | ONEMANY
-
-// Common Usage Types
-export type ParseOptions = {
-    encoding?: BufferEncoding;
-    validate?: boolean;
-    catalog?: Catalog;
-};
-
-export type SerializationOptions = {
-    pretty?: boolean;
-    indent?: number;
-    encoding?: string;
-};
 
 // Utility Types
 export type NodeType = 
@@ -360,4 +385,8 @@ export type NodeType =
     | typeof Constants.ENTITY_DECL_NODE
     | typeof Constants.XML_DECLARATION_NODE
     | typeof Constants.ATTRIBUTE_LIST_DECL_NODE
-    | typeof Constants.DOCUMENT_TYPE_NODE;
+    | typeof Constants.DOCUMENT_TYPE_NODE
+    | typeof Constants.ATTRIBUTE_DECL_NODE
+    | typeof Constants.ELEMENT_DECL_NODE
+    | typeof Constants.INTERNAL_SUBSET_NODE
+    | typeof Constants.NOTATION_DECL_NODE;

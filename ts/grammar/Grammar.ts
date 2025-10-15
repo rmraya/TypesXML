@@ -66,7 +66,18 @@ export class Grammar {
     }
 
     addAttributes(element: string, attributes: Map<string, AttDecl>) {
-        this.attributesMap.set(element, attributes);
+        // Check if element already has attributes - if so, merge them
+        let existingAttributes = this.attributesMap.get(element);
+        if (existingAttributes) {
+            // Merge new attributes with existing ones
+            // New attributes take precedence if there are conflicts
+            attributes.forEach((value, key) => {
+                existingAttributes!.set(key, value);
+            });
+        } else {
+            // First time adding attributes for this element
+            this.attributesMap.set(element, attributes);
+        }
     }
 
     resolveParameterEntities(text: string): string {

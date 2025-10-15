@@ -37,7 +37,7 @@ export class XMLAttribute implements XMLNode {
         return this.value;
     }
 
-    setvalue(value: string): void {
+    setValue(value: string): void {
         this.value = value;
     }
 

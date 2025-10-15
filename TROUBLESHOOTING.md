@@ -119,6 +119,26 @@ try {
 
 ### DTD and External Entity Issues
 
+#### Validation Mode Not Working
+
+**Cause**: Incorrect order of `setValidating` and `setContentHandler` calls
+
+```typescript
+// Problem: Setting validation on builder before setting content handler
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+builder.setValidating(true);        // This gets overridden!
+parser.setContentHandler(builder);  // Parser copies its validating state (false) to builder
+
+// Solution: Set validation on parser FIRST, then set content handler
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+parser.setValidating(true);         // Set on parser first!
+parser.setContentHandler(builder);  // Parser copies its validating state (true) to builder
+```
+
+**Important**: When `setContentHandler` is called, the SAXParser automatically copies its current `validating` state to the ContentHandler. Always set the validation mode on the parser before setting the content handler.
+
 #### External DTD Not Found
 
 ```typescript

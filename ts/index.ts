@@ -43,5 +43,6 @@ export { EntityDecl } from "./dtd/EntityDecl";
 export { InternalSubset } from "./dtd/InternalSubset";
 export { NotationDecl } from "./dtd/NotationDecl";
 
-export { ContentModel } from "./grammar/ContentModel";
+export { ContentModel, Cardinality, ContentModelType } from "./grammar/ContentModel";
+export { ContentParticle, ContentParticleType } from "./grammar/contentParticle";
 export { Grammar } from "./grammar/Grammar";
