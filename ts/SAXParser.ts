@@ -21,8 +21,8 @@ import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
-import { Grammar } from "./grammar/Grammar";
 import { DTDParser } from "./dtd/DTDParser";
+import { Grammar } from "./grammar/Grammar";
 
 export class SAXParser {
 
@@ -31,6 +31,8 @@ export class SAXParser {
     pointer: number;
     buffer: string = '';
     elementStack: number;
+    elementNameStack: string[] = [];
+    xmlSpaceStack: string[] = [];
     characterRun: string;
     rootParsed: boolean;
     xmlVersion: string;
@@ -111,7 +113,7 @@ export class SAXParser {
     }
 
     readDocument(): void {
-        this.contentHandler?.startDocument();
+        this.contentHandler!.startDocument();
         while (this.pointer < this.buffer.length) {
             // If we're in CDATA mode, only look for the end marker
             if (this.inCDATA) {
@@ -154,6 +156,10 @@ export class SAXParser {
                 continue;
             }
             if (this.lookingAt(']]>')) {
+                // Well-formedness check: ]]> sequence not allowed outside CDATA
+                if (!this.inCDATA) {
+                    throw new Error('Well-formedness error: "]]>" sequence is not allowed outside CDATA sections');
+                }
                 this.endCDATA();
                 continue;
             }
@@ -166,6 +172,20 @@ export class SAXParser {
                 continue;
             }
             let char: string = this.buffer.charAt(this.pointer);
+
+            // Well-formedness check: validate XML characters
+            let charCode = char.charCodeAt(0);
+            if (charCode !== undefined) {
+                const isValid = this.xmlVersion === '1.0' ?
+                    XMLUtils.isValidXml10Char(charCode) :
+                    XMLUtils.isValidXml11Char(charCode);
+                if (!isValid) {
+                    throw new Error(`Invalid XML character: U+${charCode.toString(16).toUpperCase().padStart(4, '0')} is not allowed in XML ${this.xmlVersion}`);
+                }
+            } else {
+                throw new Error('Invalid character: undefined character code encountered');
+            }
+
             if (!this.rootParsed && !XMLUtils.isXmlSpace(char)) {
                 throw new Error('Malformed XML document: text found in prolog');
             }
@@ -183,7 +203,7 @@ export class SAXParser {
         }
         this.cleanCharacterRun();
         if (this.rootParsed) {
-            this.contentHandler?.endDocument();
+            this.contentHandler!.endDocument();
         }
     }
 
@@ -197,7 +217,7 @@ export class SAXParser {
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
                 this.buffer += this.reader?.read();
             }
-            
+
             // Check if we've reached the end of the buffer and no more data is available
             if (this.pointer >= this.buffer.length) {
                 if (!this.reader?.dataAvailable()) {
@@ -224,111 +244,94 @@ export class SAXParser {
 
         // Check for valid entity names
         if (name.length === 0) {
-            if (this.validating) {
-                throw new Error('Invalid entity reference: entity name cannot be empty');
-            } else {
-                if (!this.silent) {
-                    console.warn('XML Warning: Invalid entity reference: entity name cannot be empty');
-                }
-            }
+            throw new Error('Invalid entity reference: entity name cannot be empty');
         }
 
         // Character references (#123 or #xABC) have different rules
         if (name.startsWith('#')) {
             if (name.length === 1) {
-                if (this.validating) {
-                    throw new Error('Invalid character reference: missing numeric value');
-                } else {
-                    if (!this.silent) {
-                        console.warn('XML Warning: Invalid character reference: missing numeric value');
-                    }
-                }
+                throw new Error('Invalid character reference: missing numeric value');
             }
             if (name.startsWith('#x')) {
                 // Hexadecimal character reference
                 if (name.length === 2) {
-                    if (this.validating) {
-                        throw new Error('Invalid hexadecimal character reference: missing hex digits');
-                    } else {
-                        if (!this.silent) {
-                            console.warn('XML Warning: Invalid hexadecimal character reference: missing hex digits');
-                        }
-                    }
+                    throw new Error('Invalid hexadecimal character reference: missing hex digits');
                 }
                 const hexPart = name.substring(2);
                 if (!/^[0-9a-fA-F]+$/.test(hexPart)) {
-                    if (this.validating) {
-                        throw new Error(`Invalid hexadecimal character reference: "${name}" contains non-hex characters`);
-                    } else {
-                        if (!this.silent) {
-                            console.warn(`XML Warning: Invalid hexadecimal character reference: "${name}" contains non-hex characters`);
-                        }
-                    }
+                    throw new Error(`Invalid hexadecimal character reference: "${name}" contains non-hex characters`);
                 }
             } else {
                 // Decimal character reference
                 const decPart = name.substring(1);
                 if (!/^[0-9]+$/.test(decPart)) {
-                    if (this.validating) {
-                        throw new Error(`Invalid decimal character reference: "${name}" contains non-numeric characters`);
-                    } else {
-                        if (!this.silent) {
-                            console.warn(`XML Warning: Invalid decimal character reference: "${name}" contains non-numeric characters`);
-                        }
-                    }
+                    throw new Error(`Invalid decimal character reference: "${name}" contains non-numeric characters`);
                 }
             }
         } else {
             // Named entity reference
             if (!XMLUtils.isValidXMLName(name)) {
-                if (this.validating) {
-                    throw new Error(`Invalid entity reference: "${name}" - entity names must be valid XML names`);
-                } else {
-                    if (!this.silent) {
-                        console.warn(`XML Warning: Invalid entity reference: "${name}" - entity names must be valid XML names`);
-                    }
-                }
+                throw new Error(`Invalid entity reference: "${name}" - entity names must be valid XML names`);
             }
         }
 
         if (name === 'lt') {
-            this.contentHandler?.characters('<');
+            this.contentHandler!.characters('<');
         } else if (name === 'gt') {
-            this.contentHandler?.characters('>');
+            this.contentHandler!.characters('>');
         } else if (name === 'amp') {
-            this.contentHandler?.characters('&');
+            this.contentHandler!.characters('&');
         } else if (name === 'apos') {
-            this.contentHandler?.characters('\'');
+            this.contentHandler!.characters('\'');
         } else if (name === 'quot') {
-            this.contentHandler?.characters('"');
+            this.contentHandler!.characters('"');
         } else if (name.startsWith('#x')) {
             let code: number = parseInt(name.substring(2), 16);
-            let char: string = String.fromCharCode(code);
-            this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
+            // Well-formedness check: validate character code
+            const isValid = this.xmlVersion === '1.0' ?
+                XMLUtils.isValidXml10Char(code) :
+                XMLUtils.isValidXml11Char(code);
+            if (!isValid) {
+                throw new Error(`Invalid character reference: &#x${name.substring(2)}; (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML ${this.xmlVersion}`);
+            }
+            let char: string = String.fromCodePoint(code);
+            this.contentHandler!.characters(char);
         } else if (name.startsWith('#')) {
             let code: number = parseInt(name.substring(1));
-            let char: string = String.fromCharCode(code);
-            this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
+            // Well-formedness check: validate character code
+            const isValid = this.xmlVersion === '1.0' ?
+                XMLUtils.isValidXml10Char(code) :
+                XMLUtils.isValidXml11Char(code);
+            if (!isValid) {
+                throw new Error(`Invalid character reference: &#${code}; (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML ${this.xmlVersion}`);
+            }
+            let char: string = String.fromCodePoint(code);
+            this.contentHandler!.characters(char);
         } else {
             // Look up entity in DTD
             const entity = this.grammar.getEntity(name);
             if (entity) {
                 // Expand the entity
                 let entityValue = entity.getValue();
-                if (entityValue) {
-                    // Expand character references within the entity value
-                    entityValue = this.expandCharacterReferences(entityValue);
-                    
-                    // For now, always treat as character content to see if character expansion works
-                    // TODO: Handle markup content properly
-                    this.contentHandler?.characters(entityValue);
+                if (entityValue !== null && entityValue !== undefined) {
+                    // Entity has a defined value (could be empty string, which is valid)
+                    if (entityValue.length > 0) {
+                        // Expand character references within the entity value
+                        entityValue = this.expandCharacterReferences(entityValue);
+
+                        // Classify and handle entity content based on what it contains
+                        this.handleEntityContent(entityValue);
+                    } else {
+                        // Legitimate empty entity (entityValue === "")
+                        this.contentHandler!.characters('');
+                    }
                 } else {
-                    // Entity has no value (empty entity)
-                    this.contentHandler?.characters('');
+                    // Entity exists but has null/undefined value - this is problematic
+                    throw new Error(`Entity "${name}" is declared but has no defined value`);
                 }
             } else {
                 // Entity not found - handle as skipped entity
-                this.contentHandler?.skippedEntity(name);
+                this.contentHandler!.skippedEntity(name);
             }
         }
         this.pointer++; // skip ';'
@@ -349,13 +352,7 @@ export class SAXParser {
 
         // Check for valid XML element names
         if (!XMLUtils.isValidXMLName(name)) {
-            if (this.validating) {
-                throw new Error(`Invalid element name: "${name}" - XML names must start with a letter, underscore, or colon`);
-            } else {
-                if (!this.silent) {
-                    console.warn(`XML Warning: Invalid element name: "${name}" - XML names must start with a letter, underscore, or colon`);
-                }
-            }
+            throw new Error(`Invalid element name: "${name}" - XML names must start with a letter, underscore, or colon`);
         }
 
         let rest: string = '';
@@ -367,24 +364,40 @@ export class SAXParser {
         }
         rest = rest.trim();
         let attributesMap: Map<string, string> = this.parseAttributes(rest);
-        
+
         // Apply DTD-aware attribute value normalization and add default attributes
         attributesMap = this.normalizeAndDefaultAttributes(name, attributesMap);
-        
+
+        // Track xml:space attribute for whitespace handling
+        const xmlSpaceValue = attributesMap.get('xml:space');
+        if (xmlSpaceValue === 'preserve') {
+            this.xmlSpaceStack.push('preserve');
+        } else if (xmlSpaceValue === 'default') {
+            this.xmlSpaceStack.push('default');
+        } else {
+            // Inherit from parent (or default if at root)
+            const currentSpace = this.xmlSpaceStack.length > 0 ?
+                this.xmlSpaceStack[this.xmlSpaceStack.length - 1] : 'default';
+            this.xmlSpaceStack.push(currentSpace);
+        }
+
         let attributes: Array<XMLAttribute> = [];
         attributesMap.forEach((value: string, key: string) => {
             let attribute: XMLAttribute = new XMLAttribute(key, value);
             attributes.push(attribute);
         });
-        this.contentHandler?.startElement(name, attributes);
+        this.contentHandler!.startElement(name, attributes);
         this.elementStack++;
+        this.elementNameStack.push(name); // Track element for well-formedness checking
         if (!this.rootParsed) {
             this.rootParsed = true;
         }
         if (this.lookingAt('/>')) {
             this.cleanCharacterRun();
-            this.contentHandler?.endElement(name);
+            this.contentHandler!.endElement(name);
             this.elementStack--;
+            this.elementNameStack.pop(); // Remove from stack for self-closing tags
+            this.xmlSpaceStack.pop(); // Remove xml:space state for self-closing tags
             this.pointer += 2; // skip '/>'
         } else {
             this.pointer++; // skip '>'
@@ -400,8 +413,19 @@ export class SAXParser {
         while (!this.lookingAt('>')) {
             name += this.buffer.charAt(this.pointer++);
         }
-        this.contentHandler?.endElement(name);
+
+        // Well-formedness check: mismatched element tags
+        if (this.elementNameStack.length === 0) {
+            throw new Error(`Mismatched element tags: found closing tag "${name}" but no elements are open`);
+        }
+        const expectedName = this.elementNameStack.pop();
+        if (name !== expectedName) {
+            throw new Error(`Mismatched element tags: expected closing tag for "${expectedName}" but found "${name}"`);
+        }
+
+        this.contentHandler!.endElement(name);
         this.elementStack--;
+        this.xmlSpaceStack.pop(); // Remove xml:space state when element ends
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
@@ -412,17 +436,33 @@ export class SAXParser {
             if (this.rootParsed) {
                 if (this.elementStack === 0) {
                     // document ended
-                    this.contentHandler?.ignorableWhitespace(this.characterRun);
+                    this.contentHandler!.ignorableWhitespace(this.characterRun);
                 } else {
-                    // in an element
-                    this.contentHandler?.characters(this.characterRun);
+                    // in an element - check xml:space
+                    const preserveWhitespace = this.isXmlSpacePreserve();
+                    if (preserveWhitespace || !this.isWhitespaceOnly(this.characterRun)) {
+                        // Preserve whitespace or contains non-whitespace - treat as significant
+                        this.contentHandler!.characters(this.characterRun);
+                    } else {
+                        // Default mode and only whitespace - treat as ignorable
+                        this.contentHandler!.ignorableWhitespace(this.characterRun);
+                    }
                 }
             } else {
                 // in prolog
-                this.contentHandler?.ignorableWhitespace(this.characterRun);
+                this.contentHandler!.ignorableWhitespace(this.characterRun);
             }
             this.characterRun = '';
         }
+    }
+
+    private isXmlSpacePreserve(): boolean {
+        return this.xmlSpaceStack.length > 0 &&
+            this.xmlSpaceStack[this.xmlSpaceStack.length - 1] === 'preserve';
+    }
+
+    private isWhitespaceOnly(text: string): boolean {
+        return /^\s*$/.test(text);
     }
 
     parseComment(): void {
@@ -435,7 +475,7 @@ export class SAXParser {
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
                 this.buffer += this.reader?.read();
             }
-            
+
             // Check if we've reached the end of the buffer and no more data is available
             if (this.pointer >= this.buffer.length) {
                 if (!this.reader?.dataAvailable()) {
@@ -452,7 +492,7 @@ export class SAXParser {
             let char = this.buffer.charAt(this.pointer);
             comment += char;
             this.pointer++;
-            
+
             // In validation mode, check for XML compliance violations as we build the comment
             if (this.validating && comment.endsWith('--') && !this.lookingAt('>')) {
                 throw new Error('Invalid comment: comments must not contain "--"');
@@ -468,7 +508,7 @@ export class SAXParser {
 
         this.buffer = this.buffer.substring(this.pointer + 3); // skip '-->'
         this.pointer = 0;
-        this.contentHandler?.comment(comment);
+        this.contentHandler!.comment(comment);
     }
 
     parseProcessingInstruction(): void {
@@ -483,7 +523,7 @@ export class SAXParser {
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
                 this.buffer += this.reader?.read();
             }
-            
+
             // Check if we've reached the end of the buffer and no more data is available
             if (this.pointer >= this.buffer.length) {
                 if (!this.reader?.dataAvailable()) {
@@ -522,37 +562,19 @@ export class SAXParser {
 
         // Check for valid PI target
         if (target.length === 0) {
-            if (this.validating) {
-                throw new Error('Invalid processing instruction: target cannot be empty');
-            } else {
-                if (!this.silent) {
-                    console.warn('XML Warning: Invalid processing instruction: target cannot be empty');
-                }
-            }
+            throw new Error('Invalid processing instruction: target cannot be empty');
         }
         if (!XMLUtils.isValidXMLName(target)) {
-            if (this.validating) {
-                throw new Error(`Invalid processing instruction target: "${target}" - must be a valid XML name`);
-            } else {
-                if (!this.silent) {
-                    console.warn(`XML Warning: Invalid processing instruction target: "${target}" - must be a valid XML name`);
-                }
-            }
+            throw new Error(`Invalid processing instruction target: "${target}" - must be a valid XML name`);
         }
         // PI targets cannot be "xml" (case insensitive)
         if (target.toLowerCase() === 'xml') {
-            if (this.validating) {
-                throw new Error('Invalid processing instruction: target cannot be "xml"');
-            } else {
-                if (!this.silent) {
-                    console.warn('XML Warning: Invalid processing instruction: target cannot be "xml"');
-                }
-            }
+            throw new Error('Invalid processing instruction: target cannot be "xml"');
         }
 
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
-        this.contentHandler?.processingInstruction(target, data);
+        this.contentHandler!.processingInstruction(target, data);
     }
 
     parseDoctype() {
@@ -601,7 +623,7 @@ export class SAXParser {
             publicId = pair[0];
             systemId = pair[1];
         }
-        this.contentHandler?.startDTD(name, publicId, systemId);
+        this.contentHandler!.startDTD(name, publicId, systemId);
         // skip spaces after SYSTEM or PUBLIC
         for (; this.pointer < this.buffer.length; this.pointer++) {
             let char = this.buffer[this.pointer];
@@ -618,10 +640,10 @@ export class SAXParser {
             this.pointer++; // skip '['
             let inQuote: boolean = false;
             let quoteChar: string = '';
-            
+
             for (; this.pointer < this.buffer.length; this.pointer++) {
                 let char: string = this.buffer[this.pointer];
-                
+
                 // Handle quoted strings - don't treat ] inside quotes as subset end
                 if (!inQuote && (char === '"' || char === "'")) {
                     inQuote = true;
@@ -630,12 +652,12 @@ export class SAXParser {
                     inQuote = false;
                     quoteChar = '';
                 }
-                
+
                 // Only break on ] when not inside quotes
                 if (!inQuote && ']' === char) {
                     break;
                 }
-                
+
                 internalSubset += char;
                 if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
                     this.buffer += this.reader?.read();
@@ -657,7 +679,7 @@ export class SAXParser {
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
         if (internalSubset !== '') {
-            this.contentHandler?.internalSubset(internalSubset);
+            this.contentHandler!.internalSubset(internalSubset);
             // Parse the internal subset to extract entity declarations
             try {
                 const dtdParser = new DTDParser(this.grammar);
@@ -668,7 +690,7 @@ export class SAXParser {
                 }
             }
         }
-        this.contentHandler?.endDTD();
+        this.contentHandler!.endDTD();
     }
 
     parsePublicDeclaration(): string[] {
@@ -775,7 +797,7 @@ export class SAXParser {
         let version: string = attributes.get('version') || '1.0';
         this.xmlVersion = version;
         let encoding: string = attributes.get('encoding') || 'UTF-8';
-        this.contentHandler?.xmlDeclaration(version, encoding, attributes.get('standalone'));
+        this.contentHandler!.xmlDeclaration(version, encoding, attributes.get('standalone'));
     }
 
     lookingAt(text: string): boolean {
@@ -822,13 +844,35 @@ export class SAXParser {
             text = text.substring(pair.length).trim();
             separator = '';
         }
+
+        // Well-formedness check: validate no extra unpaired characters remain
+        if (text.trim().length > 0) {
+            throw new Error(`Malformed attributes: unexpected characters "${text.trim()}" that don't form attribute pairs`);
+        }
+
         pairs.forEach((pair: string) => {
             let index = pair.indexOf('=');
             if (index === -1) {
                 throw new Error('Malformed attributes list');
             }
             let name = pair.substring(0, index).trim();
-            
+
+            // Well-formedness check: validate attribute name
+            if (name.length === 0) {
+                throw new Error('Malformed attribute: attribute name cannot be empty');
+            }
+            if (!XMLUtils.isValidXMLName(name)) {
+                throw new Error(`Malformed attribute: "${name}" is not a valid XML attribute name`);
+            }
+
+            // Well-formedness check: validate attribute quotes
+            let quotedValue = pair.substring(index + 1).trim();
+            if (quotedValue.length < 2 ||
+                (quotedValue.charAt(0) !== '"' && quotedValue.charAt(0) !== "'") ||
+                quotedValue.charAt(0) !== quotedValue.charAt(quotedValue.length - 1)) {
+                throw new Error(`Malformed attribute: attribute value must be quoted (found: ${quotedValue})`);
+            }
+
             // Handle spaces around = sign
             let valueStart = index + 1;
             // Skip spaces after =
@@ -846,17 +890,22 @@ export class SAXParser {
             } else {
                 valueEnd = pair.length;
             }
-            
+
             let value = pair.substring(valueStart, valueEnd);
-            
+
             // Expand entity references in attribute values
             value = this.expandAllEntityReferences(value);
-            
+
             // Normalize attribute value whitespace (XML spec section 3.3.3)
             // Replace line endings (\r\n, \r, \n) and tabs with spaces
             value = value.replace(/\r\n/g, ' ')    // CRLF first (to avoid double replacement)
-                         .replace(/[\t\n\r]/g, ' '); // Then individual tab, LF, CR
-            
+                .replace(/[\t\n\r]/g, ' '); // Then individual tab, LF, CR
+
+            // Well-formedness check: detect duplicate attributes
+            if (map.has(name)) {
+                throw new Error(`Duplicate attribute: "${name}" appears more than once in the same element`);
+            }
+
             map.set(name, value);
         });
         return map;
@@ -875,7 +924,7 @@ export class SAXParser {
         // Process each DTD-declared attribute
         dtdAttributes.forEach((attDecl: any, attrName: string) => {
             const currentValue = result.get(attrName);
-            
+
             if (currentValue !== undefined) {
                 // Attribute exists - apply type-specific normalization
                 const normalizedValue = this.normalizeAttributeByType(currentValue, attDecl.getType());
@@ -906,7 +955,7 @@ export class SAXParser {
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
         this.inCDATA = true;  // Enter CDATA mode
-        this.contentHandler?.startCDATA();
+        this.contentHandler!.startCDATA();
     }
 
     endCDATA() {
@@ -915,7 +964,7 @@ export class SAXParser {
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
         this.inCDATA = false;  // Exit CDATA mode
-        this.contentHandler?.endCDATA();
+        this.contentHandler!.endCDATA();
     }
 
     expandCharacterReferences(text: string): string {
@@ -925,7 +974,7 @@ export class SAXParser {
 
         let result = '';
         let i = 0;
-        
+
         while (i < text.length) {
             if (text.charAt(i) === '&' && text.charAt(i + 1) === '#') {
                 // Found character reference
@@ -936,17 +985,23 @@ export class SAXParser {
                     i++;
                     continue;
                 }
-                
+
                 let refText = text.substring(i + 2, endPos); // Skip &#
                 let char = '';
-                
+
                 if (refText.startsWith('x') || refText.startsWith('X')) {
                     // Hexadecimal character reference
                     let hexPart = refText.substring(1);
                     if (/^[0-9a-fA-F]+$/.test(hexPart)) {
                         let code = parseInt(hexPart, 16);
+                        // Well-formedness check: validate character code
+                        const isValid = this.xmlVersion === '1.0' ? 
+                            XMLUtils.isValidXml10Char(code) : 
+                            XMLUtils.isValidXml11Char(code);
+                        if (!isValid) {
+                            throw new Error(`Invalid character reference: &#x${hexPart}; (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML ${this.xmlVersion}`);
+                        }
                         char = String.fromCodePoint(code);
-                        char = this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char);
                     } else {
                         // Invalid hex - include as is
                         char = text.substring(i, endPos + 1);
@@ -955,22 +1010,116 @@ export class SAXParser {
                     // Decimal character reference
                     if (/^[0-9]+$/.test(refText)) {
                         let code = parseInt(refText);
+                        // Well-formedness check: validate character code
+                        const isValid = this.xmlVersion === '1.0' ? 
+                            XMLUtils.isValidXml10Char(code) : 
+                            XMLUtils.isValidXml11Char(code);
+                        if (!isValid) {
+                            throw new Error(`Invalid character reference: &#${code}; (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML ${this.xmlVersion}`);
+                        }
                         char = String.fromCodePoint(code);
-                        char = this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char);
                     } else {
                         // Invalid decimal - include as is
                         char = text.substring(i, endPos + 1);
                     }
                 }
-                
+
                 result += char;
                 i = endPos + 1;
             } else {
-                result += text.charAt(i);
+                let char = text.charAt(i);
+                // Well-formedness check: validate character
+                let code = char.codePointAt(0)!;
+                const isValid = this.xmlVersion === '1.0' ? 
+                    XMLUtils.isValidXml10Char(code) : 
+                    XMLUtils.isValidXml11Char(code);
+                if (!isValid) {
+                    throw new Error(`Invalid character in entity value: U+${code.toString(16).toUpperCase().padStart(4, '0')} is not allowed in XML ${this.xmlVersion}`);
+                }
+                result += char;
                 i++;
             }
         }
-        
+
+        return result;
+    }
+
+    expandCustomEntities(text: string, visitedEntities: Set<string> = new Set()): string {
+        if (!text || text.indexOf('&') === -1) {
+            return text;
+        }
+
+        let result = '';
+        let i = 0;
+
+        while (i < text.length) {
+            if (text.charAt(i) === '&') {
+                // Find the end of the entity reference
+                let endPos = text.indexOf(';', i);
+                if (endPos === -1) {
+                    // Malformed entity reference - include as is
+                    result += text.charAt(i);
+                    i++;
+                    continue;
+                }
+
+                let entityName = text.substring(i + 1, endPos);
+                
+                // Skip predefined entities and character references as they're handled elsewhere
+                if (entityName === 'lt' || entityName === 'gt' || entityName === 'amp' || 
+                    entityName === 'apos' || entityName === 'quot' || 
+                    entityName.startsWith('#')) {
+                    // Include as is - will be handled by other expansion methods
+                    result += text.substring(i, endPos + 1);
+                    i = endPos + 1;
+                    continue;
+                }
+
+                // Check for recursive entity references to prevent infinite loops
+                if (visitedEntities.has(entityName)) {
+                    throw new Error(`Recursive entity reference detected: &${entityName};`);
+                }
+
+                // Look up custom entity in DTD grammar
+                const entity = this.grammar.getEntity(entityName);
+                if (entity) {
+                    let entityValue = entity.getValue();
+                    if (entityValue !== null && entityValue !== undefined) {
+                        // Mark this entity as visited for recursion detection
+                        visitedEntities.add(entityName);
+                        
+                        // Recursively expand any entities within this entity's value
+                        entityValue = this.expandCustomEntities(entityValue, visitedEntities);
+                        
+                        // Remove from visited set after expansion
+                        visitedEntities.delete(entityName);
+                        
+                        result += entityValue;
+                    } else {
+                        // Entity has no value - this is a well-formedness error for general entities
+                        throw new Error(`Entity &${entityName}; has no defined value`);
+                    }
+                } else {
+                    // Unknown entity - this is a well-formedness error
+                    throw new Error(`Unknown entity reference: &${entityName};`);
+                }
+                
+                i = endPos + 1;
+            } else {
+                let char = text.charAt(i);
+                // Well-formedness check: validate character
+                let code = char.codePointAt(0)!;
+                const isValid = this.xmlVersion === '1.0' ? 
+                    XMLUtils.isValidXml10Char(code) : 
+                    XMLUtils.isValidXml11Char(code);
+                if (!isValid) {
+                    throw new Error(`Invalid character in entity value: U+${code.toString(16).toUpperCase().padStart(4, '0')} is not allowed in XML ${this.xmlVersion}`);
+                }
+                result += char;
+                i++;
+            }
+        }
+
         return result;
     }
 
@@ -980,7 +1129,7 @@ export class SAXParser {
         }
 
         let result = text;
-        
+
         // Expand predefined entities in the correct order
         // Important: &amp; must be expanded LAST to avoid interfering with other entities
         result = result.replace(/&quot;/g, '"');
@@ -988,14 +1137,72 @@ export class SAXParser {
         result = result.replace(/&lt;/g, '<');
         result = result.replace(/&gt;/g, '>');
         result = result.replace(/&amp;/g, '&');  // This must be last!
-        
+
         // Then expand character references
         result = this.expandCharacterReferences(result);
-        
-        // TODO: Expand custom entities from DTD grammar
-        // This would require looking up entities in this.grammar and expanding them
-        // but we need to be careful about recursive expansion
-        
+
+        // Expand custom entities from DTD grammar
+        result = this.expandCustomEntities(result);
+
         return result;
+    }
+
+    private handleEntityContent(entityValue: string): void {
+        // Analyze entity content to determine how to handle it
+        // This is a simplified approach - in a full parser, we'd need more sophisticated content analysis
+
+        if (entityValue.includes('<') && entityValue.includes('>')) {
+            // Entity contains markup - this requires more complex handling
+            // For now, we'll treat different types of markup content
+
+            if (entityValue.trim().startsWith('<!--') && entityValue.trim().endsWith('-->')) {
+                // Comment content
+                const commentContent = entityValue.trim().slice(4, -3);
+                this.contentHandler!.comment(commentContent);
+            } else if (entityValue.trim().startsWith('<?') && entityValue.trim().endsWith('?>')) {
+                // Processing instruction content
+                const piContent = entityValue.trim().slice(2, -2).trim();
+                const spaceIndex = piContent.indexOf(' ');
+                if (spaceIndex > 0) {
+                    const target = piContent.substring(0, spaceIndex);
+                    const data = piContent.substring(spaceIndex + 1);
+                    this.contentHandler!.processingInstruction(target, data);
+                } else {
+                    this.contentHandler!.processingInstruction(piContent, '');
+                }
+            } else if (entityValue.trim().startsWith('<![CDATA[') && entityValue.trim().endsWith(']]>')) {
+                // CDATA content
+                const cdataContent = entityValue.trim().slice(9, -3);
+                this.contentHandler!.startCDATA();
+                this.contentHandler!.characters(cdataContent);
+                this.contentHandler!.endCDATA();
+            } else if (entityValue.trim().startsWith('<') && entityValue.trim().endsWith('>')) {
+                // Element content - simplified handling
+                // Extract element name (this is very basic parsing)
+                const elementMatch = entityValue.trim().match(/^<(\w+)(?:\s[^>]*)?(?:\/>|>.*<\/\1>)$/s);
+                if (elementMatch) {
+                    const elementName = elementMatch[1];
+                    this.contentHandler!.startElement(elementName, []);
+                    if (!entityValue.trim().endsWith('/>')) {
+                        // Extract content between tags (very simplified)
+                        const contentMatch = entityValue.trim().match(/^<\w+(?:\s[^>]*)?>(.+)<\/\w+>$/s);
+                        if (contentMatch) {
+                            const content = contentMatch[1];
+                            this.contentHandler!.characters(content);
+                        }
+                    }
+                    this.contentHandler!.endElement(elementName);
+                } else {
+                    // Malformed markup - treat as character data
+                    this.contentHandler!.characters(entityValue);
+                }
+            } else {
+                // Mixed content or other markup - treat as character data for safety
+                this.contentHandler!.characters(entityValue);
+            }
+        } else {
+            // Pure character content
+            this.contentHandler!.characters(entityValue);
+        }
     }
 }

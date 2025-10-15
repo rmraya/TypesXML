@@ -80,7 +80,7 @@ export class DTDParser {
         this.pointer = 0;
         while (this.pointer < this.source.length) {
             if (this.lookingAt('<!ELEMENT')) {
-                let index: number = this.source.indexOf('>', this.pointer);
+                let index: number = this.findDeclarationEnd(this.pointer);
                 if (index === -1) {
                     throw new Error('Malformed element declaration');
                 }
@@ -92,7 +92,7 @@ export class DTDParser {
                 continue;
             }
             if (this.lookingAt('<!ATTLIST')) {
-                let index: number = this.source.indexOf('>', this.pointer);
+                let index: number = this.findDeclarationEnd(this.pointer);
                 if (index === -1) {
                     throw new Error('Malformed attribute declaration');
                 }
@@ -104,7 +104,7 @@ export class DTDParser {
                 continue;
             }
             if (this.lookingAt('<!ENTITY')) {
-                let index: number = this.source.indexOf('>', this.pointer);
+                let index: number = this.findDeclarationEnd(this.pointer);
                 if (index === -1) {
                     throw new Error('Malformed entity declaration');
                 }
@@ -115,7 +115,7 @@ export class DTDParser {
                 continue;
             }
             if (this.lookingAt('<!NOTATION')) {
-                let index: number = this.source.indexOf('>', this.pointer);
+                let index: number = this.findDeclarationEnd(this.pointer);
                 if (index === -1) {
                     throw new Error('Malformed notation declaration');
                 }
@@ -753,6 +753,38 @@ export class DTDParser {
             }
         }
         return true;
+    }
+
+    findDeclarationEnd(startPointer: number): number {
+        let i = startPointer;
+        let inQuotes = false;
+        let quoteChar = '';
+        
+        // Skip past the opening tag (e.g., "<!ENTITY", "<!ATTLIST")
+        while (i < this.source.length && !XMLUtils.isXmlSpace(this.source.charAt(i)) && this.source.charAt(i) !== '>') {
+            i++;
+        }
+        
+        while (i < this.source.length) {
+            let char = this.source.charAt(i);
+            
+            if (!inQuotes && (char === '"' || char === "'")) {
+                // Starting a quoted section
+                inQuotes = true;
+                quoteChar = char;
+            } else if (inQuotes && char === quoteChar) {
+                // Ending a quoted section
+                inQuotes = false;
+                quoteChar = '';
+            } else if (!inQuotes && char === '>') {
+                // Found the end of the declaration
+                return i;
+            }
+            
+            i++;
+        }
+        
+        return -1; // Not found
     }
 
     resolveEntity(publicId: string, systemId: string): string {

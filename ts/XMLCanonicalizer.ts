@@ -137,14 +137,14 @@ export class XMLCanonicalizer {
 
     private escapeCharacterData(text: string): string {
         return text
-            .replace(/\r\n/g, '\n')    // Normalize Windows line endings first
-            .replace(/\r/g, '\n')      // Normalize Mac line endings
-            .replace(/&/g, '&amp;')    // & must be after line ending normalization
+            .replace(/&/g, '&amp;')    // & 
             .replace(/</g, '&lt;')     // <
             .replace(/>/g, '&gt;')     // >
             .replace(/"/g, '&quot;')   // double quote (for canonical form)
             .replace(/\t/g, '&#9;')    // tab
-            .replace(/\n/g, '&#10;');  // newline (now normalized)
+            .replace(/\r\n/g, '&#13;&#10;')  // CRLF sequence
+            .replace(/\r/g, '&#13;')   // carriage return (preserve as character reference)
+            .replace(/\n/g, '&#10;');  // newline
     }
 
     private escapeAttributeValue(value: string): string {
