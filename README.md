@@ -75,7 +75,26 @@ Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tr
 
 ## Features currently in development
 
-- Parsing of DTDs and internal subsets from <!DOCTYPE>
+- XML Schema validation support
+- RelaxNG support
+
+## Current Features
+
+- **Complete DTD Support**: Full parsing of Document Type Definitions including:
+  - Element declarations with content models (EMPTY, ANY, Mixed, Children)
+  - Attribute list declarations with all attribute types
+  - Entity declarations (parameter and general entities)
+  - Notation declarations
+  - Internal and external subset processing
+- **Advanced Content Model Processing**:
+  - Complex content model parsing (sequences, choices, cardinality)
+  - Mixed content detection and validation
+  - Element children resolution and integrity checking
+- **Grammar Generation**: Complete Grammar instances from DTD parsing with:
+  - Content model objects for each element
+  - Attribute mappings with type and default value information
+  - Entity resolution and parameter entity processing
+  - Structural validation and cross-reference checking
 
 ## Limitations
 

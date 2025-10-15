@@ -2,7 +2,6 @@
 
 ## Quick Start Cheat Sheet
 
-
 ### 1. Basic Parsing (String)
 
 ```typescript
@@ -15,7 +14,6 @@ parser.parseString('<root><child>text</child></root>');
 const doc = builder.getDocument();
 ```
 
-
 ### 2. Basic Parsing (File)
 
 ```typescript
@@ -27,7 +25,6 @@ parser.setContentHandler(builder);
 parser.parseFile('document.xml');
 const doc = builder.getDocument();
 ```
-
 
 ### 3. Creating XML from Scratch
 
@@ -48,7 +45,6 @@ root.addElement(item);
 doc.setRoot(root);
 console.log(doc.toString());
 ```
-
 
 ### 4. Writing to File
 
@@ -145,7 +141,6 @@ try {
 
 ## Common Use Cases
 
-
 ### 1. Configuration File Processing
 
 ```typescript
@@ -172,7 +167,6 @@ function updateConfig(file: string, key: string, value: string) {
 }
 ```
 
-
 ### 2. Data Transformation
 
 ```typescript
@@ -195,7 +189,6 @@ function transformXML(inputFile: string, outputFile: string) {
     XMLWriter.writeDocument(doc!, outputFile);
 }
 ```
-
 
 ### 3. XML Validation/Inspection
 
@@ -255,9 +248,68 @@ if (XMLUtils.isXmlSpace(char)) {
 const validText = XMLUtils.validXml10Chars(text);
 ```
 
+## DTD and Grammar Support
+
+### Parsing DTD and Creating Grammar
+
+```typescript
+import { DTDParser } from 'typesxml';
+
+// Parse DTD file
+const dtdParser = new DTDParser();
+const grammar = dtdParser.parseDTD('schema.dtd');
+
+// Access parsed components
+const elements = grammar.getElementDeclMap();
+const attributes = grammar.getAttributesMap();
+const entities = grammar.getEntitiesMap();
+```
+
+### Working with Content Models
+
+```typescript
+// Get content model for an element
+const bookModel = grammar.getContentModel('book');
+if (bookModel) {
+    console.log('Type:', bookModel.getType()); // 'Children', 'Mixed', 'EMPTY', 'ANY'
+    console.log('Children:', [...bookModel.getChildren()]);
+    console.log('Is mixed:', bookModel.isMixed());
+}
+
+// Parse content model from string
+import { ContentModel } from 'typesxml';
+const model = ContentModel.parse('(title, author+, (chapter | appendix)+)');
+```
+
+### Accessing DTD Declarations
+
+```typescript
+// Element declarations
+const bookElement = grammar.getElementDeclMap().get('book');
+console.log('Content spec:', bookElement?.getContentSpec());
+
+// Attribute declarations
+const bookAttrs = grammar.getElementAttributesMap('book');
+bookAttrs?.forEach((attr, name) => {
+    console.log(`${name}: ${attr.getType()} = ${attr.getDefaultValue()}`);
+});
+
+// Entity declarations
+const entities = grammar.getEntitiesMap();
+const copyright = entities.get('copyright');
+console.log('Entity value:', copyright?.getValue());
+
+// Notation declarations
+const notations = grammar.getNotationsMap();
+notations.forEach((notation, name) => {
+    console.log(`${name}: ${notation.getSystemId()}`);
+});
+```
+
 ## Best Practices
 
 1. **Always check for null/undefined**:
+
    ```typescript
    const doc = builder.getDocument();
    if (doc) {
@@ -269,6 +321,7 @@ const validText = XMLUtils.validXml10Chars(text);
    ```
 
 2. **Use try-catch for parsing**:
+
    ```typescript
    try {
        parser.parseFile('file.xml');
@@ -282,6 +335,7 @@ const validText = XMLUtils.validXml10Chars(text);
    - Use custom ContentHandler only for streaming/large files
 
 4. **Use XMLWriter for output**:
+
    ```typescript
    // Preferred
    XMLWriter.writeDocument(doc, 'output.xml');
@@ -291,6 +345,7 @@ const validText = XMLUtils.validXml10Chars(text);
    ```
 
 5. **Handle encodings explicitly**:
+
    ```typescript
    parser.parseFile('file.xml', 'utf8');
    ```

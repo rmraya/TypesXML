@@ -69,7 +69,14 @@ export class EntityDecl implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        // TODO
+        if (node instanceof EntityDecl) {
+            return this.name === node.name && 
+                   this.parameterEntity === node.parameterEntity &&
+                   this.value === node.value &&
+                   this.systemId === node.systemId &&
+                   this.publicId === node.publicId &&
+                   this.ndata === node.ndata;
+        }
         return false;
     }
 }

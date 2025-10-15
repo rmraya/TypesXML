@@ -155,19 +155,47 @@ if (!root) return; // Required check
 
 ### Current DTD Support
 
-- Element declarations (`<!ELEMENT>`)
-- Attribute list declarations (`<!ATTLIST>`)
-- Entity declarations (`<!ENTITY>`)
-- Notation declarations (`<!NOTATION>`)
-- Internal subsets
-- External DTD references
+- **Element declarations** (`<!ELEMENT>`) with full content model parsing
+- **Attribute list declarations** (`<!ATTLIST>`) with all attribute types and defaults
+- **Entity declarations** (`<!ENTITY>`) including parameter entities
+- **Notation declarations** (`<!NOTATION>`) with public/system IDs
+- **Internal subsets** and **External DTD references**
+- **Complete Grammar generation** with content model objects
+- **Content model parsing** supporting:
+  - EMPTY, ANY, Mixed, and Children content types
+  - Complex sequences, choices, and cardinality operators
+  - Element children resolution and structural validation
+
+### Advanced Grammar Features
+
+```typescript
+// Parse DTD and generate complete Grammar
+const dtdParser = new DTDParser();
+const grammar = dtdParser.parseDTD('schema.dtd');
+
+// Access content models
+const bookModel = grammar.getContentModel('book');
+console.log('Content type:', bookModel.getType());
+console.log('Child elements:', [...bookModel.getChildren()]);
+
+// Parse individual content models
+const model = ContentModel.parse('(title, author+, (chapter | appendix)+)');
+console.log('Parsed model:', model.toString());
+```
+
+### DTD Processing Capabilities
+
+- **Content Model Parsing**: Complex DTD content specifications
+- **Mixed Content Detection**: Automatic identification of #PCDATA mixed content
+- **Structural Validation**: Cross-reference checking between element declarations
+- **Entity Resolution**: Parameter entity processing and substitution
+- **Cardinality Support**: ?, +, * operators on all content particles
 
 ### DTD Limitations
 
-- No validation against DTD rules
-- Parameter entities supported but limited
-- Conditional sections supported
-- No default attribute value application
+- No runtime validation against DTD rules (parsing only)
+- Default attribute values not automatically applied during XML parsing
+- Complex parameter entity scenarios may need manual resolution
 
 ## Namespace Handling
 

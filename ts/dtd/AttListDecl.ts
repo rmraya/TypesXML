@@ -55,9 +55,19 @@ export class AttListDecl implements XMLNode {
                 }
             } else {
                 if (attType === 'NOTATION') {
-                    // TODO parse the notations in the ennumeration that follows
+                    // Parse the notations in the enumeration that follows
+                    let notations = parts[index++]; // This should be like "(notation1|notation2|notation3)"
+                    attType = 'NOTATION ' + notations; // Store the full notation enumeration as the type
+                    defaultDecl = parts[index++];
+                    if (defaultDecl === '#FIXED') {
+                        defaultValue = parts[index++];
+                    }
                 } else {
-                    defaultValue = parts[index++];
+                    // Handle other enumeration types (values in parentheses)
+                    defaultDecl = parts[index++];
+                    if (defaultDecl === '#FIXED') {
+                        defaultValue = parts[index++];
+                    }
                 }
             }
             let att: AttDecl = new AttDecl(name, attType, defaultDecl, defaultValue);
@@ -113,7 +123,7 @@ export class AttListDecl implements XMLNode {
             if (this.name !== node.getName() || this.attributes.size !== nodeAtts.size) {
                 return false;
             }
-            this.attributes.forEach((value: AttDecl, key: string) => {
+            for (let [key, value] of this.attributes) {
                 let att: AttDecl | undefined = nodeAtts.get(key);
                 if (att === undefined) {
                     return false;
@@ -121,7 +131,7 @@ export class AttListDecl implements XMLNode {
                 if (!value.equals(att)) {
                     return false;
                 }
-            });
+            }
             return true;
         }
         return false;

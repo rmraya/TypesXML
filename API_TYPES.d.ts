@@ -241,6 +241,17 @@ export declare class DTDParser {
 
 export declare class Grammar {
     constructor();
+    getContentModel(elementName: string): ContentModel | undefined;
+    getElementDeclMap(): Map<string, ElementDecl>;
+    getAttributesMap(): Map<string, Map<string, AttDecl>>;
+    getElementAttributesMap(element: string): Map<string, AttDecl> | undefined;
+    getEntitiesMap(): Map<string, EntityDecl>;
+    getNotationsMap(): Map<string, NotationDecl>;
+    getEntity(entityName: string): EntityDecl | undefined;
+    addElement(elementDecl: ElementDecl): void;
+    addEntity(entityDecl: EntityDecl): void;
+    addNotation(notation: NotationDecl): void;
+    merge(grammar: Grammar): void;
 }
 
 export declare class ElementDecl implements XMLNode {
@@ -271,9 +282,12 @@ export declare class AttDecl implements XMLNode {
 }
 
 export declare class EntityDecl implements XMLNode {
-    constructor(name: string, value: string);
+    constructor(name: string, parameterEntity: boolean, value: string, systemId: string, publicId: string, ndata: string);
     getName(): string;
     getValue(): string;
+    getSystemId(): string;
+    getPublicId(): string;
+    isParameterEntity(): boolean;
     getNodeType(): number;
     toString(): string;
     equals(node: XMLNode): boolean;
@@ -298,8 +312,28 @@ export declare class InternalSubset implements XMLNode {
 }
 
 export declare class ContentModel {
-    constructor();
+    constructor(content: Array<ContentParticle>, type: ContentModelType);
+    static parse(modelString: string): ContentModel;
+    getType(): ContentModelType;
+    getContent(): Array<ContentParticle>;
+    getChildren(): Set<string>;
+    isMixed(): boolean;
+    toString(): string;
 }
+
+export interface ContentParticle {
+    getType(): ContentParticleType;
+    addParticle(particle: ContentParticle): void;
+    setCardinality(cardinality: Cardinality): void;
+    getCardinality(): Cardinality;
+    getParticles(): Array<ContentParticle>;
+    getChildren(): Set<string>;
+    toString(): string;
+}
+
+export type ContentModelType = 'EMPTY' | 'ANY' | 'Mixed' | '#PCDATA' | 'Children';
+export type ContentParticleType = 0 | 1 | 2 | 3; // PCDATA | NAME | SEQUENCE | CHOICE
+export type Cardinality = 0 | 1 | 2 | 3; // NONE | OPTIONAL | ZEROMANY | ONEMANY
 
 // Common Usage Types
 export type ParseOptions = {

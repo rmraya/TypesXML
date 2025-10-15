@@ -15,34 +15,36 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { Grammar } from "../grammar/Grammar";
-import { Constants } from "../Constants";
-import { XMLNode } from "../XMLNode";
-import { DTDParser } from "./DTDParser";
+import { Cardinality } from "./ContentModel";
+import { ContentParticle, ContentParticleType } from "./contentParticle";
 
-export class InternalSubset implements XMLNode {
+export class DTDPCData implements ContentParticle {
 
-    declarationText: string;
-    grammar: Grammar;
-
-    constructor(declaration: string) {
-        this.declarationText = declaration;
-        let parser:DTDParser = new DTDParser();
-        this.grammar = parser.parseString(declaration.substring(1, declaration.length - 1));
+    getType(): (typeof ContentParticleType)[keyof typeof ContentParticleType] {
+        return ContentParticleType.PCDATA;
     }
 
-    getNodeType(): number {
-        return Constants.INTERNAL_SUBSET_NODE;
+    addParticle(particle: ContentParticle): void {
+        // do nothing
+    }
+
+    setCardinality(cardinality: (typeof Cardinality)[keyof typeof Cardinality]): void {
+        // do nothing
+    }
+
+    getCardinality(): (typeof Cardinality)[keyof typeof Cardinality] {
+        return Cardinality.NONE;
+    }
+
+    getParticles(): Array<ContentParticle> {
+        return new Array<ContentParticle>();
+    }
+
+    getChildren(): Set<string> {
+        return new Set<string>();
     }
 
     toString(): string {
-        return this.declarationText;
-    }
-
-    equals(node: XMLNode): boolean {
-        if (node instanceof InternalSubset) {
-            return this.declarationText === node.declarationText;
-        }
-        return false;
+        return "#PCDATA";
     }
 }

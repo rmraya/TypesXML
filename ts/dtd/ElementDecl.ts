@@ -45,7 +45,10 @@ export class ElementDecl implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        // TODO
-        throw new Error("Method not implemented.");
+        if (node instanceof ElementDecl) {
+            return this.name === node.name && 
+                   this.contentSpec === node.contentSpec;
+        }
+        return false;
     }
 }

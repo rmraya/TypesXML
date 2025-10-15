@@ -144,7 +144,7 @@ export class Grammar {
             if (XMLUtils.hasParameterEntity(contentSpec)) {
                 contentSpec = this.resolveParameterEntities(contentSpec);
             }
-            let model: ContentModel = new ContentModel(this, name, contentSpec);
+            let model: ContentModel = ContentModel.parse(contentSpec);
             this.models.set(name, model);
         });
     }

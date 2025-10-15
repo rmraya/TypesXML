@@ -15,34 +15,28 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { Grammar } from "../grammar/Grammar";
-import { Constants } from "../Constants";
-import { XMLNode } from "../XMLNode";
-import { DTDParser } from "./DTDParser";
+import { Cardinality } from "./ContentModel";
 
-export class InternalSubset implements XMLNode {
+export const ContentParticleType = {
+    PCDATA: 0,
+    NAME: 1,
+    SEQUENCE: 2,
+    CHOICE: 3
+} as const;
 
-    declarationText: string;
-    grammar: Grammar;
+export interface ContentParticle {
 
-    constructor(declaration: string) {
-        this.declarationText = declaration;
-        let parser:DTDParser = new DTDParser();
-        this.grammar = parser.parseString(declaration.substring(1, declaration.length - 1));
-    }
+    getType(): typeof ContentParticleType[keyof typeof ContentParticleType];
 
-    getNodeType(): number {
-        return Constants.INTERNAL_SUBSET_NODE;
-    }
+    addParticle(particle: ContentParticle): void;
 
-    toString(): string {
-        return this.declarationText;
-    }
+    setCardinality(cardinality: typeof Cardinality[keyof typeof Cardinality]): void;
 
-    equals(node: XMLNode): boolean {
-        if (node instanceof InternalSubset) {
-            return this.declarationText === node.declarationText;
-        }
-        return false;
-    }
+    getCardinality(): typeof Cardinality[keyof typeof Cardinality];
+
+    getParticles(): Array<ContentParticle>;
+
+    getChildren(): Set<string>;
+
+    toString(): string;
 }

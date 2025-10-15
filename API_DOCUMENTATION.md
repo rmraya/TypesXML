@@ -440,13 +440,15 @@ reader.closeFile();
 
 ## DTD Support
 
-The library includes comprehensive DTD (Document Type Definition) support:
+The library includes comprehensive DTD (Document Type Definition) support with complete Grammar generation:
 
-### DTD Classes
+### DTD Parser and Grammar
 
 ```typescript
 import { 
     DTDParser, 
+    Grammar,
+    ContentModel,
     ElementDecl, 
     AttListDecl, 
     EntityDecl, 
@@ -454,9 +456,164 @@ import {
     InternalSubset 
 } from 'typesxml';
 
-// Parse DTD
+// Parse DTD and generate Grammar
 const dtdParser = new DTDParser();
 const grammar = dtdParser.parseDTD('schema.dtd');
+
+// Access parsed components
+const elementDeclarations = grammar.getElementDeclMap();
+const attributeDeclarations = grammar.getAttributesMap();
+const entities = grammar.getEntitiesMap();
+const notations = grammar.getNotationsMap();
+```
+
+### Grammar Class
+
+The `Grammar` class represents a complete parsed DTD with all its components:
+
+#### Grammar Methods
+
+| Method | Description | Returns |
+|--------|-------------|---------|
+| `getContentModel(elementName)` | Get content model for an element | `ContentModel \| undefined` |
+| `getElementDeclMap()` | Get all element declarations | `Map<string, ElementDecl>` |
+| `getAttributesMap()` | Get all attribute declarations | `Map<string, Map<string, AttDecl>>` |
+| `getElementAttributesMap(element)` | Get attributes for specific element | `Map<string, AttDecl> \| undefined` |
+| `getEntitiesMap()` | Get all entity declarations | `Map<string, EntityDecl>` |
+| `getNotationsMap()` | Get all notation declarations | `Map<string, NotationDecl>` |
+| `getEntity(name)` | Get specific entity by name | `EntityDecl \| undefined` |
+
+#### Grammar Usage Example
+
+```typescript
+// Parse DTD
+const grammar = dtdParser.parseDTD('bookstore.dtd');
+
+// Check element structure
+const bookModel = grammar.getContentModel('book');
+if (bookModel) {
+    console.log('Book content type:', bookModel.getType());
+    console.log('Book children:', [...bookModel.getChildren()]);
+}
+
+// Check attributes for an element
+const bookAttributes = grammar.getElementAttributesMap('book');
+bookAttributes?.forEach((attDecl, attName) => {
+    console.log(`${attName}: ${attDecl.getType()} = ${attDecl.getDefaultValue()}`);
+});
+
+// Access entities
+const copyrightEntity = grammar.getEntity('copyright');
+if (copyrightEntity) {
+    console.log('Copyright text:', copyrightEntity.getValue());
+}
+```
+
+### ContentModel Class
+
+The `ContentModel` class represents the content structure of XML elements:
+
+#### Content Model Types
+
+- **EMPTY**: Element cannot contain any content
+- **ANY**: Element can contain any content
+- **Mixed**: Element contains #PCDATA mixed with child elements
+- **Children**: Element contains only child elements (sequences/choices)
+
+#### ContentModel Instance Methods
+
+| Method | Description | Returns |
+|--------|-------------|---------|
+| `getType()` | Get content model type | `'EMPTY' \| 'ANY' \| 'Mixed' \| 'Children'` |
+| `getContent()` | Get content particles array | `Array<ContentParticle>` |
+| `getChildren()` | Get set of child element names | `Set<string>` |
+| `isMixed()` | Check if content is mixed | `boolean` |
+| `toString()` | Get string representation | `string` |
+
+#### ContentModel Static Methods
+
+| Method | Description | Parameters | Returns |
+|--------|-------------|------------|---------|
+| `ContentModel.parse(modelString)` | Parse content model from string | `modelString: string` | `ContentModel` |
+
+#### ContentModel Usage Example
+
+```typescript
+// Parse content model from DTD declaration
+const bookModel = ContentModel.parse('(title, author+, (chapter | appendix)+)');
+
+console.log('Content type:', bookModel.getType()); // 'Children'
+console.log('String form:', bookModel.toString()); // '(title,author+,(chapter|appendix)+)'
+console.log('Child elements:', [...bookModel.getChildren()]); // ['title', 'author', 'chapter', 'appendix']
+
+// Check for mixed content
+const paraModel = ContentModel.parse('(#PCDATA | em | strong)*');
+console.log('Is mixed:', paraModel.isMixed()); // true
+console.log('Inline elements:', [...paraModel.getChildren()]); // ['em', 'strong']
+```
+
+### Content Particles
+
+Content models are composed of particles representing different content types:
+
+#### ContentParticle Types
+
+- **DTDName**: Represents a child element name
+- **DTDChoice**: Represents alternatives (A | B | C)
+- **DTDSecuence**: Represents sequences (A, B, C)
+- **DTDPCData**: Represents #PCDATA content
+
+#### Cardinality Support
+
+All particles support XML cardinality operators:
+
+- **NONE** (default): Exactly one occurrence
+- **OPTIONAL** (?): Zero or one occurrence
+- **ZEROMANY** (*): Zero or more occurrences
+- **ONEMANY** (+): One or more occurrences
+
+### DTD Declarations
+
+#### ElementDecl
+
+```typescript
+const elementDecl = grammar.getElementDeclMap().get('book');
+console.log('Element name:', elementDecl.getName());
+console.log('Content spec:', elementDecl.getContentSpec());
+```
+
+#### AttDecl (Attribute Declaration)
+
+```typescript
+const bookAttributes = grammar.getElementAttributesMap('book');
+const idAttr = bookAttributes?.get('id');
+if (idAttr) {
+    console.log('Attribute name:', idAttr.getName());
+    console.log('Attribute type:', idAttr.getType()); // 'ID', 'CDATA', etc.
+    console.log('Default value:', idAttr.getDefaultValue());
+    console.log('Default declaration:', idAttr.getDefaultDecl()); // '#REQUIRED', '#IMPLIED', etc.
+}
+```
+
+#### EntityDecl
+
+```typescript
+const entities = grammar.getEntitiesMap();
+entities.forEach((entity, name) => {
+    console.log(`Entity ${name}:`, entity.getValue());
+    console.log('Is parameter entity:', entity.isParameterEntity());
+});
+```
+
+#### NotationDecl
+
+```typescript
+const notations = grammar.getNotationsMap();
+notations.forEach((notation, name) => {
+    console.log(`Notation ${name}:`);
+    console.log('Public ID:', notation.getPublicId());
+    console.log('System ID:', notation.getSystemId());
+});
 ```
 
 ### Catalog Support

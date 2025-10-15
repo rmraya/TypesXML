@@ -34,18 +34,41 @@ export class NotationDecl implements XMLNode {
         return this.name;
     }
 
+    getPublicId(): string {
+        return this.publicId;
+    }
+
+    getSystemId(): string {
+        return this.systemId;
+    }
+
     getNodeType(): number {
         return Constants.NOTATION_DECL_NODE;
     }
 
     toString(): string {
-        // TODO
-        throw new Error("Method not implemented.");
+        let result = '<!NOTATION ' + this.name;
+        if (this.publicId && this.publicId.length > 0) {
+            result += ' PUBLIC "' + this.publicId + '"';
+        }
+        if (this.systemId && this.systemId.length > 0) {
+            if (this.publicId && this.publicId.length > 0) {
+                result += ' "' + this.systemId + '"';
+            } else {
+                result += ' SYSTEM "' + this.systemId + '"';
+            }
+        }
+        result += '>';
+        return result;
     }
 
     equals(node: XMLNode): boolean {
-        // TODO
-        throw new Error("Method not implemented.");
+        if (node instanceof NotationDecl) {
+            return this.name === node.name && 
+                   this.publicId === node.publicId && 
+                   this.systemId === node.systemId;
+        }
+        return false;
     }
 
 }

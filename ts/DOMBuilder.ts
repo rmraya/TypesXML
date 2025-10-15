@@ -40,6 +40,7 @@ export class DOMBuilder implements ContentHandler {
     dtdParser: DTDParser | undefined;
     grammarUrl: string | undefined;
     grammar: Grammar | undefined;
+    validating: boolean = false;
 
     initialize(): void {
         this.document = new XMLDocument();
@@ -49,6 +50,14 @@ export class DOMBuilder implements ContentHandler {
 
     setCatalog(catalog: Catalog): void {
         this.catalog = catalog;
+    }
+
+    setValidating(validating: boolean): void {
+        this.validating = validating;
+    }
+
+    isValidating(): boolean {
+        return this.validating;
     }
 
     setDTDParser(dtdParser: DTDParser): void {
@@ -221,7 +230,22 @@ export class DOMBuilder implements ContentHandler {
     }
 
     skippedEntity(name: string): void {
-        // TODO
-        throw new Error("Method not implemented.");
+        if (this.validating) {
+            // XML 1.0 spec section 5.1: In validating mode, undeclared entity references are fatal errors
+            throw new Error(`Undeclared entity reference: '${name}'. Validating parsers must report this as a fatal error.`);
+        } else {
+            // XML 1.0 spec section 4.4.3: In non-validating mode, skip the entity and optionally report it
+            // We preserve the original entity reference in the DOM to maintain document fidelity
+            let entityRefText: string = '&' + name + ';';
+            let textNode: TextNode = new TextNode(entityRefText);
+            
+            if (this.stack.length > 0) {
+                // Add to current element
+                this.stack[this.stack.length - 1].addTextNode(textNode);
+            } else {
+                // Add to document root level
+                this.document?.addTextNode(textNode);
+            }
+        }
     }
 }

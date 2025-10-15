@@ -32,6 +32,7 @@ export class SAXParser {
     characterRun: string;
     rootParsed: boolean;
     xmlVersion: string;
+    validating: boolean;
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
     static path = require('path');
@@ -42,10 +43,23 @@ export class SAXParser {
         this.pointer = 0;
         this.rootParsed = false;
         this.xmlVersion = '1.0';
+        this.validating = false;
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
         this.contentHandler = contentHandler;
+        this.contentHandler.setValidating(this.validating);
+    }
+
+    setValidating(validating: boolean): void {
+        this.validating = validating;
+        if (this.contentHandler) {
+            this.contentHandler.setValidating(validating);
+        }
+    }
+
+    isValidating(): boolean {
+        return this.validating;
     }
 
     parseFile(path: string, encoding?: BufferEncoding): void {
