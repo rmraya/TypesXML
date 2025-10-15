@@ -70,9 +70,11 @@ export class Grammar {
         let existingAttributes = this.attributesMap.get(element);
         if (existingAttributes) {
             // Merge new attributes with existing ones
-            // New attributes take precedence if there are conflicts
+            // First declaration takes precedence (XML spec) - don't overwrite existing
             attributes.forEach((value, key) => {
-                existingAttributes!.set(key, value);
+                if (!existingAttributes!.has(key)) {
+                    existingAttributes!.set(key, value);
+                }
             });
         } else {
             // First time adding attributes for this element

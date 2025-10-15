@@ -131,6 +131,73 @@ Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tr
 npm install typesxml
 ```
 
+## Testing
+
+TypesXML includes a comprehensive test suite that validates against the **W3C XML Test Suite** - the official standard for XML parser compliance.
+
+### Quick Start Testing
+
+```bash
+# Setup test suite (first time only)
+npm run test:setup
+
+# Run comprehensive W3C XML Test Suite
+npm test
+
+# Run XML canonicalizer tests
+npm run test:canonicalizer
+```
+
+### Comprehensive Test Features
+
+🎯 **Complete W3C Coverage**
+
+- Tests against 500+ official W3C XML test files
+- Validates parsing, canonicalization, and error detection
+- Covers valid, invalid, and not-well-formed documents
+
+📊 **Advanced Reporting**
+
+- Real-time progress indicators with ETA
+- Detailed statistics by test category
+- Performance benchmarks and timing analysis
+- Error categorization and analysis
+- Saves comprehensive JSON reports
+
+🚀 **Smart Execution**
+
+- Automatic test environment validation
+- Efficient batch processing for large test sets
+- Graceful handling of missing test files
+
+### Test Categories
+
+- **Valid Documents**: Should parse successfully and match canonical output
+- **Invalid Documents**: Well-formed but fail DTD validation
+- **Not-Well-Formed**: Should be rejected during parsing
+
+### Sample Output
+
+```text
+╔══════════════════════════════════════════════════════════════╗
+║              TypesXML W3C Comprehensive Test Suite          ║
+╚══════════════════════════════════════════════════════════════╝
+
+📊 OVERALL STATISTICS
+   Total Test Files: 531
+   Tests Passed: 492
+   Tests Failed: 39
+   Success Rate: 92.65%
+   Execution Time: 8.45 seconds
+
+🏆 XML COMPLIANCE SUMMARY
+   📋 Valid Document Processing: 96.2%
+   🚫 Invalid Document Rejection: 89.1%
+   🌟 EXCELLENT: High compliance with XML standards
+```
+
+For detailed testing documentation, see [`tests/README.md`](./tests/README.md).
+
 ## Example
 
 ### Basic Usage

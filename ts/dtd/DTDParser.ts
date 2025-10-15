@@ -300,6 +300,12 @@ export class DTDParser {
             }
             name += char;
         }
+        
+        // Validate entity name
+        if (!XMLUtils.isValidXMLName(name)) {
+            throw new Error(`Invalid entity name in DTD: "${name}" - XML names must be valid`);
+        }
+        
         if (XMLUtils.hasParameterEntity(name)) {
             name = this.resolveEntities(name);
         }
@@ -565,6 +571,12 @@ export class DTDParser {
             }
             name += char;
         }
+        
+        // Validate notation name
+        if (!XMLUtils.isValidXMLName(name)) {
+            throw new Error(`Invalid notation name in DTD: "${name}" - XML names must be valid`);
+        }
+        
         // skip spaces before external id
         for (; i < declaration.length; i++) {
             char = declaration.charAt(i);
@@ -674,6 +686,11 @@ export class DTDParser {
             attributesText += char;
         }
         
+        // Validate element name in ATTLIST declaration
+        if (!XMLUtils.isValidXMLName(name)) {
+            throw new Error(`Invalid element name in ATTLIST declaration: "${name}"`);
+        }
+        
         // Expand parameter entities in attributes text before parsing
         attributesText = this.expandParameterEntities(attributesText);
         
@@ -700,6 +717,12 @@ export class DTDParser {
             }
             name += char;
         }
+        
+        // Validate element name
+        if (!XMLUtils.isValidXMLName(name)) {
+            throw new Error(`Invalid element name in DTD: "${name}" - XML names must be valid`);
+        }
+        
         // skip spaces before content spec
         for (; i < declaration.length; i++) {
             char = declaration.charAt(i);

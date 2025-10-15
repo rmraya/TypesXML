@@ -15,7 +15,9 @@
     "Default Attributes"
   ],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npm run build && node tests/comprehensive-test-suite.js",
+    "test:setup": "node tests/setup-test-suite.js"
   },
   "author": {
     "name": "Rodolfo M. Raya",

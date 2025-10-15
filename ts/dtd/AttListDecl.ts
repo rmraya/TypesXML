@@ -17,6 +17,7 @@
 
 import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
+import { XMLUtils } from "../XMLUtils";
 import { AttDecl } from "./AttDecl";
 
 export class AttListDecl implements XMLNode {
@@ -45,6 +46,12 @@ export class AttListDecl implements XMLNode {
         let index: number = 0;
         while (index < parts.length) {
             let name: string = parts[index++];
+            
+            // Validate attribute name
+            if (!XMLUtils.isValidXMLName(name)) {
+                throw new Error(`Invalid attribute name in ATTLIST declaration: "${name}"`);
+            }
+            
             let attType: string = parts[index++];
             let defaultDecl: string = '';
             let defaultValue: string = '';
