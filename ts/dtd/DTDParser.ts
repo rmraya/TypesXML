@@ -18,6 +18,7 @@
 import { Stats, closeSync, openSync, readSync, statSync } from "fs";
 import { dirname, sep } from "node:path";
 import { Catalog } from "../Catalog";
+import { FileReader } from "../FileReader";
 import { XMLUtils } from "../XMLUtils";
 import { Grammar } from "../grammar/Grammar";
 import { AttListDecl } from "./AttListDecl";
@@ -813,22 +814,20 @@ export class DTDParser {
         return basePath + sep + uri;
     }
 
-    loadExternalEntity(publicId: string, systemId: string): string {
+    loadExternalEntity(publicId: string, systemId: string, isReferenced: boolean = false): string {
         try {
             let location = this.resolveEntity(publicId, systemId);
             
-            // Read the external entity file
-            let stats: Stats = statSync(location, { bigint: false, throwIfNoEntry: true });
-            let blockSize: number = stats.blksize;
-            let fileHandle = openSync(location, 'r');
-            let buffer = Buffer.alloc(blockSize);
+            // Use FileReader to properly handle different encodings (UTF-8, UTF-16, etc.)
+            let reader = new FileReader(location);
             let content = '';
-            let bytesRead: number = readSync(fileHandle, buffer, 0, blockSize, 0);
-            while (bytesRead > 0) {
-                content += buffer.toString('utf8', 0, bytesRead);
-                bytesRead = readSync(fileHandle, buffer, 0, blockSize, content.length);
+            while (reader.dataAvailable()) {
+                content += reader.read();
             }
-            closeSync(fileHandle);
+            reader.closeFile();
+            
+            // Validate that content is valid XML text (not binary)
+            this.validateTextContent(content, location);
             
             // Don't trim - preserve original content including whitespace/newlines
             return content;
@@ -837,8 +836,55 @@ export class DTDParser {
             if (this.baseDirectory === '' && this.currentFile === '') {
                 return '';
             }
-            console.warn(`Warning: Could not load external entity "${systemId}": ${error}`);
-            return '';
+            
+            // XML specification behavior depends on context:
+            // - Referenced external entities (used in document) must be loadable (fatal error)
+            // - Unreferenced external entities (DTD declarations only) can be missing (warning)
+            if (isReferenced) {
+                throw new Error(`Could not load external entity "${publicId || systemId}": ${(error as Error).message}`);
+            } else {
+                // DTD processing - be more lenient for unreferenced entities
+                console.warn(`Warning: Could not load external entity "${publicId || systemId}": ${(error as Error).message}`);
+                return '';
+            }
+        }
+    }
+
+    private validateTextContent(content: string, location: string): void {
+        // Check for null bytes and other binary indicators
+        if (content.includes('\0')) {
+            throw new Error(`External entity "${location}" contains binary data (null bytes) and cannot be used as XML text`);
+        }
+        
+        // Skip BOM if present (UTF-8: \uFEFF or UTF-16: \uFEFF)
+        let textContent = content;
+        if (textContent.charCodeAt(0) === 0xFEFF) {
+            textContent = textContent.substring(1);
+        }
+        
+        // Check for XML declarations in external entities (not allowed)
+        const xmlDeclPattern = /<\?xml\s+/gi;
+        const xmlDeclMatches = textContent.match(xmlDeclPattern);
+        if (xmlDeclMatches && xmlDeclMatches.length > 0) {
+            throw new Error(`External entity "${location}" contains XML declaration(s), which is not allowed in external entities`);
+        }
+        
+        // Check for excessive non-printable characters that might indicate binary content
+        let nonPrintableCount = 0;
+        const checkLength = Math.min(textContent.length, 1000);
+        for (let i = 0; i < checkLength; i++) {
+            const code = textContent.charCodeAt(i);
+            // Allow common XML characters: tab(9), newline(10), carriage return(13), and printable ASCII
+            // Also allow Unicode characters above 127
+            if (code < 9 || (code > 13 && code < 32) || code === 127) {
+                nonPrintableCount++;
+            }
+        }
+        
+        // If more than 20% of characters are non-printable control characters, likely binary
+        // (increased threshold and only checked control chars, not Unicode)
+        if (checkLength > 0 && (nonPrintableCount / checkLength) > 0.2) {
+            throw new Error(`External entity "${location}" appears to contain binary data and cannot be used as XML text`);
         }
     }
 

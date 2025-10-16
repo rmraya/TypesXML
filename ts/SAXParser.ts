@@ -328,13 +328,16 @@ export class SAXParser {
                 let entityValue = entity.getValue();
                 
                 // Check if this is an external entity that hasn't been loaded yet
-                if (entity.getSystemId() && !entity.isExternalContentLoaded()) {
-                    // Load external entity content
+                if ((entity.getSystemId() || entity.getPublicId()) && !entity.isExternalContentLoaded()) {
+                    // Load external entity content - this is a referenced entity (used in document)
                     try {
-                        entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId());
+                        entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId(), true);
                         // Store the loaded content back in the entity for future use
-                        entity.setValue(entityValue);
+                        if (entityValue !== null && entityValue !== undefined) {
+                            entity.setValue(entityValue);
+                        }
                     } catch (error) {
+                        // Referenced external entity loading failures are fatal errors per XML spec
                         throw new Error(`Failed to load external entity "${name}": ${error}`);
                     }
                 }
@@ -751,7 +754,7 @@ export class SAXParser {
             try {
                 const dtdParser = new DTDParser(this.grammar, this.currentFile ? dirname(this.currentFile) : '');
                 dtdParser.setCatalog(this.catalog);
-                const externalDtdContent = dtdParser.loadExternalEntity(publicId, systemId);
+                const externalDtdContent = dtdParser.loadExternalEntity(publicId, systemId, false);
                 // Parse the external DTD content to extract entity declarations
                 dtdParser.parseString(externalDtdContent);
                 if (!this.silent) {
@@ -1188,18 +1191,19 @@ export class SAXParser {
                 if (entity) {
                     let entityValue = entity.getValue();
                     
-                    // If entity has no value but has systemId, try to load external entity
+                    // If entity has no value but has external identifiers, try to load external entity
                     if ((entityValue === null || entityValue === undefined || entityValue === '') && 
-                        entity.getSystemId() !== '') {
+                        (entity.getSystemId() !== '' || entity.getPublicId() !== '')) {
                         try {
-                            // Load external entity content
-                            entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId());
+                            // Load external entity content - this is a referenced entity
+                            entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId(), true);
                             // Update the entity with the loaded content for future use
-                            if (entityValue !== '') {
-                                // Note: We can't modify the EntityDecl directly, but we can track it
-                                // For now, we'll use the loaded content directly
+                            if (entityValue !== null && entityValue !== undefined && entityValue !== '') {
+                                // Note: We can't modify the EntityDecl directly here, but we can use the loaded content
+                                // The entity expansion will use this loaded value
                             }
                         } catch (error) {
+                            // XML specification: external entity loading failures are fatal errors
                             throw new Error(`Failed to load external entity &${entityName};: ${error}`);
                         }
                     }
@@ -1247,14 +1251,14 @@ export class SAXParser {
         return result;
     }
 
-    private loadExternalEntityContent(publicId: string, systemId: string): string {
+    private loadExternalEntityContent(publicId: string, systemId: string, isReferenced: boolean = false): string {
         try {
             // Use DTDParser's entity loading functionality
             const dtdParser = new DTDParser(undefined, this.currentFile ? dirname(this.currentFile) : '');
             if (this.catalog) {
                 dtdParser.setCatalog(this.catalog);
             }
-            const result = dtdParser.loadExternalEntity(publicId, systemId);
+            const result = dtdParser.loadExternalEntity(publicId, systemId, isReferenced);
             return result;
         } catch (error) {
             throw new Error(`Could not load external entity "${systemId}": ${error}`);
