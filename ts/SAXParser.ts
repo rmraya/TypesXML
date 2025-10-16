@@ -17,6 +17,8 @@
 
 import { unlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { dirname, join } from "node:path";
+import { Catalog } from "./Catalog";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { XMLAttribute } from "./XMLAttribute";
@@ -40,9 +42,10 @@ export class SAXParser {
     inCDATA: boolean;
     silent: boolean;
     grammar: Grammar;
+    currentFile: string = ''; 
+    catalog: Catalog | undefined; 
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
-    static path = require('path');
 
     constructor() {
         this.characterRun = '';
@@ -76,6 +79,10 @@ export class SAXParser {
         this.silent = silent;
     }
 
+    setCatalog(catalog: Catalog): void {
+        this.catalog = catalog;
+    }
+
     isSilent(): boolean {
         return this.silent;
     }
@@ -84,6 +91,7 @@ export class SAXParser {
         if (!this.contentHandler) {
             throw new Error('ContentHandler not set');
         }
+        this.currentFile = path; // Store current file path for entity resolution
         if (!encoding) {
             encoding = FileReader.detectEncoding(path);
         }
@@ -106,7 +114,7 @@ export class SAXParser {
             name += letter;
         }
         name = name + '.xml';
-        let tempFile: string = SAXParser.path.join(tmpdir(), name);
+        let tempFile: string = join(tmpdir(), name);
         writeFileSync(tempFile, data, { encoding: 'utf8' });
         this.parseFile(tempFile, 'utf8');
         unlinkSync(tempFile);
@@ -317,8 +325,20 @@ export class SAXParser {
             // Look up entity in DTD
             const entity = this.grammar.getEntity(name);
             if (entity) {
-                // Expand the entity
                 let entityValue = entity.getValue();
+                
+                // Check if this is an external entity that hasn't been loaded yet
+                if (entity.getSystemId() && !entity.isExternalContentLoaded()) {
+                    // Load external entity content
+                    try {
+                        entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId());
+                        // Store the loaded content back in the entity for future use
+                        entity.setValue(entityValue);
+                    } catch (error) {
+                        throw new Error(`Failed to load external entity "${name}": ${error}`);
+                    }
+                }
+                
                 if (entityValue !== null && entityValue !== undefined) {
                     // Entity has a defined value (could be empty string, which is valid)
                     if (entityValue.length > 0) {
@@ -417,17 +437,20 @@ export class SAXParser {
         this.pointer += 2; // skip '</'
         let name: string = '';
         
-        // Read tag name until '>'
-        while (!this.lookingAt('>')) {
-            let char = this.buffer.charAt(this.pointer);
-            
-            // Well-formedness check: no whitespace allowed between name and '>' in end tags
-            if (XMLUtils.isXmlSpace(char)) {
-                throw new Error(`Well-formedness error: whitespace is not allowed between element name and '>' in end tag "</${name}"`);
-            }
-            
-            name += char;
+        // Read tag name until whitespace or '>'
+        while (!this.lookingAt('>') && !XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer))) {
+            name += this.buffer.charAt(this.pointer);
             this.pointer++;
+        }
+        
+        // Skip optional whitespace before '>'
+        while (XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer))) {
+            this.pointer++;
+        }
+        
+        // Expect '>'
+        if (!this.lookingAt('>')) {
+            throw new Error(`Well-formedness error: expected '>' in end tag "</${name}"`);
         }
 
         // Well-formedness check: mismatched element tags
@@ -449,24 +472,27 @@ export class SAXParser {
 
     cleanCharacterRun(): void {
         if (this.characterRun !== '') {
+            // Expand entities in character data before processing
+            let expandedContent = this.expandEntities(this.characterRun);
+            
             if (this.rootParsed) {
                 if (this.elementStack === 0) {
                     // document ended
                     // Normalize line endings per XML 1.0 spec section 2.11
-                    const normalizedContent = XMLUtils.normalizeLines(this.characterRun);
+                    const normalizedContent = XMLUtils.normalizeLines(expandedContent);
                     this.contentHandler!.ignorableWhitespace(normalizedContent);
                 } else {
                     // in an element - check xml:space
                     const preserveWhitespace = this.isXmlSpacePreserve();
-                    if (preserveWhitespace || !this.isWhitespaceOnly(this.characterRun)) {
+                    if (preserveWhitespace || !this.isWhitespaceOnly(expandedContent)) {
                         // Preserve whitespace or contains non-whitespace - treat as significant
                         // Normalize line endings per XML 1.0 spec section 2.11
-                        const normalizedContent = XMLUtils.normalizeLines(this.characterRun);
+                        const normalizedContent = XMLUtils.normalizeLines(expandedContent);
                         this.contentHandler!.characters(normalizedContent);
                     } else {
                         // Default mode and only whitespace - treat as ignorable
                         // Normalize line endings per XML 1.0 spec section 2.11
-                        const normalizedContent = XMLUtils.normalizeLines(this.characterRun);
+                        const normalizedContent = XMLUtils.normalizeLines(expandedContent);
                         this.contentHandler!.ignorableWhitespace(normalizedContent);
                     }
                 }
@@ -581,6 +607,9 @@ export class SAXParser {
         }
         // set data
         data = instructionText.substring(i);
+
+        // Normalize line endings per XML 1.0 spec section 2.11
+        data = XMLUtils.normalizeLines(data);
 
         // Check for valid PI target
         if (target.length === 0) {
@@ -704,7 +733,10 @@ export class SAXParser {
             this.contentHandler!.internalSubset(internalSubset);
             // Parse the internal subset to extract entity declarations
             try {
-                const dtdParser = new DTDParser(this.grammar);
+                const dtdParser = new DTDParser(this.grammar, this.currentFile ? dirname(this.currentFile) : '');
+                if (this.catalog) {
+                    dtdParser.setCatalog(this.catalog);
+                }
                 dtdParser.parseString(internalSubset);
             } catch (error) {
                 if (!this.silent) {
@@ -713,6 +745,24 @@ export class SAXParser {
             }
         }
         this.contentHandler!.endDTD();
+        
+        // Load external DTD if available and catalog is set
+        if ((publicId || systemId) && this.catalog) {
+            try {
+                const dtdParser = new DTDParser(this.grammar, this.currentFile ? dirname(this.currentFile) : '');
+                dtdParser.setCatalog(this.catalog);
+                const externalDtdContent = dtdParser.loadExternalEntity(publicId, systemId);
+                // Parse the external DTD content to extract entity declarations
+                dtdParser.parseString(externalDtdContent);
+                if (!this.silent) {
+                    console.log(`✓ External DTD loaded and parsed: ${publicId || systemId}`);
+                }
+            } catch (error) {
+                if (!this.silent) {
+                    console.warn(`Failed to load external DTD '${systemId}': ${(error as Error).message}`);
+                }
+            }
+        }
     }
 
     parsePublicDeclaration(): string[] {
@@ -916,12 +966,7 @@ export class SAXParser {
             let value = pair.substring(valueStart, valueEnd);
 
             // Expand entity references in attribute values
-            value = this.expandAllEntityReferences(value);
-
-            // Normalize attribute value whitespace (XML spec section 3.3.3)
-            // Replace line endings (\r\n, \r, \n) and tabs with spaces
-            value = value.replace(/\r\n/g, ' ')    // CRLF first (to avoid double replacement)
-                .replace(/[\t\n\r]/g, ' '); // Then individual tab, LF, CR
+            value = this.expandEntities(value);
 
             // Well-formedness check: detect duplicate attributes
             if (map.has(name)) {
@@ -962,13 +1007,16 @@ export class SAXParser {
     }
 
     normalizeAttributeByType(value: string, type: string): string {
-        // Basic whitespace normalization (already done in parseAttributes for all types)
-        // Additional normalization for non-CDATA types
-        if (type !== 'CDATA') {
-            // For non-CDATA attributes: collapse consecutive whitespace and trim
-            return value.replace(/\s+/g, ' ').trim();
+        if (type === 'CDATA') {
+            // For CDATA attributes: only normalize line endings to spaces, preserve tabs
+            return value.replace(/\r\n/g, ' ')    // CRLF first (to avoid double replacement)
+                .replace(/[\n\r]/g, ' ');         // Then individual LF, CR (but NOT tabs)
+        } else {
+            // For non-CDATA attributes: normalize all whitespace and collapse
+            const normalizedValue = value.replace(/\r\n/g, ' ')    // CRLF first
+                .replace(/[\t\n\r]/g, ' ');                        // Then individual tab, LF, CR
+            return normalizedValue.replace(/\s+/g, ' ').trim();    // Collapse and trim
         }
-        return value;
     }
 
     startCDATA() {
@@ -989,7 +1037,31 @@ export class SAXParser {
         this.contentHandler!.endCDATA();
     }
 
-    expandCharacterReferences(text: string): string {
+    expandEntities(text: string): string {
+        if (!text || text.indexOf('&') === -1) {
+            return text;
+        }
+
+        let result = text;
+
+        // First expand custom entities from DTD grammar
+        result = this.expandCustomEntities(result);
+
+        // Then expand character references
+        result = this.expandCharacterReferences(result);
+
+        // Finally expand predefined entities in the correct order
+        // Important: &amp; must be expanded LAST to avoid interfering with other entities
+        result = result.replace(/&quot;/g, '"');
+        result = result.replace(/&apos;/g, "'");
+        result = result.replace(/&lt;/g, '<');
+        result = result.replace(/&gt;/g, '>');
+        result = result.replace(/&amp;/g, '&');  // This must be last!
+
+        return result;
+    }
+
+    private expandCharacterReferences(text: string): string {
         if (!text || text.indexOf('&#') === -1) {
             return text;
         }
@@ -1010,6 +1082,7 @@ export class SAXParser {
 
                 let refText = text.substring(i + 2, endPos); // Skip &#
                 let char = '';
+                let originalRef = text.substring(i, endPos + 1); // Full reference like &#9;
 
                 if (refText.startsWith('x') || refText.startsWith('X')) {
                     // Hexadecimal character reference
@@ -1024,6 +1097,8 @@ export class SAXParser {
                             throw new Error(`Invalid character reference: &#x${hexPart}; (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML ${this.xmlVersion}`);
                         }
                         char = String.fromCodePoint(code);
+                        // Track the mapping: expanded character -> original reference
+                        this.grammar.addEntityReferenceUsage(originalRef, char);
                     } else {
                         // Invalid hex - include as is
                         char = text.substring(i, endPos + 1);
@@ -1040,6 +1115,8 @@ export class SAXParser {
                             throw new Error(`Invalid character reference: &#${code}; (U+${code.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML ${this.xmlVersion}`);
                         }
                         char = String.fromCodePoint(code);
+                        // Track the mapping: expanded character -> original reference
+                        this.grammar.addEntityReferenceUsage(originalRef, char);
                     } else {
                         // Invalid decimal - include as is
                         char = text.substring(i, endPos + 1);
@@ -1070,7 +1147,7 @@ export class SAXParser {
         return result;
     }
 
-    expandCustomEntities(text: string, visitedEntities: Set<string> = new Set()): string {
+    private expandCustomEntities(text: string, visitedEntities: Set<string> = new Set()): string {
         if (!text || text.indexOf('&') === -1) {
             return text;
         }
@@ -1110,7 +1187,24 @@ export class SAXParser {
                 const entity = this.grammar.getEntity(entityName);
                 if (entity) {
                     let entityValue = entity.getValue();
-                    if (entityValue !== null && entityValue !== undefined) {
+                    
+                    // If entity has no value but has systemId, try to load external entity
+                    if ((entityValue === null || entityValue === undefined || entityValue === '') && 
+                        entity.getSystemId() !== '') {
+                        try {
+                            // Load external entity content
+                            entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId());
+                            // Update the entity with the loaded content for future use
+                            if (entityValue !== '') {
+                                // Note: We can't modify the EntityDecl directly, but we can track it
+                                // For now, we'll use the loaded content directly
+                            }
+                        } catch (error) {
+                            throw new Error(`Failed to load external entity &${entityName};: ${error}`);
+                        }
+                    }
+                    
+                    if (entityValue !== null && entityValue !== undefined && entityValue !== '') {
                         // Mark this entity as visited for recursion detection
                         visitedEntities.add(entityName);
                         
@@ -1153,28 +1247,18 @@ export class SAXParser {
         return result;
     }
 
-    expandAllEntityReferences(text: string): string {
-        if (!text || text.indexOf('&') === -1) {
-            return text;
+    private loadExternalEntityContent(publicId: string, systemId: string): string {
+        try {
+            // Use DTDParser's entity loading functionality
+            const dtdParser = new DTDParser(undefined, this.currentFile ? dirname(this.currentFile) : '');
+            if (this.catalog) {
+                dtdParser.setCatalog(this.catalog);
+            }
+            const result = dtdParser.loadExternalEntity(publicId, systemId);
+            return result;
+        } catch (error) {
+            throw new Error(`Could not load external entity "${systemId}": ${error}`);
         }
-
-        let result = text;
-
-        // First expand custom entities from DTD grammar
-        result = this.expandCustomEntities(result);
-
-        // Then expand character references
-        result = this.expandCharacterReferences(result);
-
-        // Finally expand predefined entities in the correct order
-        // Important: &amp; must be expanded LAST to avoid interfering with other entities
-        result = result.replace(/&quot;/g, '"');
-        result = result.replace(/&apos;/g, "'");
-        result = result.replace(/&lt;/g, '<');
-        result = result.replace(/&gt;/g, '>');
-        result = result.replace(/&amp;/g, '&');  // This must be last!
-
-        return result;
     }
 
     private handleEntityContent(entityValue: string): void {
@@ -1234,5 +1318,9 @@ export class SAXParser {
             // Pure character content
             this.contentHandler!.characters(entityValue);
         }
+    }
+    
+    getGrammar(): Grammar {
+        return this.grammar;
     }
 }

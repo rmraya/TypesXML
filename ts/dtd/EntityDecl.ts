@@ -22,9 +22,11 @@ export class EntityDecl implements XMLNode {
 
     private name: string;
     private parameterEntity: boolean;
-    private value: string; systemId: string;
+    private value: string; 
+    private systemId: string;
     private publicId: string;
     private ndata: string;
+    private externalContentLoaded: boolean = false; // Track if external content has been loaded
 
     constructor(name: string, parameterEntity: boolean, value: string, systemId: string, publicId: string, ndata: string) {
         // parameterEntities are only used in DTDs
@@ -42,6 +44,17 @@ export class EntityDecl implements XMLNode {
 
     getValue(): string {
         return this.value;
+    }
+
+    setValue(value: string): void {
+        this.value = value;
+        if (this.systemId || this.publicId) {
+            this.externalContentLoaded = true;
+        }
+    }
+
+    isExternalContentLoaded(): boolean {
+        return this.externalContentLoaded;
     }
 
     isParameterEntity(): boolean {

@@ -22,11 +22,17 @@ import { XMLAttribute } from "./XMLAttribute";
 import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
 import { CData } from "./CData";
+import { Grammar } from "./grammar/Grammar";
 
 export class XMLCanonicalizer {
 
-    public static canonicalize(document: XMLDocument): string {
+    private grammar: Grammar | undefined;
+
+    public static canonicalize(document: XMLDocument, grammar?: Grammar): string {
         const canonicalizer = new XMLCanonicalizer();
+        if (grammar) {
+            canonicalizer.grammar = grammar;
+        }
         return canonicalizer.canonicalizeDocument(document);
     }
 
@@ -136,25 +142,99 @@ export class XMLCanonicalizer {
     }
 
     private escapeCharacterData(text: string): string {
-        return text
-            .replace(/&/g, '&amp;')    // & 
-            .replace(/</g, '&lt;')     // <
-            .replace(/>/g, '&gt;')     // >
-            .replace(/"/g, '&quot;')   // double quote (for canonical form)
-            .replace(/\t/g, '&#9;')    // tab
-            .replace(/\r\n/g, '&#13;&#10;')  // CRLF sequence
-            .replace(/\r/g, '&#13;')   // carriage return (preserve as character reference)
-            .replace(/\n/g, '&#10;');  // newline
+        // Avoid double-escaping by preserving existing valid entity references
+        let result = '';
+        let i = 0;
+        
+        while (i < text.length) {
+            if (text.charAt(i) === '&') {
+                // Check if this starts a valid entity reference
+                const remainingText = text.substring(i);
+                const entityMatch = remainingText.match(/^&(amp|lt|gt|quot|apos);/);
+                
+                if (entityMatch) {
+                    // This is already a valid entity reference, preserve it
+                    result += entityMatch[0];
+                    i += entityMatch[0].length;
+                    continue;
+                }
+            }
+            
+            // Regular character escaping
+            const char = text.charAt(i);
+            switch (char) {
+                case '&':
+                    result += '&amp;';
+                    break;
+                case '<':
+                    result += '&lt;';
+                    break;
+                case '>':
+                    result += '&gt;';
+                    break;
+                case '\r':
+                    if (i + 1 < text.length && text.charAt(i + 1) === '\n') {
+                        // CRLF sequence
+                        result += '&#13;&#10;';
+                        i++; // Skip the \n
+                    } else {
+                        result += '&#13;';
+                    }
+                    break;
+                case '\n':
+                    result += '&#10;';
+                    break;
+                default:
+                    result += char;
+                    break;
+            }
+            i++;
+        }
+        
+        return result;
     }
 
     private escapeAttributeValue(value: string): string {
-        return value
-            .replace(/&/g, '&amp;')    // & 
-            .replace(/</g, '&lt;')     // <
-            .replace(/>/g, '&gt;')     // >
-            .replace(/"/g, '&quot;')   // double quote
-            .replace(/\t/g, '&#9;')    // tab (should be rare after normalization)
-            .replace(/\n/g, '&#10;')   // newline (should be rare after normalization) 
-            .replace(/\r/g, '&#13;');  // carriage return (should be rare after normalization)
+        let result = '';
+        
+        for (let i = 0; i < value.length; i++) {
+            const char = value.charAt(i);
+            
+            // First priority: Check if this character has an original entity reference form from parsing
+            if (this.grammar && this.grammar.getOriginalEntityReference(char)) {
+                result += this.grammar.getOriginalEntityReference(char);
+                continue;
+            }
+            
+            // Second priority: Standard XML escaping for canonical form
+            switch (char) {
+                case '&':
+                    result += '&amp;';
+                    break;
+                case '<':
+                    result += '&lt;';
+                    break;
+                case '>':
+                    result += '&gt;';
+                    break;
+                case '"':
+                    result += '&quot;';
+                    break;
+                case '\t':
+                    result += ' ';  // tab → space for canonical form
+                    break;
+                case '\n':
+                    result += '&#10;';  // newline
+                    break;
+                case '\r':
+                    result += '&#13;';  // carriage return
+                    break;
+                default:
+                    result += char;
+                    break;
+            }
+        }
+        
+        return result;
     }
 }

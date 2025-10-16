@@ -30,12 +30,16 @@ export class Grammar {
     private elementDeclMap: Map<string, ElementDecl>;
     private notationsMap: Map<string, NotationDecl>;
 
+    // Track entity references used in the document for canonicalization
+    private usedEntityReferences: Map<string, string>; // Maps expanded text back to original reference form
+
     constructor() {
         this.models = new Map();
         this.elementDeclMap = new Map();
         this.attributesMap = new Map();
         this.entitiesMap = new Map();
         this.notationsMap = new Map();
+        this.usedEntityReferences = new Map();
         this.addPredefinedEntities();
     }
 
@@ -176,6 +180,26 @@ export class Grammar {
 
     getElementAttributesMap(element: string): Map<string, AttDecl> | undefined {
         return this.attributesMap.get(element);
+    }
+
+    addEntityReferenceUsage(originalReference: string, expandedText: string) {
+        // Track entity reference usage for canonicalization
+        this.usedEntityReferences.set(expandedText, originalReference);
+    }
+
+    getOriginalEntityReference(expandedText: string): string | undefined {
+        // Get original entity reference form for canonicalization
+        return this.usedEntityReferences.get(expandedText);
+    }
+
+    getUsedEntityReferences(): Map<string, string> {
+        // Get all used entity references map
+        return this.usedEntityReferences;
+    }
+
+    clearEntityReferenceTracking() {
+        // Clear entity reference tracking (for new document)
+        this.usedEntityReferences.clear();
     }
 
 }

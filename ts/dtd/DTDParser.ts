@@ -16,7 +16,7 @@
  *******************************************************************************/
 
 import { Stats, closeSync, openSync, readSync, statSync } from "fs";
-import * as path from "node:path";
+import { dirname, sep } from "node:path";
 import { Catalog } from "../Catalog";
 import { XMLUtils } from "../XMLUtils";
 import { Grammar } from "../grammar/Grammar";
@@ -32,8 +32,9 @@ export class DTDParser {
     private pointer: number = 0;
     private source: string;
     private currentFile: string;
+    private baseDirectory: string = '';
 
-    constructor(grammar?: Grammar) {
+    constructor(grammar?: Grammar, baseDirectory?: string) {
         this.source = '';
         this.currentFile = '';
         if (grammar) {
@@ -41,6 +42,7 @@ export class DTDParser {
         } else {
             this.grammar = new Grammar();
         }
+        this.baseDirectory = baseDirectory || '';
     }
 
     setCatalog(catalog: Catalog) {
@@ -363,6 +365,7 @@ export class DTDParser {
                 if (XMLUtils.hasParameterEntity(systemId)) {
                     systemId = this.resolveEntities(systemId);
                 }
+                // Don't load external entity content during DTD parsing - load lazily when referenced
                 return new EntityDecl(name, parameterEntity, '', systemId, publicId, '');
             } else if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
                 // skip spaces before system id
@@ -387,6 +390,7 @@ export class DTDParser {
                 if (XMLUtils.hasParameterEntity(systemId)) {
                     systemId = this.resolveEntities(systemId);
                 }
+                // Don't load external entity content during DTD parsing - load lazily when referenced
                 return new EntityDecl(name, parameterEntity, '', systemId, '', '');
             } else {
                 // get entity value
@@ -532,8 +536,10 @@ export class DTDParser {
                     if (XMLUtils.hasParameterEntity(ndata)) {
                         ndata = this.resolveEntities(ndata);
                     }
+                    // NDATA entities are unparsed and shouldn't have content loaded
                     return new EntityDecl(name, parameterEntity, '', systemId, '', ndata);
                 }
+                // Don't load external entity content during DTD parsing - load lazily when referenced
                 return new EntityDecl(name, parameterEntity, '', systemId, '', '');
             } else {
                 // get entity value
@@ -802,8 +808,38 @@ export class DTDParser {
     }
 
     makeAbsolute(uri: string): string {
-        let currentPath: string = path.dirname(this.currentFile);
-        return currentPath + path.sep + uri;
+        // Use base directory if available (for inline DTDs), otherwise use current file directory
+        let basePath: string = this.baseDirectory || dirname(this.currentFile);
+        return basePath + sep + uri;
+    }
+
+    loadExternalEntity(publicId: string, systemId: string): string {
+        try {
+            let location = this.resolveEntity(publicId, systemId);
+            
+            // Read the external entity file
+            let stats: Stats = statSync(location, { bigint: false, throwIfNoEntry: true });
+            let blockSize: number = stats.blksize;
+            let fileHandle = openSync(location, 'r');
+            let buffer = Buffer.alloc(blockSize);
+            let content = '';
+            let bytesRead: number = readSync(fileHandle, buffer, 0, blockSize, 0);
+            while (bytesRead > 0) {
+                content += buffer.toString('utf8', 0, bytesRead);
+                bytesRead = readSync(fileHandle, buffer, 0, blockSize, content.length);
+            }
+            closeSync(fileHandle);
+            
+            // Don't trim - preserve original content including whitespace/newlines
+            return content;
+        } catch (error) {
+            // Don't load during DTD parsing if base directory not set yet
+            if (this.baseDirectory === '' && this.currentFile === '') {
+                return '';
+            }
+            console.warn(`Warning: Could not load external entity "${systemId}": ${error}`);
+            return '';
+        }
     }
 
     expandParameterEntities(text: string): string {

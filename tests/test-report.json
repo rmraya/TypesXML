@@ -1,0 +1,2053 @@
+{
+  "timestamp": "2025-10-16T00:10:25.592Z",
+  "duration": 105,
+  "summary": {
+    "totalTests": 367,
+    "totalPassed": 202,
+    "categories": {
+      "valid": {
+        "passed": 118,
+        "failed": 46
+      },
+      "invalid": {
+        "passed": 6,
+        "failed": 0
+      },
+      "notWellFormed": {
+        "passed": 78,
+        "failed": 119
+      }
+    }
+  },
+  "details": {
+    "valid": {
+      "passed": 118,
+      "failed": 46,
+      "tests": [
+        {
+          "file": "sa/001.xml",
+          "passed": true,
+          "duration": 2
+        },
+        {
+          "file": "sa/002.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/003.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/004.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/005.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/006.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/007.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/008.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "sa/009.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/010.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/011.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/012.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/013.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/014.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/015.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/016.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/017.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/018.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/019.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/020.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/021.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/022.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/023.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/024.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/025.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/026.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/027.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/028.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/029.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/030.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/031.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/032.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/033.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/034.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/035.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/036.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/037.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/038.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/039.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/040.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/041.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "sa/042.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/043.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/044.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/045.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/046.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/047.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/048.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/049.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/050.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/051.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/052.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/053.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/054.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/055.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/056.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/057.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/058.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/059.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/060.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/061.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/062.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/063.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/064.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/065.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/066.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "sa/067.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/068.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/069.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/070.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/071.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/072.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/073.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/074.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/075.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/076.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/077.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/078.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/079.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/080.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/081.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/082.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/083.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/084.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/085.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/086.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/087.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/088.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/089.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/090.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/091.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/092.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "sa/093.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/094.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/095.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/096.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/097.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/098.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/099.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/100.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/101.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/102.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "sa/103.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/104.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/105.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/106.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "sa/107.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "sa/108.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "sa/109.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/110.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "sa/111.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "sa/112.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/113.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/114.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/115.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "sa/116.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/117.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/118.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "sa/119.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "ext-sa/001.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/002.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "ext-sa/003.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/004.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "ext-sa/005.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/006.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/007.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/008.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "ext-sa/009.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/010.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/011.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/012.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "ext-sa/013.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "ext-sa/014.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/001.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-sa/002.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-sa/003.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/004.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/005.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/006.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/007.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/008.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "not-sa/009.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/010.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-sa/011.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/012.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "not-sa/013.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/014.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/015.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/016.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/017.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "not-sa/018.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/019.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/020.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/021.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 1
+        },
+        {
+          "file": "not-sa/022.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/023.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/024.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/025.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/026.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/027.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-sa/028.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/029.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        },
+        {
+          "file": "not-sa/030.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-sa/031.xml",
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
+        }
+      ]
+    },
+    "invalid": {
+      "passed": 6,
+      "failed": 0,
+      "tests": [
+        {
+          "file": "invalid/001.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "invalid/002.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "invalid/003.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "invalid/004.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "invalid/005.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "invalid/006.xml",
+          "passed": true,
+          "duration": 1
+        }
+      ]
+    },
+    "notWellFormed": {
+      "passed": 78,
+      "failed": 119,
+      "tests": [
+        {
+          "file": "not-wf/ext-sa/001.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/ext-sa/002.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/ext-sa/003.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/not-sa/001.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/not-sa/002.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/not-sa/003.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/not-sa/004.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/not-sa/005.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/not-sa/006.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/not-sa/007.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/not-sa/008.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/001.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/002.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/003.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/004.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/005.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/006.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/007.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/008.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/009.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/010.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/011.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/012.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/013.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/014.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/015.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/016.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/017.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/018.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/019.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/020.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/021.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/022.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/023.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/024.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/025.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/026.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/027.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/028.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/029.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/030.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/031.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/032.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/033.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/034.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/035.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/036.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/037.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/038.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/039.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/040.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/041.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/042.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/043.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/044.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/045.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/046.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/047.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/048.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/049.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/050.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/051.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/052.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/053.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/054.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/055.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/056.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/057.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/058.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/059.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/060.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/061.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/062.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/063.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/064.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/065.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/066.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/067.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/068.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/069.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/070.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/071.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/072.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/073.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/074.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/075.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/076.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/077.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/078.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/079.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/080.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/081.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/082.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/083.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/084.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/085.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/086.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/087.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/088.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/089.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/090.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/091.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/092.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/093.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/094.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/095.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/096.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/097.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/098.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/099.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/100.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/101.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/102.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/103.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/104.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/105.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/106.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/107.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/108.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/109.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/110.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/111.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/112.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/113.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/114.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/115.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/116.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/117.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/118.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/119.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/120.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/121.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/122.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/123.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/124.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/125.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/126.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/127.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/128.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/129.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/130.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/131.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/132.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/133.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/134.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/135.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/136.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/137.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/138.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/139.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/140.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/141.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/142.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/143.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/144.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/145.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/146.xml",
+          "passed": true,
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/147.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/148.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/149.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/150.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/151.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/152.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/153.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/154.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/155.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/156.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/157.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/158.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/159.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/160.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/161.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/162.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/163.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/164.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/165.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/166.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/167.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/168.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/169.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/170.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/171.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/172.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/173.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/174.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/175.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/176.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/177.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/178.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/179.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/180.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/181.xml",
+          "passed": true,
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/182.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/183.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/184.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        },
+        {
+          "file": "not-wf/sa/185.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 1
+        },
+        {
+          "file": "not-wf/sa/186.xml",
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
+          "duration": 0
+        }
+      ]
+    },
+    "errors": [],
+    "performance": {
+      "validDuration": 64,
+      "invalidDuration": 2,
+      "notWellFormedDuration": 30
+    }
+  },
+  "performance": {
+    "validDuration": 64,
+    "invalidDuration": 2,
+    "notWellFormedDuration": 30
+  }
+}
