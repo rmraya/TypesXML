@@ -15,7 +15,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { Grammar } from "../grammar/Grammar";
+import { DTDGrammar } from "./DTDGrammar";
 import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
 import { DTDParser } from "./DTDParser";
@@ -23,7 +23,7 @@ import { DTDParser } from "./DTDParser";
 export class InternalSubset implements XMLNode {
 
     declarationText: string;
-    grammar: Grammar;
+    grammar: DTDGrammar;
 
     constructor(declaration: string) {
         this.declarationText = declaration;

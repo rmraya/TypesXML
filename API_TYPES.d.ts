@@ -3,9 +3,12 @@
  * This file provides TypeScript type definitions for better IDE support and understanding
  * 
  * Key Features:
+ * - Multi-schema validation support (DTD, XML Schema, RelaxNG)
+ * - Grammar-based validation framework
  * - Complete DTD validation support
  * - Automatic default attribute processing
  * - XML Catalog resolution
+ * - Namespace-aware processing
  */
 
 export interface XMLNode {
@@ -17,6 +20,8 @@ export interface XMLNode {
 export interface ContentHandler {
     initialize(): void;
     setCatalog(catalog: Catalog): void;
+    setGrammar(grammar: Grammar): void;
+    setIncludeDefaultAttributes(include: boolean): void;
     startDocument(): void;
     endDocument(): void;
     xmlDeclaration(version: string, encoding: string, standalone: string | undefined): void;
@@ -38,6 +43,8 @@ export declare class SAXParser {
     constructor();
     setContentHandler(contentHandler: ContentHandler): void;
     setValidating(validating: boolean): void;
+    setGrammar(grammar: Grammar): void;
+    setIncludeDefaultAttributes(include: boolean): void;
     parseFile(path: string, encoding?: BufferEncoding): void;
     parseString(data: string): void;
 }
@@ -46,6 +53,8 @@ export declare class DOMBuilder implements ContentHandler {
     constructor();
     getDocument(): XMLDocument | undefined;
     setCatalog(catalog: Catalog): void;
+    setGrammar(grammar: Grammar): void;
+    setIncludeDefaultAttributes(include: boolean): void;
     initialize(): void;
     startDocument(): void;
     endDocument(): void;
@@ -240,28 +249,161 @@ export declare class Indenter {
     indent(element: XMLElement): void;
 }
 
-// DTD Classes
-export declare class DTDParser {
-    constructor();
-    setCatalog(catalog: Catalog): void;
-    parseDTD(path: string): Grammar;
-    parseInternalSubset(subset: string): Grammar;
+// Grammar Framework
+export declare enum GrammarType {
+    NONE = 'none',
+    DTD = 'dtd',
+    XML_SCHEMA = 'xml-schema',
+    RELAX_NG = 'relax-ng'
 }
 
-export declare class Grammar {
+export declare class QualifiedName {
+    constructor(localName: string, namespaceURI?: string, prefix?: string);
+    getLocalName(): string;
+    getNamespaceURI(): string;
+    getPrefix(): string;
+    toString(): string;
+    equals(other: QualifiedName): boolean;
+}
+
+export declare class AttributeInfo {
+    constructor(name: QualifiedName, type: string, defaultValue?: string, defaultDecl?: string);
+    getName(): QualifiedName;
+    getType(): string;
+    getDefaultValue(): string | undefined;
+    getDefaultDecl(): string | undefined;
+    hasDefaultValue(): boolean;
+}
+
+export declare class ValidationError {
+    constructor(message: string, element?: QualifiedName, line?: number, column?: number);
+    getMessage(): string;
+    getElement(): QualifiedName | undefined;
+    getLine(): number | undefined;
+    getColumn(): number | undefined;
+}
+
+export declare class ValidationWarning {
+    constructor(message: string, element?: QualifiedName, line?: number, column?: number);
+    getMessage(): string;
+    getElement(): QualifiedName | undefined;
+    getLine(): number | undefined;
+    getColumn(): number | undefined;
+}
+
+export declare class ValidationContext {
     constructor();
-    getContentModel(elementName: string): ContentModel | undefined;
+    getCurrentElement(): QualifiedName | undefined;
+    setCurrentElement(element: QualifiedName): void;
+    getCurrentLine(): number;
+    setCurrentLine(line: number): void;
+    getCurrentColumn(): number;
+    setCurrentColumn(column: number): void;
+    addError(error: ValidationError): void;
+    addWarning(warning: ValidationWarning): void;
+    getErrors(): ValidationError[];
+    getWarnings(): ValidationWarning[];
+    hasErrors(): boolean;
+    hasWarnings(): boolean;
+    clear(): void;
+}
+
+export declare class ValidationResult {
+    constructor(valid: boolean, errors?: ValidationError[], warnings?: ValidationWarning[]);
+    isValid(): boolean;
+    getErrors(): ValidationError[];
+    getWarnings(): ValidationWarning[];
+    hasErrors(): boolean;
+    hasWarnings(): boolean;
+    static success(): ValidationResult;
+    static error(message: string, element?: QualifiedName): ValidationResult;
+    static warning(message: string, element?: QualifiedName): ValidationResult;
+}
+
+export interface Grammar {
+    getType(): GrammarType;
+    
+    // Element validation
+    validateElement(elementName: QualifiedName, context: ValidationContext): ValidationResult;
+    getElementContentModel(elementName: QualifiedName): ContentModel | undefined;
+    
+    // Attribute validation
+    validateAttributes(elementName: QualifiedName, attributes: Map<QualifiedName, string>, context: ValidationContext): ValidationResult;
+    getElementAttributes(elementName: QualifiedName): Map<QualifiedName, AttributeInfo>;
+    getDefaultAttributes(elementName: QualifiedName): Map<QualifiedName, string>;
+    
+    // Content validation
+    validateElementContent(elementName: QualifiedName, children: QualifiedName[], textContent: string, context: ValidationContext): ValidationResult;
+    
+    // Type validation
+    validateAttributeValue(elementName: QualifiedName, attributeName: QualifiedName, value: string, context: ValidationContext): ValidationResult;
+    
+    // Entity resolution
+    getEntityValue(entityName: string): string | undefined;
+    hasEntity(entityName: string): boolean;
+    
+    // Notation support
+    getNotation(notationName: string): NotationDecl | undefined;
+    hasNotation(notationName: string): boolean;
+    
+    // Schema information
+    getTargetNamespace(): string | undefined;
+    getSchemaLocation(): string | undefined;
+}
+
+export declare class NoOpGrammar implements Grammar {
+    constructor();
+    getType(): GrammarType;
+    validateElement(elementName: QualifiedName, context: ValidationContext): ValidationResult;
+    getElementContentModel(elementName: QualifiedName): ContentModel | undefined;
+    validateAttributes(elementName: QualifiedName, attributes: Map<QualifiedName, string>, context: ValidationContext): ValidationResult;
+    getElementAttributes(elementName: QualifiedName): Map<QualifiedName, AttributeInfo>;
+    getDefaultAttributes(elementName: QualifiedName): Map<QualifiedName, string>;
+    validateElementContent(elementName: QualifiedName, children: QualifiedName[], textContent: string, context: ValidationContext): ValidationResult;
+    validateAttributeValue(elementName: QualifiedName, attributeName: QualifiedName, value: string, context: ValidationContext): ValidationResult;
+    getEntityValue(entityName: string): string | undefined;
+    hasEntity(entityName: string): boolean;
+    getNotation(notationName: string): NotationDecl | undefined;
+    hasNotation(notationName: string): boolean;
+    getTargetNamespace(): string | undefined;
+    getSchemaLocation(): string | undefined;
+}
+
+export declare class DTDGrammar implements Grammar {
+    constructor(elementDeclMap?: Map<string, ElementDecl>, attributesMap?: Map<string, Map<string, AttDecl>>, entitiesMap?: Map<string, EntityDecl>, notationsMap?: Map<string, NotationDecl>);
+    getType(): GrammarType;
+    validateElement(elementName: QualifiedName, context: ValidationContext): ValidationResult;
+    getElementContentModel(elementName: QualifiedName): ContentModel | undefined;
+    validateAttributes(elementName: QualifiedName, attributes: Map<QualifiedName, string>, context: ValidationContext): ValidationResult;
+    getElementAttributes(elementName: QualifiedName): Map<QualifiedName, AttributeInfo>;
+    getDefaultAttributes(elementName: QualifiedName): Map<QualifiedName, string>;
+    validateElementContent(elementName: QualifiedName, children: QualifiedName[], textContent: string, context: ValidationContext): ValidationResult;
+    validateAttributeValue(elementName: QualifiedName, attributeName: QualifiedName, value: string, context: ValidationContext): ValidationResult;
+    getEntityValue(entityName: string): string | undefined;
+    hasEntity(entityName: string): boolean;
+    getNotation(notationName: string): NotationDecl | undefined;
+    hasNotation(notationName: string): boolean;
+    getTargetNamespace(): string | undefined;
+    getSchemaLocation(): string | undefined;
+    
+    // DTD-specific methods
     getElementDeclMap(): Map<string, ElementDecl>;
     getAttributesMap(): Map<string, Map<string, AttDecl>>;
-    getElementAttributesMap(element: string): Map<string, AttDecl> | undefined;
     getEntitiesMap(): Map<string, EntityDecl>;
     getNotationsMap(): Map<string, NotationDecl>;
-    getEntity(entityName: string): EntityDecl | undefined;
     addElement(elementDecl: ElementDecl): void;
     addAttributes(element: string, attributes: Map<string, AttDecl>): void;
     addEntity(entityDecl: EntityDecl): void;
     addNotation(notation: NotationDecl): void;
-    merge(grammar: Grammar): void;
+    merge(grammar: DTDGrammar): void;
+}
+
+// DTD Classes
+export declare class DTDParser {
+    constructor();
+    setCatalog(catalog: Catalog): void;
+    parseDTD(path: string): DTDGrammar;
+    parseInternalSubset(subset: string): DTDGrammar;
 }
 
 export declare class ElementDecl implements XMLNode {
@@ -336,6 +478,51 @@ export declare class ContentModel {
 }
 
 export interface ContentParticle {
+    getType(): number;
+    addParticle(particle: ContentParticle): void;
+    setCardinality(cardinality: number): void;
+    getCardinality(): number;
+    getParticles(): Array<ContentParticle>;
+    getChildren(): Set<string>;
+    toString(): string;
+}
+
+export declare class DTDChoice implements ContentParticle {
+    constructor();
+    getType(): number;
+    addParticle(particle: ContentParticle): void;
+    setCardinality(cardinality: number): void;
+    getCardinality(): number;
+    getParticles(): Array<ContentParticle>;
+    getChildren(): Set<string>;
+    toString(): string;
+}
+
+export declare class DTDName implements ContentParticle {
+    constructor(name: string);
+    getName(): string;
+    getType(): number;
+    addParticle(particle: ContentParticle): void;
+    setCardinality(cardinality: number): void;
+    getCardinality(): number;
+    getParticles(): Array<ContentParticle>;
+    getChildren(): Set<string>;
+    toString(): string;
+}
+
+export declare class DTDPCData implements ContentParticle {
+    constructor();
+    getType(): number;
+    addParticle(particle: ContentParticle): void;
+    setCardinality(cardinality: number): void;
+    getCardinality(): number;
+    getParticles(): Array<ContentParticle>;
+    getChildren(): Set<string>;
+    toString(): string;
+}
+
+export declare class DTDSecuence implements ContentParticle {
+    constructor();
     getType(): number;
     addParticle(particle: ContentParticle): void;
     setCardinality(cardinality: number): void;

@@ -31,9 +31,7 @@ import { XMLElement } from "./XMLElement";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 import { DTDParser } from "./dtd/DTDParser";
-import { ContentModelType, Cardinality } from "./grammar/ContentModel";
-import { ContentParticleType } from "./grammar/contentParticle";
-import { Grammar } from "./grammar/Grammar";
+import { AttributeUse, Grammar, QualifiedName, ValidationContext } from "./grammar/Grammar";
 
 export class DOMBuilder implements ContentHandler {
 
@@ -46,8 +44,7 @@ export class DOMBuilder implements ContentHandler {
     grammarUrl: string | undefined;
     grammar: Grammar | undefined;
     validating: boolean = false;
-
-    // Validation infrastructure
+    private includeDefaultAttributes: boolean = true;
     private rootElementValidated: boolean = false;
     private declaredIds: Set<string> = new Set();
     private pendingIdrefs: string[] = [];
@@ -56,7 +53,6 @@ export class DOMBuilder implements ContentHandler {
         this.document = new XMLDocument();
         this.stack = new Array();
         this.inCdData = false;
-        // Reset validation state
         this.rootElementValidated = false;
         this.declaredIds.clear();
         this.pendingIdrefs = [];
@@ -68,15 +64,16 @@ export class DOMBuilder implements ContentHandler {
 
     setValidating(validating: boolean): void {
         this.validating = validating;
-        // Note: DTDParser will be created on-demand when a DTD is actually encountered
-        // This allows for other schema types (XML Schema, RelaxNG) to be supported in the future
     }
 
     isValidating(): boolean {
         return this.validating;
     }
 
-    // Validation methods
+    setIncludeDefaultAttributes(include: boolean): void {
+        this.includeDefaultAttributes = include;
+    }
+
     private validateRootElement(elementName: string): void {
         if (!this.validating || this.rootElementValidated) {
             return;
@@ -90,34 +87,27 @@ export class DOMBuilder implements ContentHandler {
     }
 
     private addDefaultAttributes(elementName: string, element: XMLElement): void {
-        // Add default attributes whenever we have a grammar available (not just in validating mode)
         if (!this.grammar) {
             return;
         }
 
-        const attDecls = this.grammar.getElementAttributesMap(elementName);
-        if (!attDecls) {
-            return; // No attribute declarations for this element
+        const elementQName = QualifiedName.fromString(elementName);
+        const defaultAttrs = this.grammar.getDefaultAttributes(elementQName);
+        if (!defaultAttrs || defaultAttrs.size === 0) {
+            return;
         }
 
-        // Get currently set attribute names
         const existingAttNames = new Set<string>();
         const attributes = element.getAttributes();
         if (attributes) {
             attributes.forEach(att => existingAttNames.add(att.getName()));
         }
 
-        // Add default values for attributes that are not already set
-        attDecls.forEach((attDecl, attName) => {
+        defaultAttrs.forEach((defaultValue, attQName) => {
+            const attName = attQName.toString();
             if (!existingAttNames.has(attName)) {
-                const defaultDecl = attDecl.getDefaultDecl();
-                const defaultValue = attDecl.getDefaultValue();
-
-                // Set default value if it exists (either direct default or #FIXED)
-                if (defaultValue && defaultValue.trim() !== '') {
-                    const defaultAttr = new XMLAttribute(attName, defaultValue);
-                    element.setAttribute(defaultAttr);
-                }
+                const defaultAttr = new XMLAttribute(attName, defaultValue);
+                element.setAttribute(defaultAttr);
             }
         });
     }
@@ -127,9 +117,9 @@ export class DOMBuilder implements ContentHandler {
             return;
         }
 
-        const attDecls = this.grammar.getElementAttributesMap(elementName);
-        if (!attDecls) {
-            // No attribute declarations for this element - if attributes are provided, it's an error
+        const elementQName = QualifiedName.fromString(elementName);
+        const attDecls = this.grammar.getElementAttributes(elementQName);
+        if (!attDecls || attDecls.size === 0) {
             if (attributes.length > 0) {
                 const attNames = attributes.map(att => att.getName()).join(', ');
                 throw new Error(`Element '${elementName}' has no declared attributes but contains: [${attNames}]`);
@@ -139,8 +129,9 @@ export class DOMBuilder implements ContentHandler {
 
         const providedAttNames = new Set(attributes.map(att => att.getName()));
 
-        attDecls.forEach((attDecl, attName) => {
-            if (attDecl.getDefaultDecl() === '#REQUIRED' && !providedAttNames.has(attName)) {
+        attDecls.forEach((attInfo, attQName) => {
+            const attName = attQName.toString();
+            if (attInfo.use === AttributeUse.REQUIRED && !providedAttNames.has(attName)) {
                 throw new Error(`Required attribute '${attName}' is missing from element '${elementName}'`);
             }
         });
@@ -151,39 +142,34 @@ export class DOMBuilder implements ContentHandler {
             return;
         }
 
-        const attDecls = this.grammar.getElementAttributesMap(elementName);
-        if (!attDecls) {
-            // Already handled in validateRequiredAttributes - no attributes should be present
+        const elementQName = QualifiedName.fromString(elementName);
+        const attDecls = this.grammar.getElementAttributes(elementQName);
+        if (!attDecls || attDecls.size === 0) {
             return;
         }
 
         for (const attribute of attributes) {
             const attName = attribute.getName();
             const attValue = attribute.getValue();
-            const attDecl = attDecls.get(attName);
+            const attQName = QualifiedName.fromString(attName);
+            const attInfo = attDecls.get(attQName);
 
-            if (attDecl) {
-                if (!attDecl.isValid(attValue)) {
-                    throw new Error(`Invalid value '${attValue}' for attribute '${attName}' of type '${attDecl.getType()}' in element '${elementName}'`);
-                }
-
-                // Track ID values for uniqueness validation
-                if (attDecl.getType() === 'ID') {
+            if (attInfo) {
+                // ID uniqueness and IDREF collection for validation  
+                if (attInfo.datatype === 'ID') {
                     if (this.declaredIds.has(attValue)) {
                         throw new Error(`Duplicate ID value '${attValue}' found in element '${elementName}'`);
                     }
                     this.declaredIds.add(attValue);
                 }
 
-                // Collect IDREF values for later validation
-                if (attDecl.getType() === 'IDREF') {
+                if (attInfo.datatype === 'IDREF') {
                     this.pendingIdrefs.push(attValue);
-                } else if (attDecl.getType() === 'IDREFS') {
+                } else if (attInfo.datatype === 'IDREFS') {
                     const idrefs = attValue.split(/\s+/);
                     this.pendingIdrefs.push(...idrefs);
                 }
             } else {
-                // Undeclared attribute - validation error
                 throw new Error(`Undeclared attribute '${attName}' found in element '${elementName}'`);
             }
         }
@@ -206,220 +192,42 @@ export class DOMBuilder implements ContentHandler {
             return;
         }
 
-        // Get the content model for this element
-        const contentModel = this.grammar.getContentModel(elementName);
-        if (!contentModel) {
-            return; // No content model declared for this element
-        }
+        // Create ValidationContext for the element
+        const elementQName = QualifiedName.fromString(elementName);
 
-        // Get child element names (filter out text nodes and other non-element content)
+        // Extract child element names
         const childElementNames = children
             .filter(child => child.getNodeType() === Constants.ELEMENT_NODE)
-            .map(child => (child as XMLElement).getName());
+            .map(child => QualifiedName.fromString((child as XMLElement).getName()));
 
-        // Check for text content (excluding whitespace-only)
-        const hasTextContent = children.some(child =>
-            child.getNodeType() === Constants.TEXT_NODE &&
-            (child as TextNode).getValue().trim().length > 0
+        // Extract text content
+        const textNodes = children
+            .filter(child => child.getNodeType() === Constants.TEXT_NODE)
+            .map(child => (child as TextNode).getValue());
+        const textContent = textNodes.join('');
+
+        // Create attributes map
+        const currentElement = this.stack[this.stack.length - 1];
+        const attributesArray = currentElement?.getAttributes() || [];
+        const attributesMap = new Map<QualifiedName, string>();
+        attributesArray.forEach(attr => {
+            attributesMap.set(QualifiedName.fromString(attr.getName()), attr.getValue());
+        });
+
+        // Create validation context
+        const context = new ValidationContext(
+            childElementNames,
+            attributesMap,
+            textContent,
+            this.stack.length > 1 ? QualifiedName.fromString(this.stack[this.stack.length - 2].getName()) : undefined
         );
 
-        // Validate based on content model type
-        if (contentModel.toString() === ContentModelType.EMPTY) {
-            if (childElementNames.length > 0) {
-                throw new Error(`Element '${elementName}' declared as EMPTY but contains child elements: [${childElementNames.join(', ')}]`);
-            }
-            if (hasTextContent) {
-                throw new Error(`Element '${elementName}' declared as EMPTY but contains text content`);
-            }
-            return;
+        // Validate using Grammar interface
+        const result = this.grammar.validateElement(elementQName, context);
+        if (!result.isValid) {
+            const errorMessages = result.errors.map(err => err.message).join('; ');
+            throw new Error(`Element '${elementName}' validation failed: ${errorMessages}`);
         }
-
-        if (contentModel.toString() === ContentModelType.ANY) {
-            // ANY content allows all content - no validation needed
-            return;
-        }
-
-        // For MIXED content models
-        if (contentModel.isMixed()) {
-            // Mixed content allows text and declared child elements
-            const allowedChildren = contentModel.getChildren();
-            for (const childName of childElementNames) {
-                if (!allowedChildren.has(childName)) {
-                    throw new Error(`Element '${childName}' is not allowed in mixed content model of element '${elementName}'. Allowed: [${Array.from(allowedChildren).join(', ')}]`);
-                }
-            }
-            return;
-        }
-
-        // For element-only content models (CHILDREN)
-        if (hasTextContent) {
-            throw new Error(`Element '${elementName}' has element-only content model but contains text content`);
-        }
-
-        // Validate element sequence against content model
-        const allowedChildren = contentModel.getChildren();
-        for (const childName of childElementNames) {
-            if (!allowedChildren.has(childName)) {
-                throw new Error(`Element '${childName}' is not allowed in element '${elementName}'. Allowed: [${Array.from(allowedChildren).join(', ')}]`);
-            }
-        }
-
-        // Validate element sequence against detailed content model
-        this.validateContentModelStructure(elementName, childElementNames, contentModel);
-    }
-
-    private validateContentModelStructure(elementName: string, childElementNames: string[], contentModel: any): void {
-        if (!this.validating || !this.grammar) {
-            return;
-        }
-
-        // Get the actual content particles from the content model
-        const contentParticles = contentModel.getContent();
-        if (!contentParticles || contentParticles.length === 0) {
-            return;
-        }
-
-        // Validate the child elements against the content model structure
-        try {
-            this.validateParticleSequence(childElementNames, contentParticles, elementName);
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            throw new Error(`Content model validation failed for element '${elementName}': ${errorMessage}`);
-        }
-    }
-
-    private validateParticleSequence(childElements: string[], particles: any[], elementName: string): boolean {
-        // Create a copy of child elements for consumption during validation
-        let remainingChildren = [...childElements];
-        
-        // Process each particle in the content model
-        for (const particle of particles) {
-            const consumed = this.consumeParticle(remainingChildren, particle, elementName);
-            if (!consumed && this.isRequiredParticle(particle)) {
-                throw new Error(`Required content particle '${particle.toString()}' not satisfied`);
-            }
-        }
-
-        // Check if there are unconsumed child elements
-        if (remainingChildren.length > 0) {
-            throw new Error(`Unexpected elements found: [${remainingChildren.join(', ')}]`);
-        }
-
-        return true;
-    }
-
-    private consumeParticle(remainingChildren: string[], particle: any, elementName: string): boolean {
-        const particleType = particle.getType();
-        const cardinality = particle.getCardinality();
-        
-        if (particleType === ContentParticleType.NAME) {
-            return this.consumeNameParticle(remainingChildren, particle, cardinality);
-        } else if (particleType === ContentParticleType.SEQUENCE) {
-            return this.consumeSequenceParticle(remainingChildren, particle, cardinality);
-        } else if (particleType === ContentParticleType.CHOICE) {
-            return this.consumeChoiceParticle(remainingChildren, particle, cardinality);
-        }
-        
-        return false;
-    }
-
-    private consumeNameParticle(remainingChildren: string[], particle: any, cardinality: any): boolean {
-        const elementName = particle.getName();
-        let consumedCount = 0;
-        
-        // Consume matching elements from the beginning of the list
-        while (remainingChildren.length > 0 && remainingChildren[0] === elementName) {
-            remainingChildren.shift();
-            consumedCount++;
-        }
-        
-        // Validate cardinality
-        return this.validateCardinality(consumedCount, cardinality, elementName);
-    }
-
-    private consumeSequenceParticle(remainingChildren: string[], particle: any, cardinality: any): boolean {
-        const subParticles = particle.getParticles();
-        let sequenceConsumedCount = 0;
-        
-        // Try to consume the sequence as many times as the cardinality allows
-        while (true) {
-            const childrenBeforeSequence = remainingChildren.length;
-            let sequenceMatched = true;
-            
-            // Try to match the entire sequence
-            for (const subParticle of subParticles) {
-                if (!this.consumeParticle(remainingChildren, subParticle, particle.toString())) {
-                    if (this.isRequiredParticle(subParticle)) {
-                        sequenceMatched = false;
-                        break;
-                    }
-                }
-            }
-            
-            if (sequenceMatched && remainingChildren.length < childrenBeforeSequence) {
-                sequenceConsumedCount++;
-            } else {
-                // Restore children if sequence didn't match completely
-                if (!sequenceMatched) {
-                    // This is a simplified restoration - in a full implementation we'd need proper backtracking
-                    break;
-                }
-                break;
-            }
-        }
-        
-        return this.validateCardinality(sequenceConsumedCount, cardinality, particle.toString());
-    }
-
-    private consumeChoiceParticle(remainingChildren: string[], particle: any, cardinality: any): boolean {
-        const subParticles = particle.getParticles();
-        let choiceConsumedCount = 0;
-        
-        // Try to consume the choice as many times as the cardinality allows
-        while (remainingChildren.length > 0) {
-            const childrenBeforeChoice = remainingChildren.length;
-            let choiceMatched = false;
-            
-            // Try each alternative in the choice
-            for (const subParticle of subParticles) {
-                const childrenCopy = [...remainingChildren];
-                if (this.consumeParticle(childrenCopy, subParticle, particle.toString())) {
-                    // This alternative matched, update the actual remaining children
-                    remainingChildren.length = 0;
-                    remainingChildren.push(...childrenCopy);
-                    choiceMatched = true;
-                    break;
-                }
-            }
-            
-            if (choiceMatched && remainingChildren.length < childrenBeforeChoice) {
-                choiceConsumedCount++;
-            } else {
-                break;
-            }
-        }
-        
-        return this.validateCardinality(choiceConsumedCount, cardinality, particle.toString());
-    }
-
-    private validateCardinality(consumedCount: number, cardinality: any, particleName: string): boolean {
-        switch (cardinality) {
-            case Cardinality.NONE: // exactly one
-                return consumedCount === 1;
-            case Cardinality.OPTIONAL: // zero or one
-                return consumedCount === 0 || consumedCount === 1;
-            case Cardinality.ZEROMANY: // zero or more
-                return consumedCount >= 0;
-            case Cardinality.ONEMANY: // one or more
-                return consumedCount >= 1;
-            default:
-                return false;
-        }
-    }
-
-    private isRequiredParticle(particle: any): boolean {
-        const cardinality = particle.getCardinality();
-        return cardinality === Cardinality.NONE || cardinality === Cardinality.ONEMANY;
     }
 
     setDTDParser(dtdParser: DTDParser): void {
@@ -431,11 +239,9 @@ export class DOMBuilder implements ContentHandler {
     }
 
     startDocument(): void {
-        // do nothing
     }
 
     endDocument(): void {
-        // Validate all IDREF references at the end of parsing
         this.validateIdReferences();
     }
 
@@ -445,7 +251,6 @@ export class DOMBuilder implements ContentHandler {
     }
 
     startElement(name: string, atts: XMLAttribute[]): void {
-        // Validate root element if this is the first element
         if (this.stack.length === 0) {
             this.validateRootElement(name);
         }
@@ -455,27 +260,29 @@ export class DOMBuilder implements ContentHandler {
             element.setAttribute(att);
         });
 
-        // Add default attribute values from DTD when validating
-        this.addDefaultAttributes(name, element);
+        // Add default attributes when includeDefaultAttributes flag is set
+        if (this.includeDefaultAttributes) {
+            this.addDefaultAttributes(name, element);
+        }
 
-        // Validate required attributes and their values (after defaults are added)
-        const allAttributes = element.getAttributes() || [];
-        this.validateRequiredAttributes(name, allAttributes);
-        this.validateAttributeValues(name, allAttributes);
+        // Validate attributes when validating is enabled
+        if (this.validating) {
+            this.validateRequiredAttributes(name, element.getAttributes());
+        }
 
-        if (this.stack.length > 0) {
-            this.stack[this.stack.length - 1].addElement(element);
-        } else {
+        this.validateAttributeValues(name, element.getAttributes());
+
+        if (this.stack.length === 0) {
             this.document?.setRoot(element);
+        } else {
+            this.stack[this.stack.length - 1].addElement(element);
         }
         this.stack.push(element);
     }
 
     endElement(name: string): void {
-        // Get the element being closed
         const element = this.stack[this.stack.length - 1];
 
-        // Validate element content against DTD
         if (element && this.validating) {
             const children = element.getChildren ? element.getChildren() : [];
             this.validateElementContent(name, children);
@@ -489,22 +296,19 @@ export class DOMBuilder implements ContentHandler {
         if (docType) {
             docType.setInternalSubset(declaration);
 
-            // Parse the DTD to create Grammar (for default attributes and validation if enabled)
-            // This is helpful behavior - we parse DTDs even when not validating to provide default attributes
+            // Parse DTD for default attributes and validation
             if (!this.dtdParser) {
                 this.dtdParser = new DTDParser();
             }
 
             try {
-                this.grammar = this.dtdParser.parseString(declaration);
+                const legacyGrammar = this.dtdParser.parseString(declaration);
+                this.grammar = legacyGrammar;
             } catch (error) {
-                // If DTD parsing fails in validating mode, throw an error
-                // In non-validating mode, just log the error and continue without DTD support
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 if (this.validating) {
                     throw new Error(`DTD parsing error: ${errorMessage}`);
                 } else {
-                    // Silently continue without DTD support in non-validating mode
                     console.warn(`DTD parsing warning: ${errorMessage}`);
                 }
             }
@@ -663,9 +467,9 @@ export class DOMBuilder implements ContentHandler {
                         }
                     }
 
-                    let dtdGrammar: Grammar = this.dtdParser.parseDTD(dtdUrl);
-                    if (dtdGrammar) {
-                        this.grammar = dtdGrammar;
+                    let legacyGrammar = this.dtdParser.parseDTD(dtdUrl);
+                    if (legacyGrammar) {
+                        this.grammar = legacyGrammar;
                         this.grammarUrl = dtdUrl;
                     }
                 } catch (error) {

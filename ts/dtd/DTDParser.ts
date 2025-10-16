@@ -20,43 +20,43 @@ import { dirname, sep } from "node:path";
 import { Catalog } from "../Catalog";
 import { FileReader } from "../FileReader";
 import { XMLUtils } from "../XMLUtils";
-import { Grammar } from "../grammar/Grammar";
 import { AttListDecl } from "./AttListDecl";
+import { DTDGrammar } from "./DTDGrammar";
 import { ElementDecl } from "./ElementDecl";
 import { EntityDecl } from "./EntityDecl";
 import { NotationDecl } from "./NotationDecl";
 
 export class DTDParser {
 
-    private grammar: Grammar;
+    private grammar: DTDGrammar;
     private catalog: Catalog | undefined;
     private pointer: number = 0;
-    private source: string;
-    private currentFile: string;
+    private source: string = '';
+    private currentFile: string = '';
     private baseDirectory: string = '';
 
-    constructor(grammar?: Grammar, baseDirectory?: string) {
-        this.source = '';
-        this.currentFile = '';
+    constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
             this.grammar = grammar;
         } else {
-            this.grammar = new Grammar();
+            this.grammar = new DTDGrammar();
         }
-        this.baseDirectory = baseDirectory || '';
+        if (baseDirectory) {
+            this.baseDirectory = baseDirectory;
+        }
     }
 
     setCatalog(catalog: Catalog) {
         this.catalog = catalog;
     }
 
-    parseDTD(file: string): Grammar {
+    parseDTD(file: string): DTDGrammar {
         this.parseFile(file);
         this.grammar.processModels();
         return this.grammar;
     }
 
-    parseFile(file: string): Grammar {
+    parseFile(file: string): DTDGrammar {
         this.source = '';
         let stats: Stats = statSync(file, { bigint: false, throwIfNoEntry: true });
         this.currentFile = file;
@@ -72,14 +72,14 @@ export class DTDParser {
         return this.parse();
     }
 
-    parseString(source: string): Grammar {
+    parseString(source: string): DTDGrammar {
         this.source = source;
         this.parse();
         this.grammar.processModels();
         return this.grammar;
     }
 
-    parse(): Grammar {
+    parse(): DTDGrammar {
         this.pointer = 0;
         while (this.pointer < this.source.length) {
             if (this.lookingAt('<!ELEMENT')) {
@@ -179,7 +179,7 @@ export class DTDParser {
                     if (this.catalog) {
                         parser.setCatalog(this.catalog);
                     }
-                    let externalGrammar: Grammar = parser.parseFile(location);
+                    let externalGrammar: DTDGrammar = parser.parseFile(location);
                     this.grammar.merge(externalGrammar);
                     this.pointer = index + ';'.length;
                 } else {
@@ -303,12 +303,12 @@ export class DTDParser {
             }
             name += char;
         }
-        
+
         // Validate entity name
         if (!XMLUtils.isValidXMLName(name)) {
             throw new Error(`Invalid entity name in DTD: "${name}" - XML names must be valid`);
         }
-        
+
         if (XMLUtils.hasParameterEntity(name)) {
             name = this.resolveEntities(name);
         }
@@ -578,12 +578,12 @@ export class DTDParser {
             }
             name += char;
         }
-        
+
         // Validate notation name
         if (!XMLUtils.isValidXMLName(name)) {
             throw new Error(`Invalid notation name in DTD: "${name}" - XML names must be valid`);
         }
-        
+
         // skip spaces before external id
         for (; i < declaration.length; i++) {
             char = declaration.charAt(i);
@@ -692,15 +692,15 @@ export class DTDParser {
             }
             attributesText += char;
         }
-        
+
         // Validate element name in ATTLIST declaration
         if (!XMLUtils.isValidXMLName(name)) {
             throw new Error(`Invalid element name in ATTLIST declaration: "${name}"`);
         }
-        
+
         // Expand parameter entities in attributes text before parsing
         attributesText = this.expandParameterEntities(attributesText);
-        
+
         let list: AttListDecl = new AttListDecl(name, attributesText)
         return list;
     }
@@ -724,12 +724,12 @@ export class DTDParser {
             }
             name += char;
         }
-        
+
         // Validate element name
         if (!XMLUtils.isValidXMLName(name)) {
             throw new Error(`Invalid element name in DTD: "${name}" - XML names must be valid`);
         }
-        
+
         // skip spaces before content spec
         for (; i < declaration.length; i++) {
             char = declaration.charAt(i);
@@ -766,15 +766,15 @@ export class DTDParser {
         let i = startPointer;
         let inQuotes = false;
         let quoteChar = '';
-        
+
         // Skip past the opening tag (e.g., "<!ENTITY", "<!ATTLIST")
         while (i < this.source.length && !XMLUtils.isXmlSpace(this.source.charAt(i)) && this.source.charAt(i) !== '>') {
             i++;
         }
-        
+
         while (i < this.source.length) {
             let char = this.source.charAt(i);
-            
+
             if (!inQuotes && (char === '"' || char === "'")) {
                 // Starting a quoted section
                 inQuotes = true;
@@ -787,10 +787,10 @@ export class DTDParser {
                 // Found the end of the declaration
                 return i;
             }
-            
+
             i++;
         }
-        
+
         return -1; // Not found
     }
 
@@ -817,7 +817,7 @@ export class DTDParser {
     loadExternalEntity(publicId: string, systemId: string, isReferenced: boolean = false): string {
         try {
             let location = this.resolveEntity(publicId, systemId);
-            
+
             // Use FileReader to properly handle different encodings (UTF-8, UTF-16, etc.)
             let reader = new FileReader(location);
             let content = '';
@@ -825,10 +825,10 @@ export class DTDParser {
                 content += reader.read();
             }
             reader.closeFile();
-            
+
             // Validate that content is valid XML text (not binary)
             this.validateTextContent(content, location);
-            
+
             // Don't trim - preserve original content including whitespace/newlines
             return content;
         } catch (error) {
@@ -836,7 +836,7 @@ export class DTDParser {
             if (this.baseDirectory === '' && this.currentFile === '') {
                 return '';
             }
-            
+
             // XML specification behavior depends on context:
             // - Referenced external entities (used in document) must be loadable (fatal error)
             // - Unreferenced external entities (DTD declarations only) can be missing (warning)
@@ -855,20 +855,20 @@ export class DTDParser {
         if (content.includes('\0')) {
             throw new Error(`External entity "${location}" contains binary data (null bytes) and cannot be used as XML text`);
         }
-        
+
         // Skip BOM if present (UTF-8: \uFEFF or UTF-16: \uFEFF)
         let textContent = content;
         if (textContent.charCodeAt(0) === 0xFEFF) {
             textContent = textContent.substring(1);
         }
-        
+
         // Check for XML declarations in external entities (not allowed)
         const xmlDeclPattern = /<\?xml\s+/gi;
         const xmlDeclMatches = textContent.match(xmlDeclPattern);
         if (xmlDeclMatches && xmlDeclMatches.length > 0) {
             throw new Error(`External entity "${location}" contains XML declaration(s), which is not allowed in external entities`);
         }
-        
+
         // Check for excessive non-printable characters that might indicate binary content
         let nonPrintableCount = 0;
         const checkLength = Math.min(textContent.length, 1000);
@@ -880,7 +880,7 @@ export class DTDParser {
                 nonPrintableCount++;
             }
         }
-        
+
         // If more than 20% of characters are non-printable control characters, likely binary
         // (increased threshold and only checked control chars, not Unicode)
         if (checkLength > 0 && (nonPrintableCount / checkLength) > 0.2) {
@@ -893,28 +893,28 @@ export class DTDParser {
         let expandedEntities = new Set<string>(); // Track expanded entities to prevent circular references
         let maxIterations = 50; // Increase limit for complex DTDs
         let iteration = 0;
-        
+
         while (iteration < maxIterations) {
             let changed = false;
-            
+
             // Find all parameter entity references in current text
             let entityMatches = result.match(/%[a-zA-Z0-9_.-]+;/g);
             if (!entityMatches) {
                 break; // No more entities to expand
             }
-            
+
             for (let entityRef of entityMatches) {
                 let entityName = entityRef.substring(1, entityRef.length - 1); // Remove % and ;
-                
+
                 // Skip if we've already expanded this entity to prevent cycles
                 if (expandedEntities.has(entityName)) {
                     continue;
                 }
-                
+
                 let entity = this.grammar.getEntity(entityName);
                 if (entity && entity.getValue()) {
                     let entityValue = entity.getValue();
-                    
+
                     // Only expand if the value doesn't contain the same entity reference (simple cycle detection)
                     if (!entityValue.includes(entityRef)) {
                         result = result.replace(new RegExp(this.escapeRegExp(entityRef), 'g'), entityValue);
@@ -923,26 +923,26 @@ export class DTDParser {
                     }
                 }
             }
-            
+
             if (!changed) {
                 break; // No more expansions possible
             }
-            
+
             iteration++;
         }
-        
+
         if (iteration >= maxIterations) {
             console.warn(`Parameter entity expansion reached maximum iterations (${maxIterations}), some entities may not be fully expanded`);
         }
-        
+
         return result;
     }
-    
+
     private escapeRegExp(string: string): string {
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    getGrammar(): Grammar {
+    getGrammar(): DTDGrammar {
         return this.grammar;
     }
 }

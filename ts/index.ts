@@ -44,6 +44,13 @@ export { EntityDecl } from "./dtd/EntityDecl";
 export { InternalSubset } from "./dtd/InternalSubset";
 export { NotationDecl } from "./dtd/NotationDecl";
 
-export { ContentModel, Cardinality, ContentModelType } from "./grammar/ContentModel";
-export { ContentParticle, ContentParticleType } from "./grammar/contentParticle";
-export { Grammar } from "./grammar/Grammar";
+export { ContentModel, Cardinality, ContentModelType } from "./dtd/ContentModel";
+export { ContentParticle, ContentParticleType } from "./dtd/contentParticle";
+export { DTDChoice } from "./dtd/dtdChoice";
+export { DTDGrammar } from "./dtd/DTDGrammar";
+export { DTDName } from "./dtd/dtdName";
+export { DTDPCData } from "./dtd/dtdPCData";
+export { DTDSecuence } from "./dtd/dtdSecuence";
+
+export { Grammar, GrammarType, QualifiedName, AttributeInfo, AttributeUse, ValidationContext, ValidationResult, ValidationError, ValidationWarning } from "./grammar/Grammar";
+export { NoOpGrammar } from "./grammar/NoOpGrammar";

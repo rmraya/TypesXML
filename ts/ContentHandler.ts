@@ -23,6 +23,7 @@ export interface ContentHandler {
     initialize(): void;
     setCatalog(catalog: Catalog): void;
     setValidating(validating: boolean): void;
+    setIncludeDefaultAttributes(include: boolean): void;
 
     startDocument(): void;
     endDocument(): void;

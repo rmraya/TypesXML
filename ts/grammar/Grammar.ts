@@ -15,191 +15,128 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { XMLUtils } from "../XMLUtils";
-import { AttDecl } from "../dtd/AttDecl";
-import { ElementDecl } from "../dtd/ElementDecl";
-import { EntityDecl } from "../dtd/EntityDecl";
-import { NotationDecl } from "../dtd/NotationDecl";
-import { ContentModel } from "./ContentModel";
+// Namespace-aware naming
+export class QualifiedName {
+    constructor(
+        public localName: string,
+        public namespaceURI: string = '',
+        public prefix: string = ''
+    ) { }
 
-export class Grammar {
-    private models: Map<string, ContentModel>;
-
-    private entitiesMap: Map<string, EntityDecl>;
-    private attributesMap: Map<string, Map<string, AttDecl>>;
-    private elementDeclMap: Map<string, ElementDecl>;
-    private notationsMap: Map<string, NotationDecl>;
-
-    // Track entity references used in the document for canonicalization
-    private usedEntityReferences: Map<string, string>; // Maps expanded text back to original reference form
-
-    constructor() {
-        this.models = new Map();
-        this.elementDeclMap = new Map();
-        this.attributesMap = new Map();
-        this.entitiesMap = new Map();
-        this.notationsMap = new Map();
-        this.usedEntityReferences = new Map();
-        this.addPredefinedEntities();
-    }
-
-    addPredefinedEntities() {
-        this.addEntity(new EntityDecl('lt', false, '<', '', '', ''));
-        this.addEntity(new EntityDecl('gt', false, '>', '', '', ''));
-        this.addEntity(new EntityDecl('amp', false, '&', '', '', ''));
-        this.addEntity(new EntityDecl('apos', false, "'", '', '', ''));
-        this.addEntity(new EntityDecl('quot', false, '"', '', '', ''));
-    }
-
-    getContentModel(elementName: string): ContentModel | undefined {
-        return this.models.get(elementName);
+    equals(other: QualifiedName): boolean {
+        return this.localName === other.localName &&
+            this.namespaceURI === other.namespaceURI;
     }
 
     toString(): string {
-        let result: string = '';
-        this.models.forEach((value: ContentModel) => {
-            result = result + value.toString() + '\n';
-        });
+        return this.prefix ? `${this.prefix}:${this.localName}` : this.localName;
+    }
+
+    // For backward compatibility with string-based element names
+    static fromString(name: string): QualifiedName {
+        const colonIndex = name.indexOf(':');
+        if (colonIndex !== -1) {
+            const prefix = name.substring(0, colonIndex);
+            const localName = name.substring(colonIndex + 1);
+            return new QualifiedName(localName, '', prefix);
+        }
+        return new QualifiedName(name);
+    }
+}
+
+// Unified attribute information
+export class AttributeInfo {
+    constructor(
+        public name: QualifiedName,
+        public datatype: string,
+        public use: AttributeUse,
+        public defaultValue?: string,
+        public fixedValue?: string
+    ) { }
+}
+
+export enum AttributeUse {
+    REQUIRED = 'required',
+    OPTIONAL = 'optional',
+    IMPLIED = 'implied',
+    FIXED = 'fixed',
+    PROHIBITED = 'prohibited'
+}
+
+// Validation context
+export class ValidationContext {
+    constructor(
+        public children: QualifiedName[],
+        public attributes: Map<QualifiedName, string>,
+        public textContent: string,
+        public parent?: QualifiedName
+    ) { }
+}
+
+// Validation result
+export class ValidationError {
+    constructor(
+        public message: string,
+        public location?: string
+    ) { }
+}
+
+export class ValidationWarning {
+    constructor(
+        public message: string,
+        public location?: string
+    ) { }
+}
+
+export class ValidationResult {
+    constructor(
+        public isValid: boolean,
+        public errors: ValidationError[] = [],
+        public warnings: ValidationWarning[] = []
+    ) { }
+
+    static success(): ValidationResult {
+        return new ValidationResult(true);
+    }
+
+    static error(message: string, location?: string): ValidationResult {
+        return new ValidationResult(false, [new ValidationError(message, location)]);
+    }
+
+    static warning(message: string, location?: string): ValidationResult {
+        const result = new ValidationResult(true);
+        result.warnings.push(new ValidationWarning(message, location));
         return result;
     }
+}
 
-    addElement(elementDecl: ElementDecl) {
-        if (!this.elementDeclMap.has(elementDecl.getName())) {
-            this.elementDeclMap.set(elementDecl.getName(), elementDecl);
-        }
-    }
+// Grammar type enumeration
+export enum GrammarType {
+    DTD = 'dtd',
+    XML_SCHEMA = 'xmlschema',
+    RELAX_NG = 'relaxng',
+    NONE = 'none'
+}
 
-    addAttributes(element: string, attributes: Map<string, AttDecl>) {
-        // Check if element already has attributes - if so, merge them
-        let existingAttributes = this.attributesMap.get(element);
-        if (existingAttributes) {
-            // Merge new attributes with existing ones
-            // First declaration takes precedence (XML spec) - don't overwrite existing
-            attributes.forEach((value, key) => {
-                if (!existingAttributes!.has(key)) {
-                    existingAttributes!.set(key, value);
-                }
-            });
-        } else {
-            // First time adding attributes for this element
-            this.attributesMap.set(element, attributes);
-        }
-    }
+// Main Grammar interface
+export interface Grammar {
+    // Core validation methods
+    validateElement(element: QualifiedName, content: ValidationContext): ValidationResult;
+    getElementAttributes(element: QualifiedName): Map<QualifiedName, AttributeInfo>;
+    getDefaultAttributes(element: QualifiedName): Map<QualifiedName, string>;
 
-    resolveParameterEntities(text: string): string {
-        while (XMLUtils.hasParameterEntity(text)) {
-            let start: number = text.indexOf('%');
-            let end: number = text.indexOf(';');
-            let entityName: string = text.substring(start + '%'.length, end);
-            let entity: EntityDecl | undefined = this.getParameterEntity(entityName);
-            if (entity === undefined) {
-                throw new Error('Unknown entity: ' + entityName);
-            }
-            text = text.replace('%' + entityName + ';', entity.getValue());
-        }
-        return text;
-    }
+    // Entity resolution (for DTD compatibility)
+    resolveEntity(name: string): string | undefined;
 
-    addEntity(entityDecl: EntityDecl) {
-        // Use different keys for parameter entities vs general entities to avoid conflicts
-        const key = entityDecl.isParameterEntity() ? `%${entityDecl.getName()}` : entityDecl.getName();
-        if (!this.entitiesMap.has(key)) {
-            this.entitiesMap.set(key, entityDecl);
-        }
-    }
+    // Entity reference tracking (for canonicalization)
+    addEntityReferenceUsage(originalReference: string, expandedText: string): void;
+    getOriginalEntityReference(expandedText: string): string | undefined;
+    clearEntityReferenceTracking(): void;
 
-    getEntity(entityName: string): EntityDecl | undefined {
-        // Only look up general entities (not parameter entities) when called from entity references
-        return this.entitiesMap.get(entityName);
-    }
+    // Grammar type identification
+    getGrammarType(): GrammarType;
 
-    getParameterEntity(entityName: string): EntityDecl | undefined {
-        // Look up parameter entities specifically
-        return this.entitiesMap.get(`%${entityName}`);
-    }
-
-    addNotation(notation: NotationDecl) {
-        if (!this.notationsMap.has(notation.getName())) {
-            this.notationsMap.set(notation.getName(), notation);
-        }
-    }
-
-    merge(grammar: Grammar): void {
-        grammar.getEntitiesMap().forEach((value: EntityDecl, key: string) => {
-            if (!this.entitiesMap.has(key)) {
-                this.entitiesMap.set(key, value);
-            }
-        });
-        grammar.getAttributesMap().forEach((value: Map<string, AttDecl>, key: string) => {
-            if (!this.attributesMap.has(key)) {
-                this.attributesMap.set(key, value);
-            }
-        });
-        grammar.getElementDeclMap().forEach((value: ElementDecl, key: string) => {
-            if (!this.elementDeclMap.has(key)) {
-                this.elementDeclMap.set(key, value);
-            }
-        });
-        grammar.getNotationsMap().forEach((value: NotationDecl, key: string) => {
-            if (!this.notationsMap.has(key)) {
-                this.notationsMap.set(key, value);
-            }
-        });
-    }
-
-    getNotationsMap(): Map<string, NotationDecl> {
-        return this.notationsMap;
-    }
-
-    getElementDeclMap(): Map<string, ElementDecl> {
-        return this.elementDeclMap;
-    }
-
-    getEntitiesMap(): Map<string, EntityDecl> {
-        return this.entitiesMap
-    }
-
-    processModels() {
-        this.elementDeclMap.forEach((elementDecl: ElementDecl) => {
-            let name: string = elementDecl.getName();
-            if (XMLUtils.hasParameterEntity(name)) {
-                name = this.resolveParameterEntities(name);
-            }
-            let contentSpec: string = elementDecl.getContentSpec();
-            if (XMLUtils.hasParameterEntity(contentSpec)) {
-                contentSpec = this.resolveParameterEntities(contentSpec);
-            }
-            let model: ContentModel = ContentModel.parse(contentSpec);
-            this.models.set(name, model);
-        });
-    }
-
-    getAttributesMap(): Map<string, Map<string, AttDecl>> {
-        return this.attributesMap;
-    }
-
-    getElementAttributesMap(element: string): Map<string, AttDecl> | undefined {
-        return this.attributesMap.get(element);
-    }
-
-    addEntityReferenceUsage(originalReference: string, expandedText: string) {
-        // Track entity reference usage for canonicalization
-        this.usedEntityReferences.set(expandedText, originalReference);
-    }
-
-    getOriginalEntityReference(expandedText: string): string | undefined {
-        // Get original entity reference form for canonicalization
-        return this.usedEntityReferences.get(expandedText);
-    }
-
-    getUsedEntityReferences(): Map<string, string> {
-        // Get all used entity references map
-        return this.usedEntityReferences;
-    }
-
-    clearEntityReferenceTracking() {
-        // Clear entity reference tracking (for new document)
-        this.usedEntityReferences.clear();
-    }
-
+    // Namespace support
+    getTargetNamespace(): string | undefined;
+    getNamespaceDeclarations(): Map<string, string>;
 }

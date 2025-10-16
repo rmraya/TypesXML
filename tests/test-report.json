@@ -1,33 +1,33 @@
 {
-  "timestamp": "2025-10-16T00:10:25.592Z",
-  "duration": 105,
+  "timestamp": "2025-10-16T11:58:55.664Z",
+  "duration": 101,
   "summary": {
     "totalTests": 367,
-    "totalPassed": 202,
+    "totalPassed": 199,
     "categories": {
       "valid": {
-        "passed": 118,
-        "failed": 46
+        "passed": 116,
+        "failed": 48
       },
       "invalid": {
         "passed": 6,
         "failed": 0
       },
       "notWellFormed": {
-        "passed": 78,
-        "failed": 119
+        "passed": 77,
+        "failed": 120
       }
     }
   },
   "details": {
     "valid": {
-      "passed": 118,
-      "failed": 46,
+      "passed": 116,
+      "failed": 48,
       "tests": [
         {
           "file": "sa/001.xml",
           "passed": true,
-          "duration": 2
+          "duration": 3
         },
         {
           "file": "sa/002.xml",
@@ -47,12 +47,12 @@
         {
           "file": "sa/005.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/006.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/007.xml",
@@ -63,12 +63,12 @@
           "file": "sa/008.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/009.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/010.xml",
@@ -83,7 +83,7 @@
         {
           "file": "sa/012.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/013.xml",
@@ -93,7 +93,7 @@
         {
           "file": "sa/014.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/015.xml",
@@ -108,22 +108,22 @@
         {
           "file": "sa/017.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/018.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/019.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/020.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/021.xml",
@@ -138,7 +138,7 @@
         {
           "file": "sa/023.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/024.xml",
@@ -153,12 +153,12 @@
         {
           "file": "sa/026.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/027.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/028.xml",
@@ -168,12 +168,12 @@
         {
           "file": "sa/029.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/030.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/031.xml",
@@ -183,12 +183,12 @@
         {
           "file": "sa/032.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/033.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/034.xml",
@@ -198,12 +198,12 @@
         {
           "file": "sa/035.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/036.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/037.xml",
@@ -213,7 +213,7 @@
         {
           "file": "sa/038.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/039.xml",
@@ -223,7 +223,7 @@
         {
           "file": "sa/040.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/041.xml",
@@ -254,12 +254,12 @@
         {
           "file": "sa/046.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/047.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/048.xml",
@@ -269,12 +269,12 @@
         {
           "file": "sa/049.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/050.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/051.xml",
@@ -355,12 +355,12 @@
           "file": "sa/066.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/067.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/068.xml",
@@ -370,17 +370,17 @@
         {
           "file": "sa/069.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/070.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/071.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/072.xml",
@@ -390,7 +390,7 @@
         {
           "file": "sa/073.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/074.xml",
@@ -400,12 +400,12 @@
         {
           "file": "sa/075.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/076.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/077.xml",
@@ -415,17 +415,17 @@
         {
           "file": "sa/078.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/079.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/080.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/081.xml",
@@ -455,12 +455,12 @@
         {
           "file": "sa/086.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/087.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/088.xml",
@@ -480,13 +480,13 @@
         {
           "file": "sa/091.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/092.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/093.xml",
@@ -496,12 +496,12 @@
         {
           "file": "sa/094.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/095.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/096.xml",
@@ -569,12 +569,12 @@
         {
           "file": "sa/108.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/109.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/110.xml",
@@ -586,12 +586,12 @@
           "file": "sa/111.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/112.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/113.xml",
@@ -607,12 +607,12 @@
           "file": "sa/115.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "sa/116.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "sa/117.xml",
@@ -627,18 +627,19 @@
         {
           "file": "sa/119.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "ext-sa/001.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "ext-sa/002.xml",
-          "passed": true,
-          "duration": 1
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
         },
         {
           "file": "ext-sa/003.xml",
@@ -649,13 +650,13 @@
           "file": "ext-sa/004.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "ext-sa/005.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "ext-sa/006.xml",
@@ -696,12 +697,13 @@
           "file": "ext-sa/012.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "ext-sa/013.xml",
-          "passed": true,
-          "duration": 1
+          "passed": false,
+          "error": "Canonical output mismatch",
+          "duration": 0
         },
         {
           "file": "ext-sa/014.xml",
@@ -712,18 +714,18 @@
         {
           "file": "not-sa/001.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-sa/002.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-sa/003.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-sa/004.xml",
@@ -747,13 +749,13 @@
           "file": "not-sa/007.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-sa/008.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-sa/009.xml",
@@ -770,7 +772,7 @@
           "file": "not-sa/011.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-sa/012.xml",
@@ -800,13 +802,13 @@
           "file": "not-sa/016.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-sa/017.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-sa/018.xml",
@@ -818,7 +820,7 @@
           "file": "not-sa/019.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-sa/020.xml",
@@ -830,7 +832,7 @@
           "file": "not-sa/021.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-sa/022.xml",
@@ -842,7 +844,7 @@
           "file": "not-sa/023.xml",
           "passed": false,
           "error": "Canonical output mismatch",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-sa/024.xml",
@@ -899,7 +901,7 @@
         {
           "file": "invalid/001.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "invalid/002.xml",
@@ -914,7 +916,7 @@
         {
           "file": "invalid/004.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "invalid/005.xml",
@@ -924,19 +926,19 @@
         {
           "file": "invalid/006.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         }
       ]
     },
     "notWellFormed": {
-      "passed": 78,
-      "failed": 119,
+      "passed": 77,
+      "failed": 120,
       "tests": [
         {
           "file": "not-wf/ext-sa/001.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/ext-sa/002.xml",
@@ -948,13 +950,13 @@
           "file": "not-wf/ext-sa/003.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/not-sa/001.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/not-sa/002.xml",
@@ -1016,7 +1018,7 @@
         {
           "file": "not-wf/sa/004.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/005.xml",
@@ -1027,7 +1029,7 @@
           "file": "not-wf/sa/006.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/007.xml",
@@ -1057,7 +1059,7 @@
         {
           "file": "not-wf/sa/012.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/013.xml",
@@ -1077,7 +1079,7 @@
         {
           "file": "not-wf/sa/016.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/017.xml",
@@ -1104,7 +1106,7 @@
           "file": "not-wf/sa/021.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/022.xml",
@@ -1130,7 +1132,7 @@
         {
           "file": "not-wf/sa/026.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/027.xml",
@@ -1150,13 +1152,13 @@
         {
           "file": "not-wf/sa/030.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/031.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/032.xml",
@@ -1210,12 +1212,12 @@
           "file": "not-wf/sa/041.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/042.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/043.xml",
@@ -1256,7 +1258,7 @@
         {
           "file": "not-wf/sa/050.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/051.xml",
@@ -1267,7 +1269,7 @@
           "file": "not-wf/sa/052.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/053.xml",
@@ -1295,7 +1297,7 @@
           "file": "not-wf/sa/057.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/058.xml",
@@ -1330,13 +1332,13 @@
         {
           "file": "not-wf/sa/063.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/064.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/065.xml",
@@ -1378,13 +1380,13 @@
           "file": "not-wf/sa/071.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/072.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/073.xml",
@@ -1417,7 +1419,7 @@
           "file": "not-wf/sa/078.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/079.xml",
@@ -1429,11 +1431,12 @@
           "file": "not-wf/sa/080.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/081.xml",
-          "passed": true,
+          "passed": false,
+          "error": "Document parsed but should have been rejected",
           "duration": 0
         },
         {
@@ -1452,7 +1455,7 @@
           "file": "not-wf/sa/084.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/085.xml",
@@ -1470,7 +1473,7 @@
           "file": "not-wf/sa/087.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/088.xml",
@@ -1493,7 +1496,7 @@
           "file": "not-wf/sa/091.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/092.xml",
@@ -1516,7 +1519,7 @@
           "file": "not-wf/sa/095.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/096.xml",
@@ -1532,7 +1535,7 @@
         {
           "file": "not-wf/sa/098.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/099.xml",
@@ -1565,7 +1568,7 @@
         {
           "file": "not-wf/sa/104.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/105.xml",
@@ -1581,7 +1584,7 @@
         {
           "file": "not-wf/sa/107.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/108.xml",
@@ -1614,13 +1617,13 @@
           "file": "not-wf/sa/113.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/114.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/115.xml",
@@ -1667,13 +1670,13 @@
           "file": "not-wf/sa/122.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/123.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/124.xml",
@@ -1709,13 +1712,13 @@
           "file": "not-wf/sa/129.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/130.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/131.xml",
@@ -1751,7 +1754,7 @@
           "file": "not-wf/sa/136.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/137.xml",
@@ -1763,7 +1766,7 @@
           "file": "not-wf/sa/138.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/139.xml",
@@ -1806,7 +1809,7 @@
         {
           "file": "not-wf/sa/146.xml",
           "passed": true,
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/147.xml",
@@ -1818,7 +1821,7 @@
           "file": "not-wf/sa/148.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/149.xml",
@@ -1830,7 +1833,7 @@
           "file": "not-wf/sa/150.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/151.xml",
@@ -1880,7 +1883,7 @@
           "file": "not-wf/sa/159.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/160.xml",
@@ -1898,7 +1901,7 @@
           "file": "not-wf/sa/162.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/163.xml",
@@ -1954,13 +1957,13 @@
           "file": "not-wf/sa/172.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/173.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/174.xml",
@@ -1987,19 +1990,19 @@
         {
           "file": "not-wf/sa/178.xml",
           "passed": true,
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/179.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/180.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 0
+          "duration": 1
         },
         {
           "file": "not-wf/sa/181.xml",
@@ -2028,7 +2031,7 @@
           "file": "not-wf/sa/185.xml",
           "passed": false,
           "error": "Document parsed but should have been rejected",
-          "duration": 1
+          "duration": 0
         },
         {
           "file": "not-wf/sa/186.xml",
@@ -2040,14 +2043,14 @@
     },
     "errors": [],
     "performance": {
-      "validDuration": 64,
-      "invalidDuration": 2,
-      "notWellFormedDuration": 30
+      "validDuration": 61,
+      "invalidDuration": 1,
+      "notWellFormedDuration": 29
     }
   },
   "performance": {
-    "validDuration": 64,
-    "invalidDuration": 2,
-    "notWellFormedDuration": 30
+    "validDuration": 61,
+    "invalidDuration": 1,
+    "notWellFormedDuration": 29
   }
 }

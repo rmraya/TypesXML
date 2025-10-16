@@ -8,16 +8,18 @@
 4. [Usage Patterns](#usage-patterns)
 5. [Node Types](#node-types)
 6. [Utility Classes](#utility-classes)
-7. [DTD Support](#dtd-support)
-8. [Error Handling](#error-handling)
-9. [Examples](#examples)
+7. [Grammar Framework](#grammar-framework)
+8. [DTD Support](#dtd-support)
+9. [Error Handling](#error-handling)
+10. [Examples](#examples)
 
 ## Overview
 
-TypesXML is an open-source XML library written in TypeScript that provides both SAX (event-driven) and DOM (tree-based) parsing capabilities. It implements a complete XML 1.0/1.1 parser with full DTD validation and processing features.
+TypesXML is an open-source XML library written in TypeScript that provides both SAX (event-driven) and DOM (tree-based) parsing capabilities. It implements a complete XML 1.0/1.1 parser with extensible grammar-based validation framework supporting multiple schema types.
 
 ### Key Features
 
+- **Multi-Schema Validation Framework**: Extensible Grammar interface supporting DTD, XML Schema, and RelaxNG
 - **SAX Parser**: Event-driven parsing for memory-efficient processing of large XML files
 - **DOM Builder**: Creates an in-memory tree representation of XML documents
 - **Complete DTD Support**: Full parsing and validation of Document Type Definitions
@@ -25,7 +27,8 @@ TypesXML is an open-source XML library written in TypeScript that provides both 
 - **XML Writer**: Utilities for writing XML documents to files
 - **Encoding Support**: Handles various character encodings including UTF-8, UTF-16LE
 - **Entity Resolution**: Built-in support for XML entities and catalog-based resolution
-- **Namespace Support**: Full XML namespace handling
+- **Namespace Support**: Full XML namespace handling with QualifiedName system
+- **Flexible Validation**: Grammar-based validation with configurable strictness levels
 
 ## Quick Start Guide
 
@@ -38,12 +41,18 @@ npm install typesxml
 ### Basic Usage
 
 ```typescript
-import { SAXParser, DOMBuilder, XMLDocument, XMLElement } from 'typesxml';
+import { SAXParser, DOMBuilder, XMLDocument, XMLElement, DTDGrammar, DTDParser } from 'typesxml';
 
 // Create parser and content handler
 const contentHandler = new DOMBuilder();
 const parser = new SAXParser();
 parser.setContentHandler(contentHandler);
+
+// Optional: Set up grammar-based validation
+const dtdParser = new DTDParser();
+const grammar = dtdParser.parseDTD('schema.dtd');
+parser.setGrammar(grammar);
+parser.setValidating(true); // Enable strict validation
 
 // Parse XML from file
 parser.parseFile('document.xml');
@@ -72,7 +81,9 @@ new SAXParser()
 | Method | Description | Parameters | Returns |
 |--------|-------------|------------|---------|
 | `setContentHandler(handler)` | Sets the content handler to receive parsing events | `handler: ContentHandler` | `void` |
-| `setValidating(validating)` | Enable/disable DTD validation mode | `validating: boolean` | `void` |
+| `setValidating(validating)` | Enable/disable strict validation mode | `validating: boolean` | `void` |
+| `setGrammar(grammar)` | Sets the grammar for validation | `grammar: Grammar` | `void` |
+| `setIncludeDefaultAttributes(include)` | Enable/disable default attribute processing | `include: boolean` | `void` |
 | `parseFile(path, encoding?)` | Parses XML from a file | `path: string, encoding?: BufferEncoding` | `void` |
 | `parseString(data)` | Parses XML from a string | `data: string` | `void` |
 
@@ -82,6 +93,13 @@ new SAXParser()
 const parser = new SAXParser();
 const contentHandler = new DOMBuilder();
 parser.setContentHandler(contentHandler);
+
+// Set up grammar-based validation
+const dtdParser = new DTDParser();
+const grammar = dtdParser.parseDTD('schema.dtd');
+parser.setGrammar(grammar);
+parser.setValidating(true); // Enable strict validation
+parser.setIncludeDefaultAttributes(true); // Include default attributes
 
 try {
     parser.parseFile('example.xml', 'utf8');
@@ -107,6 +125,8 @@ new DOMBuilder()
 |--------|-------------|------------|---------|
 | `getDocument()` | Returns the built XML document | none | `XMLDocument \| undefined` |
 | `setCatalog(catalog)` | Sets an entity catalog for resolution | `catalog: Catalog` | `void` |
+| `setGrammar(grammar)` | Sets the grammar for validation | `grammar: Grammar` | `void` |
+| `setIncludeDefaultAttributes(include)` | Enable/disable default attribute processing | `include: boolean` | `void` |
 | `initialize()` | Initializes the builder (called automatically) | none | `void` |
 
 #### DOMBuilder Example
@@ -333,13 +353,27 @@ console.log(doc.toString());
 ### Pattern 3: Custom Content Handler
 
 ```typescript
-import { ContentHandler, SAXParser, XMLAttribute } from 'typesxml';
+import { ContentHandler, SAXParser, XMLAttribute, Grammar, Catalog } from 'typesxml';
 
 class CustomHandler implements ContentHandler {
     private depth = 0;
+    private grammar?: Grammar;
     
     initialize(): void {
         console.log('Document parsing started');
+    }
+    
+    setCatalog(catalog: Catalog): void {
+        console.log('Catalog set for entity resolution');
+    }
+    
+    setGrammar(grammar: Grammar): void {
+        this.grammar = grammar;
+        console.log('Grammar set for validation:', grammar.getType());
+    }
+    
+    setIncludeDefaultAttributes(include: boolean): void {
+        console.log('Include default attributes:', include);
     }
     
     startElement(name: string, atts: XMLAttribute[]): void {
@@ -362,7 +396,6 @@ class CustomHandler implements ContentHandler {
     }
     
     // Implement other required methods...
-    setCatalog() {}
     startDocument() {}
     endDocument() {}
     xmlDeclaration() {}
@@ -440,13 +473,210 @@ const content = reader.read();
 reader.closeFile();
 ```
 
+## Grammar Framework
+
+TypesXML implements an extensible Grammar framework that provides a unified interface for multi-schema validation. The framework supports DTD, XML Schema, and RelaxNG validation through a common abstraction layer.
+
+### Grammar Interface
+
+The core `Grammar` interface defines validation methods that work across different schema types:
+
+```typescript
+import { 
+    Grammar, 
+    GrammarType, 
+    QualifiedName, 
+    ValidationContext, 
+    ValidationResult,
+    AttributeInfo 
+} from 'typesxml';
+
+interface Grammar {
+    getType(): GrammarType;
+    
+    // Element validation
+    validateElement(elementName: QualifiedName, context: ValidationContext): ValidationResult;
+    getElementContentModel(elementName: QualifiedName): ContentModel | undefined;
+    
+    // Attribute validation
+    validateAttributes(elementName: QualifiedName, attributes: Map<QualifiedName, string>, context: ValidationContext): ValidationResult;
+    getElementAttributes(elementName: QualifiedName): Map<QualifiedName, AttributeInfo>;
+    getDefaultAttributes(elementName: QualifiedName): Map<QualifiedName, string>;
+    
+    // Content validation
+    validateElementContent(elementName: QualifiedName, children: QualifiedName[], textContent: string, context: ValidationContext): ValidationResult;
+    
+    // Type validation
+    validateAttributeValue(elementName: QualifiedName, attributeName: QualifiedName, value: string, context: ValidationContext): ValidationResult;
+    
+    // Entity resolution
+    getEntityValue(entityName: string): string | undefined;
+    hasEntity(entityName: string): boolean;
+    
+    // Notation support
+    getNotation(notationName: string): NotationDecl | undefined;
+    hasNotation(notationName: string): boolean;
+    
+    // Schema information
+    getTargetNamespace(): string | undefined;
+    getSchemaLocation(): string | undefined;
+}
+```
+
+### Grammar Types
+
+```typescript
+enum GrammarType {
+    NONE = 'none',
+    DTD = 'dtd',
+    XML_SCHEMA = 'xml-schema',
+    RELAX_NG = 'relax-ng'
+}
+```
+
+### QualifiedName System
+
+The framework uses `QualifiedName` for namespace-aware processing:
+
+```typescript
+import { QualifiedName } from 'typesxml';
+
+// Create qualified names
+const element = new QualifiedName('book', 'http://example.com/books', 'bk');
+const attribute = new QualifiedName('id');
+
+console.log(element.getLocalName()); // 'book'
+console.log(element.getNamespaceURI()); // 'http://example.com/books'
+console.log(element.getPrefix()); // 'bk'
+console.log(element.toString()); // 'bk:book'
+```
+
+### Validation Context and Results
+
+```typescript
+import { ValidationContext, ValidationResult, ValidationError, ValidationWarning } from 'typesxml';
+
+// Create validation context
+const context = new ValidationContext();
+context.setCurrentElement(new QualifiedName('book'));
+context.setCurrentLine(25);
+context.setCurrentColumn(10);
+
+// Create validation results
+const success = ValidationResult.success();
+const error = ValidationResult.error('Element not allowed here', new QualifiedName('invalid'));
+const warning = ValidationResult.warning('Deprecated element usage', new QualifiedName('old-element'));
+
+// Check results
+if (error.hasErrors()) {
+    error.getErrors().forEach(err => {
+        console.log(`Error at line ${err.getLine()}: ${err.getMessage()}`);
+    });
+}
+```
+
+### Grammar Implementations
+
+#### NoOpGrammar
+
+Provides a no-operation grammar for documents without schema validation:
+
+```typescript
+import { NoOpGrammar } from 'typesxml';
+
+const noOpGrammar = new NoOpGrammar();
+console.log(noOpGrammar.getType()); // GrammarType.NONE
+
+// All validation methods return success
+const result = noOpGrammar.validateElement(new QualifiedName('any'), new ValidationContext());
+console.log(result.isValid()); // true
+```
+
+#### DTDGrammar
+
+Wraps existing DTD functionality in the Grammar interface:
+
+```typescript
+import { DTDGrammar, DTDParser } from 'typesxml';
+
+// Create DTDGrammar from DTD file
+const dtdParser = new DTDParser();
+const dtdGrammar = dtdParser.parseDTD('schema.dtd');
+
+console.log(dtdGrammar.getType()); // GrammarType.DTD
+
+// Access DTD-specific functionality
+const elementDecls = dtdGrammar.getElementDeclMap();
+const attributeDecls = dtdGrammar.getAttributesMap();
+const entities = dtdGrammar.getEntitiesMap();
+
+// Use Grammar interface methods
+const bookName = new QualifiedName('book');
+const contentModel = dtdGrammar.getElementContentModel(bookName);
+const defaultAttrs = dtdGrammar.getDefaultAttributes(bookName);
+```
+
+### Using Grammars with SAXParser
+
+```typescript
+import { SAXParser, DOMBuilder, DTDParser, NoOpGrammar } from 'typesxml';
+
+const parser = new SAXParser();
+const builder = new DOMBuilder();
+parser.setContentHandler(builder);
+
+// Option 1: Use DTD grammar
+const dtdParser = new DTDParser();
+const dtdGrammar = dtdParser.parseDTD('schema.dtd');
+parser.setGrammar(dtdGrammar);
+parser.setValidating(true); // Enable strict validation
+
+// Option 2: Use no-op grammar (no validation)
+const noOpGrammar = new NoOpGrammar();
+parser.setGrammar(noOpGrammar);
+parser.setValidating(false);
+
+// Option 3: Let parser use default (automatic DTD detection)
+// parser.setGrammar() not called - parser will auto-detect DTD from document
+
+parser.parseFile('document.xml');
+```
+
+### Attribute Information
+
+```typescript
+import { AttributeInfo, QualifiedName } from 'typesxml';
+
+const attrInfo = new AttributeInfo(
+    new QualifiedName('id'),
+    'ID',
+    undefined, // no default value
+    '#REQUIRED'
+);
+
+console.log(attrInfo.getName().getLocalName()); // 'id'
+console.log(attrInfo.getType()); // 'ID'
+console.log(attrInfo.hasDefaultValue()); // false
+console.log(attrInfo.getDefaultDecl()); // '#REQUIRED'
+```
+
+### Grammar Framework Benefits
+
+1. **Unified Validation**: Single interface for all schema types
+2. **Namespace Support**: Full namespace handling with QualifiedName
+3. **Extensibility**: Easy to add new schema types (XML Schema, RelaxNG)
+4. **Detailed Validation**: Rich error reporting with line/column information
+5. **Flexible Processing**: Choose validation strictness levels
+6. **Backward Compatibility**: Existing DTD code continues to work
+
 ## DTD Support
 
-The library includes comprehensive DTD (Document Type Definition) support with complete Grammar generation, full validation, and default attribute processing:
+The library includes comprehensive DTD (Document Type Definition) support through the Grammar framework, with complete DTDGrammar implementation, full validation, and default attribute processing:
 
 ### Key DTD Features
 
 - **Complete DTD Parsing**: Full support for element, attribute, entity, and notation declarations
+- **Grammar Integration**: DTD functionality wrapped in the unified Grammar interface
 - **Full DTD Validation**: Complete validation against DTD constraints including element sequences, choice groups, and cardinality
 - **Flexible Validation Modes**: Strict validation with `setValidating(true)` or helpful processing with `setValidating(false)`
 - **Default Attribute Processing**: Automatic setting of default attribute values from DTD
@@ -459,7 +689,7 @@ The library includes comprehensive DTD (Document Type Definition) support with c
 ```typescript
 import { 
     DTDParser, 
-    Grammar,
+    DTDGrammar,
     ContentModel,
     ElementDecl, 
     AttListDecl, 
@@ -471,9 +701,9 @@ import {
     Catalog
 } from 'typesxml';
 
-// Parse DTD and generate Grammar
+// Parse DTD and generate DTDGrammar
 const dtdParser = new DTDParser();
-const grammar = dtdParser.parseDTD('schema.dtd');
+const dtdGrammar = dtdParser.parseDTD('schema.dtd');
 
 // Parse XML with DTD validation and default attributes
 const parser = new SAXParser();
@@ -483,19 +713,23 @@ const builder = new DOMBuilder();
 const catalog = new Catalog('/path/to/catalog.xml');
 builder.setCatalog(catalog);
 
+// Set the DTD grammar
+parser.setGrammar(dtdGrammar);
+
 // Enable validation (optional - default attributes work in both modes)
 parser.setValidating(true);
+parser.setIncludeDefaultAttributes(true);
 parser.setContentHandler(builder);
 
 // Parse document - default attributes will be automatically added
 parser.parseFile('document.xml');
 const doc = builder.getDocument();
 
-// Access parsed components
-const elementDeclarations = grammar.getElementDeclMap();
-const attributeDeclarations = grammar.getAttributesMap();
-const entities = grammar.getEntitiesMap();
-const notations = grammar.getNotationsMap();
+// Access parsed components through DTDGrammar
+const elementDeclarations = dtdGrammar.getElementDeclMap();
+const attributeDeclarations = dtdGrammar.getAttributesMap();
+const entities = dtdGrammar.getEntitiesMap();
+const notations = dtdGrammar.getNotationsMap();
 ```
 
 ### Validation and Default Attributes
@@ -601,45 +835,72 @@ ditaElements?.forEach(element => {
 // p: - topic/p 
 ```
 
-### Grammar Class
+### DTDGrammar Class
 
-The `Grammar` class represents a complete parsed DTD with all its components:
+The `DTDGrammar` class implements the Grammar interface and represents a complete parsed DTD with all its components:
 
-#### Grammar Methods
+#### DTDGrammar Methods
 
 | Method | Description | Returns |
 |--------|-------------|---------|
-| `getContentModel(elementName)` | Get content model for an element | `ContentModel \| undefined` |
+| `getType()` | Get grammar type | `GrammarType.DTD` |
+| `validateElement(elementName, context)` | Validate element existence | `ValidationResult` |
+| `getElementContentModel(elementName)` | Get content model for an element | `ContentModel \| undefined` |
+| `validateAttributes(elementName, attributes, context)` | Validate element attributes | `ValidationResult` |
+| `getElementAttributes(elementName)` | Get attribute info for element | `Map<QualifiedName, AttributeInfo>` |
+| `getDefaultAttributes(elementName)` | Get default attributes for element | `Map<QualifiedName, string>` |
+| `validateElementContent(elementName, children, textContent, context)` | Validate element content | `ValidationResult` |
+| `validateAttributeValue(elementName, attributeName, value, context)` | Validate attribute value | `ValidationResult` |
+| `getEntityValue(entityName)` | Get entity value | `string \| undefined` |
+| `hasEntity(entityName)` | Check if entity exists | `boolean` |
+| `getNotation(notationName)` | Get notation declaration | `NotationDecl \| undefined` |
+| `hasNotation(notationName)` | Check if notation exists | `boolean` |
+
+#### DTD-Specific Methods
+
+| Method | Description | Returns |
+|--------|-------------|---------|
 | `getElementDeclMap()` | Get all element declarations | `Map<string, ElementDecl>` |
 | `getAttributesMap()` | Get all attribute declarations | `Map<string, Map<string, AttDecl>>` |
-| `getElementAttributesMap(element)` | Get attributes for specific element | `Map<string, AttDecl> \| undefined` |
 | `getEntitiesMap()` | Get all entity declarations | `Map<string, EntityDecl>` |
 | `getNotationsMap()` | Get all notation declarations | `Map<string, NotationDecl>` |
-| `getEntity(name)` | Get specific entity by name | `EntityDecl \| undefined` |
+| `addElement(elementDecl)` | Add element declaration | `void` |
+| `addAttributes(element, attributes)` | Add attribute declarations | `void` |
+| `addEntity(entityDecl)` | Add entity declaration | `void` |
+| `addNotation(notation)` | Add notation declaration | `void` |
+| `merge(grammar)` | Merge with another DTDGrammar | `void` |
 
-#### Grammar Usage Example
+#### DTDGrammar Usage Example
 
 ```typescript
 // Parse DTD
-const grammar = dtdParser.parseDTD('bookstore.dtd');
+const dtdGrammar = dtdParser.parseDTD('bookstore.dtd');
 
-// Check element structure
-const bookModel = grammar.getContentModel('book');
+// Check element structure using Grammar interface
+const bookName = new QualifiedName('book');
+const bookModel = dtdGrammar.getElementContentModel(bookName);
 if (bookModel) {
     console.log('Book content type:', bookModel.getType());
     console.log('Book children:', [...bookModel.getChildren()]);
 }
 
-// Check attributes for an element
-const bookAttributes = grammar.getElementAttributesMap('book');
-bookAttributes?.forEach((attDecl, attName) => {
-    console.log(`${attName}: ${attDecl.getType()} = ${attDecl.getDefaultValue()}`);
+// Check attributes for an element using Grammar interface
+const bookAttributes = dtdGrammar.getElementAttributes(bookName);
+bookAttributes.forEach((attrInfo, attrName) => {
+    console.log(`${attrName.getLocalName()}: ${attrInfo.getType()} = ${attrInfo.getDefaultValue()}`);
 });
 
-// Access entities
-const copyrightEntity = grammar.getEntity('copyright');
-if (copyrightEntity) {
-    console.log('Copyright text:', copyrightEntity.getValue());
+// Access DTD-specific functionality
+const elementDecls = dtdGrammar.getElementDeclMap();
+const bookElementDecl = elementDecls.get('book');
+if (bookElementDecl) {
+    console.log('Book element spec:', bookElementDecl.getContentSpec());
+}
+
+// Access entities through Grammar interface
+const copyrightText = dtdGrammar.getEntityValue('copyright');
+if (copyrightText) {
+    console.log('Copyright text:', copyrightText);
 }
 ```
 
@@ -697,6 +958,40 @@ Content models are composed of particles representing different content types:
 - **DTDSecuence**: Represents sequences (A, B, C)
 - **DTDPCData**: Represents #PCDATA content
 
+#### DTD Content Particle Classes
+
+```typescript
+import { DTDName, DTDChoice, DTDSecuence, DTDPCData, ContentParticle } from 'typesxml';
+
+// Create element name particle
+const titleParticle = new DTDName('title');
+console.log(titleParticle.getName()); // 'title'
+console.log(titleParticle.getType()); // ContentParticleType.NAME
+
+// Create choice particle (author | editor)
+const choice = new DTDChoice();
+choice.addParticle(new DTDName('author'));
+choice.addParticle(new DTDName('editor'));
+choice.setCardinality(Cardinality.ONEMANY); // +
+console.log(choice.toString()); // '(author|editor)+'
+
+// Create sequence particle (title, subtitle?)
+const sequence = new DTDSecuence();
+sequence.addParticle(new DTDName('title'));
+const subtitle = new DTDName('subtitle');
+subtitle.setCardinality(Cardinality.OPTIONAL); // ?
+sequence.addParticle(subtitle);
+console.log(sequence.toString()); // '(title,subtitle?)'
+
+// Create mixed content with PCDATA
+const mixed = new DTDChoice();
+mixed.addParticle(new DTDPCData());
+mixed.addParticle(new DTDName('em'));
+mixed.addParticle(new DTDName('strong'));
+mixed.setCardinality(Cardinality.ZEROMANY); // *
+console.log(mixed.toString()); // '(#PCDATA|em|strong)*'
+```
+
 #### Cardinality Support
 
 All particles support XML cardinality operators:
@@ -706,20 +1001,60 @@ All particles support XML cardinality operators:
 - **ZEROMANY** (*): Zero or more occurrences
 - **ONEMANY** (+): One or more occurrences
 
+```typescript
+import { Cardinality } from 'typesxml';
+
+const particle = new DTDName('chapter');
+particle.setCardinality(Cardinality.ONEMANY);
+console.log(particle.toString()); // 'chapter+'
+console.log(particle.getCardinality()); // 3 (ONEMANY)
+```
+
+### DTD Parser
+
+#### DTDParser
+
+```typescript
+import { DTDParser, DTDGrammar } from 'typesxml';
+
+const dtdParser = new DTDParser();
+
+// Parse external DTD file
+const dtdGrammar = dtdParser.parseDTD('schema.dtd');
+console.log(dtdGrammar.getType()); // GrammarType.DTD
+
+// Parse internal subset
+const internalDTD = `
+<!ELEMENT book (title, author+)>
+<!ATTLIST book id ID #REQUIRED>
+<!ENTITY copyright "Copyright 2025">
+`;
+const internalGrammar = dtdParser.parseInternalSubset(internalDTD);
+
+// Use with catalog for entity resolution
+const catalog = new Catalog('catalog.xml');
+dtdParser.setCatalog(catalog);
+const resolvedGrammar = dtdParser.parseDTD('schema.dtd');
+```
+
 ### DTD Declarations
 
 #### ElementDecl
 
 ```typescript
-const elementDecl = grammar.getElementDeclMap().get('book');
-console.log('Element name:', elementDecl.getName());
-console.log('Content spec:', elementDecl.getContentSpec());
+const dtdGrammar = dtdParser.parseDTD('schema.dtd');
+const elementDecl = dtdGrammar.getElementDeclMap().get('book');
+if (elementDecl) {
+    console.log('Element name:', elementDecl.getName());
+    console.log('Content spec:', elementDecl.getContentSpec());
+}
 ```
 
 #### AttDecl (Attribute Declaration)
 
 ```typescript
-const bookAttributes = grammar.getElementAttributesMap('book');
+// Access through DTDGrammar DTD-specific methods
+const bookAttributes = dtdGrammar.getAttributesMap().get('book');
 const idAttr = bookAttributes?.get('id');
 if (idAttr) {
     console.log('Attribute name:', idAttr.getName());
@@ -727,27 +1062,55 @@ if (idAttr) {
     console.log('Default value:', idAttr.getDefaultValue());
     console.log('Default declaration:', idAttr.getDefaultDecl()); // '#REQUIRED', '#IMPLIED', etc.
 }
+
+// Or access through Grammar interface (namespace-aware)
+const bookName = new QualifiedName('book');
+const attributeInfos = dtdGrammar.getElementAttributes(bookName);
+attributeInfos.forEach((attrInfo, qName) => {
+    console.log(`${qName.getLocalName()}: ${attrInfo.getType()}`);
+    if (attrInfo.hasDefaultValue()) {
+        console.log(`  Default: ${attrInfo.getDefaultValue()}`);
+    }
+});
 ```
 
 #### EntityDecl
 
 ```typescript
-const entities = grammar.getEntitiesMap();
+// Access through DTDGrammar DTD-specific methods
+const entities = dtdGrammar.getEntitiesMap();
 entities.forEach((entity, name) => {
     console.log(`Entity ${name}:`, entity.getValue());
     console.log('Is parameter entity:', entity.isParameterEntity());
 });
+
+// Or access through Grammar interface
+const copyrightValue = dtdGrammar.getEntityValue('copyright');
+if (copyrightValue) {
+    console.log('Copyright entity value:', copyrightValue);
+}
+
+console.log('Has entity:', dtdGrammar.hasEntity('copyright')); // true/false
 ```
 
 #### NotationDecl
 
 ```typescript
-const notations = grammar.getNotationsMap();
+// Access through DTDGrammar DTD-specific methods
+const notations = dtdGrammar.getNotationsMap();
 notations.forEach((notation, name) => {
     console.log(`Notation ${name}:`);
     console.log('Public ID:', notation.getPublicId());
     console.log('System ID:', notation.getSystemId());
 });
+
+// Or access through Grammar interface
+const gifNotation = dtdGrammar.getNotation('gif');
+if (gifNotation) {
+    console.log('GIF notation found:', gifNotation.getSystemId());
+}
+
+console.log('Has notation:', dtdGrammar.hasNotation('gif')); // true/false
 ```
 
 ### Catalog Support

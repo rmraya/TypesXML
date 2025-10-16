@@ -1,6 +1,6 @@
 # TypesXML
 
-Open source XML library written in TypeScript
+Open source XML library written in TypeScript with extensible multi-schema validation framework
 
 ## Documentation
 
@@ -51,60 +51,81 @@ TypesXML is available under a **dual licensing model**:
 
 ## Overview
 
-Implements a SAX parser that exposes these methods from the `ContentHandler` interface:
+TypesXML implements a complete XML 1.0/1.1 parser with an extensible Grammar framework that supports multiple schema validation approaches. The core architecture provides both SAX (event-driven) and DOM (tree-based) parsing with unified validation through the Grammar interface.
 
-- initialize(): void;
-- setCatalog(catalog: Catalog): void;
-- startDocument(): void;
-- endDocument(): void;
-- xmlDeclaration(version: string, encoding: string, standalone: string): void;
-- startElement(name: string, atts: Array\<XMLAttribute>): void;
-- endElement(name: string): void;
-- internalSubset(declaration: string): void;
-- characters(ch: string): void;
-- ignorableWhitespace(ch: string): void;
-- comment(ch: string): void;
-- processingInstruction(target: string, data: string): void;
-- startCDATA(): void;
-- endCDATA(): void;
-- startDTD(name: string, publicId: string, systemId: string): void;
-- endDTD(): void;
-- skippedEntity(name: string): void;
+### Grammar Framework
 
-Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tree from an XML document.
+The Grammar interface provides a unified abstraction for schema validation that supports:
 
-## Features currently in development
+- **DTD Validation**: Complete Document Type Definition support with full validation
+- **XML Schema**: Extensible framework ready for XML Schema implementation
+- **RelaxNG**: Extensible framework ready for RelaxNG implementation
+- **No-Operation Mode**: Graceful processing without schema validation
 
-- XML Schema validation support  
-- RelaxNG validation support
+### ContentHandler Interface
 
-## Current Features
+The SAX parser exposes methods through the `ContentHandler` interface:
 
-- **Complete DTD Support with Validation**: Full parsing and validation of Document Type Definitions including:
+- `initialize(): void`
+- `setCatalog(catalog: Catalog): void`
+- `setGrammar(grammar: Grammar): void`
+- `setIncludeDefaultAttributes(include: boolean): void`
+- `startDocument(): void`
+- `endDocument(): void`
+- `xmlDeclaration(version: string, encoding: string, standalone: string): void`
+- `startElement(name: string, atts: Array<XMLAttribute>): void`
+- `endElement(name: string): void`
+- `internalSubset(declaration: string): void`
+- `characters(ch: string): void`
+- `ignorableWhitespace(ch: string): void`
+- `comment(ch: string): void`
+- `processingInstruction(target: string, data: string): void`
+- `startCDATA(): void`
+- `endCDATA(): void`
+- `startDTD(name: string, publicId: string, systemId: string): void`
+- `endDTD(): void`
+- `skippedEntity(name: string): void`
+
+The `DOMBuilder` class implements the `ContentHandler` interface and builds a DOM tree from XML documents.
+
+## Features
+
+### Core XML Processing
+
+- **Complete XML 1.0/1.1 Parser**: Full specification compliance with comprehensive error handling
+- **SAX Parser**: Event-driven parsing for memory-efficient processing of large documents
+- **DOM Builder**: Creates complete in-memory tree representation of XML documents
+- **Encoding Support**: Handles various character encodings including UTF-8, UTF-16LE
+- **Entity Resolution**: Built-in support for XML entities and catalog-based resolution
+- **Namespace Support**: Full XML namespace handling with QualifiedName system
+
+### Grammar-Based Validation Framework
+
+- **Extensible Grammar Interface**: Unified abstraction supporting multiple schema types
+- **DTD Grammar**: Complete Document Type Definition implementation
+- **Namespace-Aware Processing**: QualifiedName system for namespace-aware validation
+- **Validation Context**: Rich error reporting with line/column information
+- **Flexible Validation Modes**: Configurable strictness levels for different use cases
+
+### Complete DTD Support
+
+- **DTD Grammar Implementation**: Full parsing and validation of Document Type Definitions including:
   - Element declarations with content models (EMPTY, ANY, Mixed, Children)
   - Attribute list declarations with all attribute types
   - Entity declarations (parameter and general entities)
   - Notation declarations
   - Internal and external subset processing
-  - **Full DTD Validation**: Complete validation against DTD constraints including sequences, choices, and cardinality
-  - **Flexible Validation Modes**: Strict validation with `setValidating(true)` or helpful processing with `setValidating(false)`
-  - **Unreachable DTD Handling**: Graceful fallback when DTD files are unavailable
-- **Advanced Content Model Processing**:
+- **Content Model Processing**:
   - Complex content model parsing (sequences, choices, cardinality)
   - Mixed content detection and validation
   - Element children resolution and integrity checking
-  - **Full Content Model Validation**: Complete validation of element sequences, choice groups, and cardinality constraints
-- **Grammar Generation**: Complete Grammar instances from DTD parsing with:
-  - Content model objects for each element
-  - Attribute mappings with type and default value information
-  - Entity resolution and parameter entity processing
-  - Structural validation and cross-reference checking
+  - Complete validation of element sequences, choice groups, and cardinality constraints
 - **Default Attribute Processing**: Automatic setting of default attribute values from DTD declarations:
   - Direct default values: `attr CDATA "default-value"`
   - Fixed declarations: `attr CDATA #FIXED "fixed-value"`
   - Enumeration defaults: `format (html|dita) "dita"`
-  - **DITA Processing Ready**: Automatically sets essential `@class` attributes for DITA workflows
-- **Helpful Behavior Philosophy**: DTD parsing and default attribute setting occurs even in non-validating mode
+  - DITA Processing Ready: Automatically sets essential `@class` attributes for DITA workflows
+- **Flexible Processing**: DTD parsing and default attribute setting works in both validating and non-validating modes
 - **Catalog Support**: Full XML Catalog resolution for DTD and entity references
 - **Enterprise-Grade Error Handling**: Comprehensive validation with detailed error reporting for:
   - Missing required elements and attributes
@@ -113,17 +134,11 @@ Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tr
   - Undeclared elements and attributes
   - Invalid attribute values and types
 
-## Limitations
+### Additional Features
 
-- XML Schema validation not supported yet (on roadmap)
-- RelaxNG validation not supported yet (on roadmap)
-
-## On the Roadmap
-
-- Support for XML Schemas (XSD validation)
-- Support for RelaxNG schemas
-- Enhanced namespace processing
-- Performance optimizations for large documents
+- **XML Writer**: Utilities for writing XML documents to files with proper formatting
+- **Indentation Support**: Automatic indentation and prettification of XML documents
+- **W3C Compliance**: Extensive testing against official W3C XML Test Suite
 
 ## Installation
 
@@ -241,16 +256,18 @@ export class Test {
 new Test();
 ```
 
-### DTD Validation and Default Attributes
+### Grammar-Based DTD Validation
 
 ```TypeScript
 import { DOMBuilder } from "./DOMBuilder";
 import { SAXParser } from "./SAXParser";
+import { DTDParser } from "./dtd/DTDParser";
+import { DTDGrammar } from "./dtd/DTDGrammar";
 import { Catalog } from "./Catalog";
 import { XMLWriter } from "./XMLWriter";
 import { Indenter } from "./Indenter";
 
-// Example with DTD validation and default attributes
+// Example with Grammar framework and DTD validation
 const ditaXml = `<?xml version="1.0"?>
 <!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
 <concept id="example">
@@ -264,14 +281,21 @@ try {
     const parser = new SAXParser();
     const builder = new DOMBuilder();
     
-    // Catalog setup for DTD resolution:
-    // - Required if DTD uses PUBLIC identifiers that need resolution
-    // - Optional if DTD files are accessible via system ID or local paths
+    // Set up DTD grammar for validation
+    const dtdParser = new DTDParser();
+    
+    // Optional: Set up catalog for DTD resolution
     const catalog = new Catalog('/path/to/catalog.xml');
     builder.setCatalog(catalog);
+    dtdParser.setCatalog(catalog);
     
-    // Enable strict DTD validation
-    parser.setValidating(true);
+    // Parse DTD and create grammar
+    const dtdGrammar: DTDGrammar = dtdParser.parseDTD('concept.dtd');
+    
+    // Configure parser with grammar
+    parser.setGrammar(dtdGrammar);
+    parser.setValidating(true); // Enable strict validation
+    parser.setIncludeDefaultAttributes(true); // Include default attributes
     parser.setContentHandler(builder);
     
     // Parse the document with validation
@@ -290,7 +314,6 @@ try {
     
     // Prettify the document with proper indentation
     const indenter = new Indenter(2); // 2 spaces per level
-    const root = doc?.getRoot();
     if (root) {
         indenter.indent(root);
     }
@@ -308,9 +331,11 @@ try {
 }
 ```
 
-### DTD Validation Examples
+### Flexible Validation Modes
 
 ```TypeScript
+import { SAXParser, DOMBuilder, DTDParser, NoOpGrammar } from 'typesxml';
+
 // Example: Strict validation that rejects invalid documents
 const invalidXml = `<?xml version="1.0"?>
 <!DOCTYPE book [
@@ -325,6 +350,20 @@ const invalidXml = `<?xml version="1.0"?>
 
 const parser = new SAXParser();
 const builder = new DOMBuilder();
+
+// Parse internal DTD and create grammar
+const dtdParser = new DTDParser();
+const internalDTD = `
+<!ELEMENT book (title, author+, chapter*)>
+<!ELEMENT title (#PCDATA)>
+<!ELEMENT author (#PCDATA)>
+<!ELEMENT chapter (title, content)>
+<!ELEMENT content (#PCDATA)>
+`;
+const dtdGrammar = dtdParser.parseInternalSubset(internalDTD);
+
+// Configure parser with strict validation
+parser.setGrammar(dtdGrammar);
 parser.setValidating(true); // Enable strict validation
 parser.setContentHandler(builder);
 
@@ -335,90 +374,13 @@ try {
     console.log('Validation failed:', error.message);
     // Output: "Content model validation failed for element 'book': Required content particle '(title,author+,chapter*)' not satisfied"
 }
-```
 
-```TypeScript
-import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser } from "./SAXParser";
-import { Catalog } from "./Catalog";
-import { XMLWriter } from "./XMLWriter";
-import { Indenter } from "./Indenter";
+// Alternative: Use NoOpGrammar for processing without validation
+const noOpGrammar = new NoOpGrammar();
+parser.setGrammar(noOpGrammar);
+parser.setValidating(false);
 
-// Example with DTD validation and default attributes
-const ditaXml = `<?xml version="1.0"?>
-<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="example">
-    <title>Example Topic</title>
-    <conbody>
-        <p>This paragraph will get default @class attributes automatically.</p>
-    </conbody>
-</concept>`;
-
-try {
-    const parser = new SAXParser();
-    const builder = new DOMBuilder();
-    
-    // Catalog setup for DTD resolution:
-    // - Required if DTD uses PUBLIC identifiers that need resolution
-    // - Optional if DTD files are accessible via system ID or local paths
-    const catalog = new Catalog('/path/to/catalog.xml');
-    builder.setCatalog(catalog);
-    
-    // Enable validation (optional - default attributes work in both modes)
-    parser.setValidating(true);
-    parser.setContentHandler(builder);
-    
-    // Parse the document
-    parser.parseString(ditaXml);
-    const doc = builder.getDocument();
-    
-    // Check if default attributes were added (depends on DTD availability)
-    const root = doc?.getRoot();
-    const classAttr = root?.getAttribute('class');
-    if (classAttr) {
-        console.log(`Root @class: ${classAttr.getValue()}`);
-        // Output when DTD is available: "- topic/topic concept/concept "
-    } else {
-        console.log('No @class attribute found (DTD not available)');
-    }
-    
-    // Prettify the document with proper indentation
-    const indenter = new Indenter(2); // 2 spaces per level
-    const root = doc?.getRoot();
-    if (root) {
-        indenter.indent(root);
-    }
-    
-    // Write the processed and prettified document
-    XMLWriter.writeDocument(doc!, 'output.xml');
-    
-} catch (error: any) {
-    console.log('Error:', error.message);
-}
-```
-
-**When DTD is available and contains default attribute declarations:**
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="example" class="- topic/topic concept/concept ">
-  <title class="- topic/title ">Example Topic</title>
-  <conbody class="- topic/body  concept/conbody ">
-    <p class="- topic/p ">This paragraph will get default @class attributes automatically.</p>
-  </conbody>
-</concept>
-```
-
-**When DTD is not available (graceful fallback):**
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
-<concept id="example">
-  <title>Example Topic</title>
-  <conbody>
-    <p>This paragraph will get default @class attributes automatically.</p>
-  </conbody>
-</concept>
+// This will parse successfully without validation
+parser.parseString(invalidXml);
+console.log('Document parsed without validation');
 ```

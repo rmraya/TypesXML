@@ -24,7 +24,9 @@ import { FileReader } from "./FileReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
 import { DTDParser } from "./dtd/DTDParser";
-import { Grammar } from "./grammar/Grammar";
+import { DTDGrammar } from "./dtd/DTDGrammar";
+import { Grammar, GrammarType, QualifiedName } from "./grammar/Grammar";
+import { NoOpGrammar } from "./grammar/NoOpGrammar";
 
 export class SAXParser {
 
@@ -44,6 +46,7 @@ export class SAXParser {
     grammar: Grammar;
     currentFile: string = ''; 
     catalog: Catalog | undefined; 
+    private includeDefaultAttributes: boolean = true; 
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
 
@@ -56,12 +59,13 @@ export class SAXParser {
         this.validating = false;
         this.inCDATA = false;
         this.silent = false;
-        this.grammar = new Grammar();
+        this.grammar = new NoOpGrammar(); // Start with no-op grammar
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
         this.contentHandler = contentHandler;
         this.contentHandler.setValidating(this.validating);
+        this.contentHandler.setIncludeDefaultAttributes(this.includeDefaultAttributes);
     }
 
     setValidating(validating: boolean): void {
@@ -81,6 +85,17 @@ export class SAXParser {
 
     setCatalog(catalog: Catalog): void {
         this.catalog = catalog;
+    }
+
+    setGrammar(grammar: Grammar): void {
+        this.grammar = grammar;
+    }
+
+    setIncludeDefaultAttributes(include: boolean): void {
+        this.includeDefaultAttributes = include;
+        if (this.contentHandler) {
+            this.contentHandler.setIncludeDefaultAttributes(include);
+        }
     }
 
     isSilent(): boolean {
@@ -322,41 +337,18 @@ export class SAXParser {
             let char: string = String.fromCodePoint(code);
             this.contentHandler!.characters(char);
         } else {
-            // Look up entity in DTD
-            const entity = this.grammar.getEntity(name);
-            if (entity) {
-                let entityValue = entity.getValue();
-                
-                // Check if this is an external entity that hasn't been loaded yet
-                if ((entity.getSystemId() || entity.getPublicId()) && !entity.isExternalContentLoaded()) {
-                    // Load external entity content - this is a referenced entity (used in document)
-                    try {
-                        entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId(), true);
-                        // Store the loaded content back in the entity for future use
-                        if (entityValue !== null && entityValue !== undefined) {
-                            entity.setValue(entityValue);
-                        }
-                    } catch (error) {
-                        // Referenced external entity loading failures are fatal errors per XML spec
-                        throw new Error(`Failed to load external entity "${name}": ${error}`);
-                    }
-                }
-                
-                if (entityValue !== null && entityValue !== undefined) {
-                    // Entity has a defined value (could be empty string, which is valid)
-                    if (entityValue.length > 0) {
-                        // Expand character references within the entity value
-                        entityValue = this.expandCharacterReferences(entityValue);
-
-                        // Classify and handle entity content based on what it contains
-                        this.handleEntityContent(entityValue);
-                    } else {
-                        // Legitimate empty entity (entityValue === "")
-                        this.contentHandler!.characters('');
-                    }
+            // Look up entity in DTD using grammar interface
+            const entityValue = this.grammar.resolveEntity(name);
+            if (entityValue !== undefined) {
+                // Entity found - handle its content
+                if (entityValue.length > 0) {
+                    // Expand character references within the entity value
+                    const expandedValue = this.expandCharacterReferences(entityValue);
+                    // Classify and handle entity content based on what it contains
+                    this.handleEntityContent(expandedValue);
                 } else {
-                    // Entity exists but has null/undefined value - this is problematic
-                    throw new Error(`Entity "${name}" is declared but has no defined value`);
+                    // Legitimate empty entity (entityValue === "")
+                    this.contentHandler!.characters('');
                 }
             } else {
                 // Entity not found - handle as skipped entity
@@ -736,7 +728,12 @@ export class SAXParser {
             this.contentHandler!.internalSubset(internalSubset);
             // Parse the internal subset to extract entity declarations
             try {
-                const dtdParser = new DTDParser(this.grammar, this.currentFile ? dirname(this.currentFile) : '');
+                // Create DTD grammar when we encounter DTD content
+                if (this.grammar.getGrammarType() === GrammarType.NONE) {
+                    this.grammar = new DTDGrammar();
+                }
+                // DTDParser now works directly with DTDGrammar
+                const dtdParser = new DTDParser(this.grammar as DTDGrammar, this.currentFile ? dirname(this.currentFile) : '');
                 if (this.catalog) {
                     dtdParser.setCatalog(this.catalog);
                 }
@@ -752,7 +749,11 @@ export class SAXParser {
         // Load external DTD if available and catalog is set
         if ((publicId || systemId) && this.catalog) {
             try {
-                const dtdParser = new DTDParser(this.grammar, this.currentFile ? dirname(this.currentFile) : '');
+                // Ensure we have a DTD grammar for external DTD
+                if (this.grammar.getGrammarType() === GrammarType.NONE) {
+                    this.grammar = new DTDGrammar();
+                }
+                const dtdParser = new DTDParser(this.grammar as DTDGrammar, this.currentFile ? dirname(this.currentFile) : '');
                 dtdParser.setCatalog(this.catalog);
                 const externalDtdContent = dtdParser.loadExternalEntity(publicId, systemId, false);
                 // Parse the external DTD content to extract entity declarations
@@ -982,26 +983,29 @@ export class SAXParser {
     }
 
     normalizeAndDefaultAttributes(elementName: string, attributesMap: Map<string, string>): Map<string, string> {
-        // Get attribute declarations from DTD
-        const dtdAttributes = this.grammar.getElementAttributesMap(elementName);
-        if (!dtdAttributes) {
-            return attributesMap; // No DTD info, return as-is
+        // Get attribute declarations using Grammar interface
+        const element = new QualifiedName(elementName);
+        const attributeInfos = this.grammar.getElementAttributes(element);
+        
+        if (attributeInfos.size === 0) {
+            return attributesMap; // No attribute info, return as-is
         }
 
         // Create result map starting with parsed attributes
         const result = new Map<string, string>(attributesMap);
 
-        // Process each DTD-declared attribute
-        dtdAttributes.forEach((attDecl: any, attrName: string) => {
+        // Process each declared attribute
+        attributeInfos.forEach((attributeInfo, qualifiedName) => {
+            const attrName = qualifiedName.localName;
             const currentValue = result.get(attrName);
 
             if (currentValue !== undefined) {
                 // Attribute exists - apply type-specific normalization
-                const normalizedValue = this.normalizeAttributeByType(currentValue, attDecl.getType());
+                const normalizedValue = this.normalizeAttributeByType(currentValue, attributeInfo.datatype);
                 result.set(attrName, normalizedValue);
-            } else if (attDecl.getDefaultValue()) {
+            } else if (attributeInfo.defaultValue) {
                 // Attribute not present but has default value - add it
-                const defaultValue = this.normalizeAttributeByType(attDecl.getDefaultValue(), attDecl.getType());
+                const defaultValue = this.normalizeAttributeByType(attributeInfo.defaultValue, attributeInfo.datatype);
                 result.set(attrName, defaultValue);
             }
         });
@@ -1186,42 +1190,23 @@ export class SAXParser {
                     throw new Error(`Recursive entity reference detected: &${entityName};`);
                 }
 
-                // Look up custom entity in DTD grammar
-                const entity = this.grammar.getEntity(entityName);
-                if (entity) {
-                    let entityValue = entity.getValue();
-                    
-                    // If entity has no value but has external identifiers, try to load external entity
-                    if ((entityValue === null || entityValue === undefined || entityValue === '') && 
-                        (entity.getSystemId() !== '' || entity.getPublicId() !== '')) {
-                        try {
-                            // Load external entity content - this is a referenced entity
-                            entityValue = this.loadExternalEntityContent(entity.getPublicId(), entity.getSystemId(), true);
-                            // Update the entity with the loaded content for future use
-                            if (entityValue !== null && entityValue !== undefined && entityValue !== '') {
-                                // Note: We can't modify the EntityDecl directly here, but we can use the loaded content
-                                // The entity expansion will use this loaded value
-                            }
-                        } catch (error) {
-                            // XML specification: external entity loading failures are fatal errors
-                            throw new Error(`Failed to load external entity &${entityName};: ${error}`);
-                        }
-                    }
-                    
-                    if (entityValue !== null && entityValue !== undefined && entityValue !== '') {
+                // Look up custom entity using Grammar interface
+                const entityValue = this.grammar.resolveEntity(entityName);
+                if (entityValue !== undefined) {
+                    if (entityValue !== '') {
                         // Mark this entity as visited for recursion detection
                         visitedEntities.add(entityName);
                         
                         // Recursively expand any entities within this entity's value
-                        entityValue = this.expandCustomEntities(entityValue, visitedEntities);
+                        const expandedValue = this.expandCustomEntities(entityValue, visitedEntities);
                         
                         // Remove from visited set after expansion
                         visitedEntities.delete(entityName);
                         
-                        result += entityValue;
+                        result += expandedValue;
                     } else {
-                        // Entity has no value - this is a well-formedness error for general entities
-                        throw new Error(`Entity &${entityName}; has no defined value`);
+                        // Entity has empty value - valid, just continue
+                        // (empty entities are allowed in XML)
                     }
                 } else {
                     // Unknown entity - this is a well-formedness error

@@ -1,8 +1,9 @@
 .DS_Store
 package-lock.json
-/node_modules/
-/dist/
-/.vscode/
-/.scannerwork/
+node_modules/
+dist/
+.vscode/
+.scannerwork/
 ts/test.ts
 test.xml
+notes/

@@ -22,13 +22,13 @@ import { XMLAttribute } from "./XMLAttribute";
 import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
 import { CData } from "./CData";
-import { Grammar } from "./grammar/Grammar";
+import { DTDGrammar } from "./dtd/DTDGrammar";
 
 export class XMLCanonicalizer {
 
-    private grammar: Grammar | undefined;
+    private grammar: DTDGrammar | undefined;
 
-    public static canonicalize(document: XMLDocument, grammar?: Grammar): string {
+    public static canonicalize(document: XMLDocument, grammar?: DTDGrammar): string {
         const canonicalizer = new XMLCanonicalizer();
         if (grammar) {
             canonicalizer.grammar = grammar;
