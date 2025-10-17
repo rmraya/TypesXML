@@ -16,9 +16,9 @@
  *******************************************************************************/
 
 import { existsSync } from "fs";
-import * as path from "node:path";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
+import { CatalogParser } from "./CatalogParser";
 import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser } from "./SAXParser";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
@@ -37,7 +37,7 @@ export class Catalog {
     base: string;
 
     constructor(catalogFile: string) {
-        if (!path.isAbsolute(catalogFile)) {
+        if (!isAbsolute(catalogFile)) {
             throw new Error('Catalog file must be absolute: ' + catalogFile);
         }
         if (!existsSync(catalogFile)) {
@@ -50,11 +50,11 @@ export class Catalog {
         this.dtdCatalog = new Map<string, string>();
         this.uriRewrites = new Array<string[]>();
         this.systemRewrites = new Array<string[]>();
-        this.workDir = path.dirname(catalogFile);
+        this.workDir = dirname(catalogFile);
         this.base = '';
 
         let contentHandler: DOMBuilder = new DOMBuilder();
-        let parser: SAXParser = new SAXParser();
+        let parser: CatalogParser = new CatalogParser();
         parser.setContentHandler(contentHandler);
         parser.parseFile(catalogFile);
         let catalogDocument: XMLDocument | undefined = contentHandler.getDocument();
@@ -80,8 +80,8 @@ export class Catalog {
                 if (!this.base.endsWith('/')) {
                     this.base += '/';
                 }
-                if (!path.isAbsolute(this.base)) {
-                    this.base = path.resolve(this.workDir, this.base);
+                if (!isAbsolute(this.base)) {
+                    this.base = resolve(this.workDir, this.base);
                 }
                 if (!existsSync(this.base)) {
                     throw new Error('Invalid xml:base: ' + this.base);
@@ -105,7 +105,7 @@ export class Catalog {
                     if (existsSync(uri)) {
                         this.publicCatalog.set(publicId, uri);
                         if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
-                            let name: string = path.basename(uri);
+                            let name: string = basename(uri);
                             if (!this.dtdCatalog.has(name)) {
                                 this.dtdCatalog.set(name, uri);
                             }
@@ -126,7 +126,7 @@ export class Catalog {
                     }
                     this.systemCatalog.set(systemId.getValue(), uri);
                     if (uri.endsWith(".dtd")) {
-                        let name: string = path.basename(uri);
+                        let name: string = basename(uri);
                         if (!this.dtdCatalog.has(name)) {
                             this.dtdCatalog.set(name, uri);
                         }
@@ -146,7 +146,7 @@ export class Catalog {
                     }
                     this.uriCatalog.set(nameAttribute.getValue(), uri);
                     if (uri.endsWith(".dtd") || uri.endsWith(".ent") || uri.endsWith(".mod")) {
-                        let name: string = path.basename(uri);
+                        let name: string = basename(uri);
                         if (!this.dtdCatalog.has(name)) {
                             this.dtdCatalog.set(name, uri);
                         }
@@ -234,11 +234,11 @@ export class Catalog {
 
     makeAbsolute(uri: string): string {
         let file: string = this.base + uri;
-        if (!path.isAbsolute(file)) {
+        if (!isAbsolute(file)) {
             if (this.base !== '') {
-                return path.resolve(this.base, uri);
+                return resolve(this.base, uri);
             }
-            return path.resolve(this.workDir, uri);
+            return resolve(this.workDir, uri);
         }
         return this.base + uri;
     }
@@ -305,7 +305,7 @@ export class Catalog {
             if (this.systemCatalog.has(systemId)) {
                 return this.systemCatalog.get(systemId);
             }
-            let fileName: string = path.basename(systemId);
+            let fileName: string = basename(systemId);
             if (this.dtdCatalog.has(fileName)) {
                 return this.dtdCatalog.get(fileName);
             }
