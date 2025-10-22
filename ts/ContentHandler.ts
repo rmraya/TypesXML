@@ -16,7 +16,9 @@
  *******************************************************************************/
 
 import { Catalog } from "./Catalog";
+import { SAXParser } from "./SAXParser";
 import { XMLAttribute } from "./XMLAttribute";
+import { GrammarHandler } from "./grammar/GrammarHandler";
 
 export interface ContentHandler {
 
@@ -24,6 +26,7 @@ export interface ContentHandler {
     setCatalog(catalog: Catalog): void;
     setValidating(validating: boolean): void;
     setIncludeDefaultAttributes(include: boolean): void;
+    setGrammarHandler(grammarHandler: GrammarHandler): void;
 
     startDocument(): void;
     endDocument(): void;

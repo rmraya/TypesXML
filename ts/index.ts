@@ -15,6 +15,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
+// Core XML Processing Classes
 export { CData } from "./CData";
 export { Catalog } from "./Catalog";
 export { Constants } from "./Constants";
@@ -36,6 +37,7 @@ export { XMLNode } from "./XMLNode";
 export { XMLUtils } from "./XMLUtils";
 export { XMLWriter } from "./XMLWriter";
 
+// DTD Processing Classes
 export { AttDecl } from "./dtd/AttDecl";
 export { AttListDecl } from "./dtd/AttListDecl";
 export { DTDParser } from "./dtd/DTDParser";
@@ -44,6 +46,7 @@ export { EntityDecl } from "./dtd/EntityDecl";
 export { InternalSubset } from "./dtd/InternalSubset";
 export { NotationDecl } from "./dtd/NotationDecl";
 
+// DTD Content Model Classes
 export { ContentModel, Cardinality, ContentModelType } from "./dtd/ContentModel";
 export { ContentParticle, ContentParticleType } from "./dtd/contentParticle";
 export { DTDChoice } from "./dtd/dtdChoice";
@@ -52,5 +55,27 @@ export { DTDName } from "./dtd/dtdName";
 export { DTDPCData } from "./dtd/dtdPCData";
 export { DTDSecuence } from "./dtd/dtdSecuence";
 
-export { Grammar, GrammarType, QualifiedName, AttributeInfo, AttributeUse, ValidationContext, ValidationResult, ValidationError, ValidationWarning } from "./grammar/Grammar";
+// Grammar Framework Classes
+export { Grammar, GrammarType, AttributeInfo, AttributeUse, ValidationContext, ValidationResult, ValidationError, ValidationWarning } from "./grammar/Grammar";
 export { NoOpGrammar } from "./grammar/NoOpGrammar";
+export { CompositeGrammar } from "./grammar/CompositeGrammar";
+export { DTDComposite } from "./grammar/DTDComposite";
+export { GrammarHandler } from "./grammar/GrammarHandler";
+
+// XML Schema Classes
+export { XMLSchemaGrammar } from "./schema/XMLSchemaGrammar";
+export { XMLSchemaParser } from "./schema/XMLSchemaParser";
+export { SchemaType } from "./schema/SchemaType";
+export { SimpleType } from "./schema/SimpleType";
+export { ComplexType } from "./schema/ComplexType";
+export { SchemaElementDecl } from "./schema/Element";
+export { SchemaAttributeDecl } from "./schema/Attribute";
+export { ContentModel as SchemaContentModel } from "./schema/ContentModel";
+export { ElementModel } from "./schema/ElementModel";
+export { SequenceModel } from "./schema/SequenceModel";
+export { ChoiceModel } from "./schema/ChoiceModel";
+export { AllModel } from "./schema/AllModel";
+export { ValidationParticle } from "./schema/ValidationParticle";
+export { ElementNameParticle } from "./schema/ElementNameParticle";
+export { SequenceParticle } from "./schema/SequenceParticle";
+export { ChoiceParticle } from "./schema/ChoiceParticle";

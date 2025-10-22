@@ -17,8 +17,8 @@
 
 import { existsSync } from "fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
-import { CatalogParser } from "./CatalogParser";
 import { DOMBuilder } from "./DOMBuilder";
+import { SAXParser } from "./SAXParser";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
@@ -35,6 +35,7 @@ export class Catalog {
     systemRewrites: Array<string[]>;
     workDir: string;
     base: string;
+    private catalogParser: SAXParser;
 
     constructor(catalogFile: string) {
         if (!isAbsolute(catalogFile)) {
@@ -54,9 +55,10 @@ export class Catalog {
         this.base = '';
 
         let contentHandler: DOMBuilder = new DOMBuilder();
-        let parser: CatalogParser = new CatalogParser();
-        parser.setContentHandler(contentHandler);
-        parser.parseFile(catalogFile);
+        this.catalogParser = new SAXParser();
+        this.catalogParser.setContentHandler(contentHandler);
+        this.catalogParser.setIgnoreGrammars(true);
+        this.catalogParser.parseFile(catalogFile);
         let catalogDocument: XMLDocument | undefined = contentHandler.getDocument();
         if (!catalogDocument) {
             throw new Error('Catalog file ' + catalogFile + ' is empty');

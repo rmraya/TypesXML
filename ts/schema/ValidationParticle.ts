@@ -15,11 +15,23 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { SAXParser } from "./SAXParser";
 
-export class CatalogParser extends SAXParser {
-
-    checkForNamespaces(attributesMap: Map<string, string>): void {        
-        // do nothing - catalog parsing doesn't need namespace processing
-    }
+export interface ValidationParticle {
+    getComponents(): ValidationParticle[];
+    
+    addComponent(component: ValidationParticle): void;
+    
+    getMinOccurs(): number;
+    
+    getMaxOccurs(): number;
+    
+    setCardinality(minOccurs: number, maxOccurs: number): void;
+    
+    resolve(): ValidationParticle[];
+    
+    isResolved(): boolean;
+    
+    validate(children: string[]): void;
+    
+    setSubstitutionGroupResolver?(resolver: (elementName: string, substitutionHead: string) => boolean): void;
 }

@@ -163,9 +163,30 @@ export class DTDParser {
                     throw new Error('Malformed entity reference');
                 }
                 let entityName: string = this.source.substring(this.pointer + '%'.length, index);
-                let entity: EntityDecl | undefined = this.grammar.getEntity(entityName);
+                let entity: EntityDecl | undefined = this.grammar.getParameterEntity(entityName);
+                if (!entity && this.catalog) {
+                    let entityLocation: string | undefined = this.catalog.matchPublic(entityName);
+                    if (entityLocation) {
+                        try {
+                            // For external entity references like %xs-datatypes;, we need to create
+                            // an entity that contains the entire external file content
+                            let externalContent = this.readFileContent(entityLocation);
+                            let externalEntity = new EntityDecl(entityName, true, externalContent, '', '', '');
+                            this.grammar.addEntity(externalEntity);
+                            entity = externalEntity;
+                            // Also extract any entity declarations from the external file
+                            // for potential future use
+                            this.extractAndImportEntities(entityLocation);
+                        } catch (parseError) {
+                            console.warn(`Warning: Could not extract entities from ${entityLocation}: ${(parseError as Error).message}`);
+                            // Continue without the external entities - they might be defined elsewhere
+                        }
+                    } else {
+                        console.warn('entity not found in catalog: ' + entityName);
+                    }
+                }
                 if (entity === undefined) {
-                    throw new Error('Unknown entity: ' + entityName);
+                    throw new Error('Unknown entity: ' + entityName + ' in parsing loop');
                 }
                 let value: string = entity.getValue();
                 if (value !== '') {
@@ -195,7 +216,142 @@ export class DTDParser {
             }
             throw new Error('Error parsing ' + this.currentFile + ' at ' + this.source.substring(this.pointer - 10, this.pointer) + ' @ ' + this.source.substring(this.pointer, this.pointer + 30));
         }
+        
         return this.grammar;
+    }
+
+    importAllEntities(sourceGrammar: DTDGrammar, targetGrammar: DTDGrammar): void {
+        // Import all regular entities
+        sourceGrammar.getEntitiesMap().forEach((entity, name) => {
+            if (!targetGrammar.getEntity(name)) {
+                targetGrammar.addEntity(entity);
+            }
+        });
+
+        // Import elements if they don't conflict
+        sourceGrammar.getElementDeclMap().forEach((element, name) => {
+            if (!targetGrammar.getElementDeclMap().has(name)) {
+                targetGrammar.addElement(element);
+            }
+        });
+
+        // Import attribute lists
+        sourceGrammar.getAttributesMap().forEach((attributes, elementName) => {
+            let existingAttributes = targetGrammar.getAttributesMap().get(elementName);
+            if (!existingAttributes || existingAttributes.size === 0) {
+                targetGrammar.addAttributes(elementName, attributes);
+            }
+        });
+
+        // Import notations
+        sourceGrammar.getNotationsMap().forEach((notation, name) => {
+            if (!targetGrammar.getNotationsMap().has(name)) {
+                targetGrammar.addNotation(notation);
+            }
+        });
+    }
+
+    extractAndImportEntities(filePath: string): void {
+        try {
+            // Read the external DTD content and process it in the current parser context
+            // This ensures parameter entities from the main DTD are available
+            let content = this.readFileContent(filePath);
+            let originalFile = this.currentFile;
+            let originalSource = this.source;
+            let originalPointer = this.pointer;
+            
+            // Temporarily switch context to external file
+            this.currentFile = filePath;
+            this.source = content;
+            this.pointer = 0;
+            
+            try {
+                // Parse the external DTD content in the current context
+                this.parse();
+            } finally {
+                // Restore original context
+                this.currentFile = originalFile;
+                this.source = originalSource;
+                this.pointer = originalPointer;
+            }
+        } catch (error) {
+            console.warn(`Warning: Could not parse external DTD file ${filePath}: ${(error as Error).message}`);
+            // Fallback to the old approach for partial parsing
+            this.extractAndImportEntitiesLegacy(filePath);
+        }
+    }
+    
+    private extractAndImportEntitiesLegacy(filePath: string): void {
+        // Read the file content
+        let content = this.readFileContent(filePath);
+        let pointer = 0;
+        
+        while (pointer < content.length) {
+            // Look for entity declarations
+            let entityStart = content.indexOf('<!ENTITY', pointer);
+            if (entityStart === -1) break;
+            
+            // Find the end of this entity declaration
+            let entityEnd = this.findDeclarationEndInContent(content, entityStart);
+            if (entityEnd === -1) break;
+            
+            let entityDeclaration = content.substring(entityStart, entityEnd + 1);
+            
+            try {
+                // Try to parse just this entity declaration
+                let entityDecl = this.parseEntityDeclaration(entityDeclaration);
+                this.grammar.addEntity(entityDecl);
+            } catch (error) {
+                // Skip entities that can't be parsed due to unresolved references
+                console.warn(`Skipped unparseable entity declaration: ${entityDeclaration.substring(0, 50)}...`);
+            }
+            
+            pointer = entityEnd + 1;
+        }
+    }
+    
+    private readFileContent(filePath: string): string {
+        let stats: Stats = statSync(filePath, { bigint: false, throwIfNoEntry: true });
+        let blockSize: number = stats.blksize;
+        let fileHandle = openSync(filePath, 'r');
+        let buffer = Buffer.alloc(blockSize);
+        let content = '';
+        let bytesRead: number = readSync(fileHandle, buffer, 0, blockSize, 0);
+        while (bytesRead > 0) {
+            content += buffer.toString('utf8', 0, bytesRead);
+            bytesRead = readSync(fileHandle, buffer, 0, blockSize, content.length);
+        }
+        closeSync(fileHandle);
+        return content;
+    }
+    
+    private findDeclarationEndInContent(content: string, startPos: number): number {
+        let depth = 0;
+        let inString = false;
+        let stringChar = '';
+        
+        for (let i = startPos; i < content.length; i++) {
+            let char = content.charAt(i);
+            
+            if (!inString) {
+                if (char === '"' || char === "'") {
+                    inString = true;
+                    stringChar = char;
+                } else if (char === '<') {
+                    depth++;
+                } else if (char === '>') {
+                    depth--;
+                    if (depth === 0) {
+                        return i;
+                    }
+                }
+            } else {
+                if (char === stringChar) {
+                    inString = false;
+                }
+            }
+        }
+        return -1;
     }
 
     endConditionalSection() {
@@ -263,9 +419,9 @@ export class DTDParser {
             let start = fragment.indexOf('%');
             let end = fragment.indexOf(';');
             let entityName = fragment.substring(start + '%'.length, end);
-            let entity: EntityDecl | undefined = this.grammar.getEntity(entityName);
+            let entity: EntityDecl | undefined = this.grammar.getParameterEntity(entityName);
             if (entity === undefined) {
-                throw new Error('Unknown entity: ' + entityName);
+                throw new Error('Unknown entity: ' + entityName + ' in resolveEntities');
             }
             fragment = fragment.replace('%' + entityName + ';', entity.getValue());
         }
@@ -815,16 +971,16 @@ export class DTDParser {
     }
 
     loadExternalEntity(publicId: string, systemId: string, isReferenced: boolean = false): string {
+        let reader: FileReader | undefined;
         try {
             let location = this.resolveEntity(publicId, systemId);
 
             // Use FileReader to properly handle different encodings (UTF-8, UTF-16, etc.)
-            let reader = new FileReader(location);
+            reader = new FileReader(location);
             let content = '';
             while (reader.dataAvailable()) {
                 content += reader.read();
             }
-            reader.closeFile();
 
             // Validate that content is valid XML text (not binary)
             this.validateTextContent(content, location);
@@ -846,6 +1002,15 @@ export class DTDParser {
                 // DTD processing - be more lenient for unreferenced entities
                 console.warn(`Warning: Could not load external entity "${publicId || systemId}": ${(error as Error).message}`);
                 return '';
+            }
+        } finally {
+            // Ensure file handle is always closed to prevent EMFILE errors
+            if (reader) {
+                try {
+                    reader.closeFile();
+                } catch (closeError) {
+                    console.error(`Error closing file reader: ${(closeError as Error).message}`);
+                }
             }
         }
     }
@@ -911,7 +1076,7 @@ export class DTDParser {
                     continue;
                 }
 
-                let entity = this.grammar.getEntity(entityName);
+                let entity = this.grammar.getParameterEntity(entityName);
                 if (entity && entity.getValue()) {
                     let entityValue = entity.getValue();
 

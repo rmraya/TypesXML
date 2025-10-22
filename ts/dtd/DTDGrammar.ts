@@ -17,7 +17,7 @@
 
 import { XMLUtils } from "../XMLUtils";
 import { ContentModel } from './ContentModel';
-import { AttributeInfo, AttributeUse, Grammar, GrammarType, QualifiedName, ValidationContext, ValidationResult } from '../grammar/Grammar';
+import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationContext, ValidationResult } from '../grammar/Grammar';
 import { AttDecl } from './AttDecl';
 import { ElementDecl } from './ElementDecl';
 import { EntityDecl } from './EntityDecl';
@@ -191,48 +191,57 @@ export class DTDGrammar implements Grammar {
         this.usedEntityReferences.clear();
     }
 
-    validateElement(element: QualifiedName, content: ValidationContext): ValidationResult {
-        const elementName = element.localName;
+    validateElement(element: string, content: ValidationContext): ValidationResult {
+        const colonIndex = element.indexOf(':');
+        const elementName = colonIndex !== -1 ? element.substring(colonIndex + 1) : element;
         const elementDecl = this.elementDeclMap.get(elementName);
 
         if (!elementDecl) {
-            return ValidationResult.warning(`No declaration found for element '${elementName}'`);
+            // Return success with no errors/warnings to indicate this DTD doesn't handle this element
+            // DTDComposite will try other DTDs
+            return ValidationResult.success();
         }
 
+        // Element is declared in this DTD - perform validation
         return ValidationResult.success();
     }
 
-    getElementAttributes(element: QualifiedName): Map<QualifiedName, AttributeInfo> {
-        const elementName = element.localName;
-        const result = new Map<QualifiedName, AttributeInfo>();
+    validateAttributes(element: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
+        // DTD attribute validation - simplified for now
+        return ValidationResult.success();
+    }
+
+    getElementAttributes(element: string): Map<string, AttributeInfo> {
+        const colonIndex = element.indexOf(':');
+        const elementName = colonIndex !== -1 ? element.substring(colonIndex + 1) : element;
+        const result = new Map<string, AttributeInfo>();
 
         const dtdAttributes = this.getElementAttributesMap(elementName);
         if (dtdAttributes) {
             dtdAttributes.forEach((attDecl: AttDecl, attName: string) => {
-                const qname = QualifiedName.fromString(attName);
                 const use = this.mapDTDAttributeUse(attDecl);
                 const datatype = attDecl.getType();
                 const defaultValue = attDecl.getDefaultValue();
 
-                const attributeInfo = new AttributeInfo(qname, datatype, use, defaultValue);
-                result.set(qname, attributeInfo);
+                const attributeInfo = new AttributeInfo(attName, datatype, use, defaultValue);
+                result.set(attName, attributeInfo);
             });
         }
 
         return result;
     }
 
-    getDefaultAttributes(element: QualifiedName): Map<QualifiedName, string> {
-        const elementName = element.localName;
-        const result = new Map<QualifiedName, string>();
+    getDefaultAttributes(element: string): Map<string, string> {
+        const colonIndex = element.indexOf(':');
+        const elementName = colonIndex !== -1 ? element.substring(colonIndex + 1) : element;
+        const result = new Map<string, string>();
 
         const dtdAttributes = this.getElementAttributesMap(elementName);
         if (dtdAttributes) {
             dtdAttributes.forEach((attDecl: AttDecl, attName: string) => {
                 const defaultValue = attDecl.getDefaultValue();
                 if (defaultValue && attDecl.getDefaultDecl() !== '#IMPLIED' && attDecl.getDefaultDecl() !== '#REQUIRED') {
-                    const qname = QualifiedName.fromString(attName);
-                    result.set(qname, defaultValue);
+                    result.set(attName, defaultValue);
                 }
             });
         }
@@ -269,5 +278,120 @@ export class DTDGrammar implements Grammar {
             default:
                 return AttributeUse.OPTIONAL;
         }
+    }
+
+    // Serialization for pre-compiled grammars
+    toJSON(): any {
+        const entitiesData: any = {};
+        this.entitiesMap.forEach((entity, name) => {
+            entitiesData[name] = {
+                isParameterEntity: entity.isParameterEntity(),
+                value: entity.getValue(),
+                publicId: entity.getPublicId(),
+                systemId: entity.getSystemId(),
+                ndata: (entity as any).ndata || '' // Access private field
+            };
+        });
+
+        const elementsData: any = {};
+        this.elementDeclMap.forEach((element, name) => {
+            elementsData[name] = {
+                contentSpec: element.getContentSpec()
+            };
+        });
+
+        const attributesData: any = {};
+        this.attributesMap.forEach((attrs, elementName) => {
+            const elementAttrs: any = {};
+            attrs.forEach((attr, attrName) => {
+                elementAttrs[attrName] = {
+                    type: attr.getType(),
+                    defaultValue: attr.getDefaultValue()
+                };
+            });
+            attributesData[elementName] = elementAttrs;
+        });
+
+        const notationsData: any = {};
+        this.notationsMap.forEach((notation, name) => {
+            notationsData[name] = {
+                publicId: notation.getPublicId(),
+                systemId: notation.getSystemId()
+            };
+        });
+
+        return {
+            entities: entitiesData,
+            elements: elementsData,
+            attributes: attributesData,
+            notations: notationsData,
+            entityNames: Array.from(this.entitiesMap.keys()),
+            elementNames: Array.from(this.elementDeclMap.keys()),
+            attributeElementNames: Array.from(this.attributesMap.keys()),
+            notationNames: Array.from(this.notationsMap.keys()),
+            grammarType: 'dtd',
+            version: '1.0'
+        };
+    }
+
+    // Deserialization for pre-compiled grammars
+    static fromJSON(data: any): DTDGrammar {
+        const grammar = new DTDGrammar();
+        
+        // Load entities (skip predefined ones as they're already added in constructor)
+        if (data.entities) {
+            Object.entries(data.entities).forEach(([name, entityData]: [string, any]) => {
+                if (!['lt', 'gt', 'amp', 'apos', 'quot'].includes(name)) {
+                    const entity = new EntityDecl(
+                        name,
+                        entityData.isParameterEntity,
+                        entityData.value,
+                        entityData.systemId,
+                        entityData.publicId,
+                        entityData.ndata
+                    );
+                    grammar.addEntity(entity);
+                }
+            });
+        }
+
+        // Load element declarations
+        if (data.elements) {
+            Object.entries(data.elements).forEach(([name, elementData]: [string, any]) => {
+                const element = new ElementDecl(name, elementData.contentSpec);
+                grammar.addElement(element);
+            });
+        }
+
+        // Load attribute declarations
+        if (data.attributes) {
+            Object.entries(data.attributes).forEach(([elementName, attrs]: [string, any]) => {
+                const attributeMap = new Map<string, AttDecl>();
+                Object.entries(attrs).forEach(([attrName, attrData]: [string, any]) => {
+                    const attr = new AttDecl(
+                        elementName,
+                        attrName,
+                        attrData.type,
+                        attrData.defaultValue
+                    );
+                    attributeMap.set(attrName, attr);
+                });
+                grammar.addAttributes(elementName, attributeMap);
+            });
+        }
+
+        // Load notation declarations
+        if (data.notations) {
+            Object.entries(data.notations).forEach(([name, notationData]: [string, any]) => {
+                const notation = new NotationDecl(
+                    name,
+                    notationData.publicId,
+                    notationData.systemId
+                );
+                grammar.addNotation(notation);
+            });
+        }
+
+        return grammar;
     }
 }

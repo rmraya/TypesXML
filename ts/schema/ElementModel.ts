@@ -1,0 +1,62 @@
+import { ValidationResult } from '../grammar/Grammar';
+import { ContentModel } from './ContentModel';
+import { ValidationParticle } from './ValidationParticle';
+import { ElementNameParticle } from './ElementNameParticle';
+import { ValidationContext } from './Model';
+
+export class ElementModel extends ContentModel {
+    private elementName: string;
+
+    constructor(elementName: string, minOccurs?: number, maxOccurs?: number) {
+        super(minOccurs, maxOccurs);
+        this.elementName = elementName;
+    }
+    
+    getType(): string {
+        return 'element';
+    }
+    
+    getElementName(): string {
+        return this.elementName;
+    }
+
+    validate(children: string[], context?: ValidationContext): ValidationResult {
+        const particle = this.toParticle(context);
+        try {
+            particle.validate(children);
+            return ValidationResult.success();
+        } catch (error) {
+            return ValidationResult.error((error as Error).message);
+        }
+    }
+
+    toParticle(context?: ValidationContext): ValidationParticle {
+        const particle = new ElementNameParticle(this.elementName.toString());
+        particle.setCardinality(this.minOccurs, this.maxOccurs);
+        return particle;
+    }
+
+    canAccept(element: string, position: number, children: string[]): boolean {
+        if (element !== this.elementName) {
+            return false;
+        }
+        
+        const count = children.slice(0, position).filter(child =>
+            child === this.elementName
+        ).length + 1;
+        
+        return this.isUnbounded() || count <= this.maxOccurs;
+    }
+    
+    getPossibleElements(position: number, children: string[]): string[] {
+        const count = children.slice(0, position).filter(child =>
+            child === this.elementName
+        ).length;
+        
+        if (this.isUnbounded() || count < this.maxOccurs) {
+            return [this.elementName];
+        }
+        
+        return [];
+    }
+}

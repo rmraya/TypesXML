@@ -172,6 +172,9 @@ export class XMLCanonicalizer {
                 case '>':
                     result += '&gt;';
                     break;
+                case '"':
+                    result += '&quot;';
+                    break;
                 case '\r':
                     if (i + 1 < text.length && text.charAt(i + 1) === '\n') {
                         // CRLF sequence
@@ -183,6 +186,9 @@ export class XMLCanonicalizer {
                     break;
                 case '\n':
                     result += '&#10;';
+                    break;
+                case '\t':
+                    result += '&#9;';
                     break;
                 default:
                     result += char;
@@ -221,7 +227,7 @@ export class XMLCanonicalizer {
                     result += '&quot;';
                     break;
                 case '\t':
-                    result += ' ';  // tab → space for canonical form
+                    result += '&#9;';
                     break;
                 case '\n':
                     result += '&#10;';  // newline

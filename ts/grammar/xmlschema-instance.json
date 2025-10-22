@@ -1,0 +1,65 @@
+{
+  "targetNamespace": "http://www.w3.org/2001/XMLSchema-instance",
+  "grammarType": "XMLSchema",
+  "version": "1.0",
+  "description": "Pre-compiled XMLSchema-instance namespace grammar with standard xsi attributes",
+  "elements": {},
+  "attributes": {
+    "type": {
+      "name": "type",
+      "namespace": "http://www.w3.org/2001/XMLSchema-instance",
+      "type": "QName",
+      "use": "optional",
+      "description": "Specifies the type of an element when xsi:type differs from the declared type"
+    },
+    "nil": {
+      "name": "nil",
+      "namespace": "http://www.w3.org/2001/XMLSchema-instance",
+      "type": "boolean",
+      "use": "optional",
+      "description": "Indicates that an element is nil (null)"
+    },
+    "schemaLocation": {
+      "name": "schemaLocation",
+      "namespace": "http://www.w3.org/2001/XMLSchema-instance",
+      "type": "string",
+      "use": "optional",
+      "description": "Provides hints for schema locations as namespace URI and schema location pairs"
+    },
+    "noNamespaceSchemaLocation": {
+      "name": "noNamespaceSchemaLocation",
+      "namespace": "http://www.w3.org/2001/XMLSchema-instance",
+      "type": "anyURI",
+      "use": "optional",
+      "description": "Provides hints for schema location for elements in no namespace"
+    }
+  },
+  "types": {
+    "boolean": {
+      "name": "boolean",
+      "baseType": "primitive",
+      "primitiveType": "boolean"
+    },
+    "string": {
+      "name": "string",
+      "baseType": "primitive", 
+      "primitiveType": "string"
+    },
+    "QName": {
+      "name": "QName",
+      "baseType": "primitive",
+      "primitiveType": "QName"
+    },
+    "anyURI": {
+      "name": "anyURI",
+      "baseType": "primitive",
+      "primitiveType": "anyURI"
+    }
+  },
+  "namespaces": {
+    "xsi": "http://www.w3.org/2001/XMLSchema-instance"
+  },
+  "compiled": true,
+  "compiledDate": "2024-10-18T11:45:00.000Z",
+  "compiler": "TypesXML v2.0.0"
+}

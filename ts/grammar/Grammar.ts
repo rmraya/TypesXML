@@ -15,39 +15,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-// Namespace-aware naming
-export class QualifiedName {
-    constructor(
-        public localName: string,
-        public namespaceURI: string = '',
-        public prefix: string = ''
-    ) { }
-
-    equals(other: QualifiedName): boolean {
-        return this.localName === other.localName &&
-            this.namespaceURI === other.namespaceURI;
-    }
-
-    toString(): string {
-        return this.prefix ? `${this.prefix}:${this.localName}` : this.localName;
-    }
-
-    // For backward compatibility with string-based element names
-    static fromString(name: string): QualifiedName {
-        const colonIndex = name.indexOf(':');
-        if (colonIndex !== -1) {
-            const prefix = name.substring(0, colonIndex);
-            const localName = name.substring(colonIndex + 1);
-            return new QualifiedName(localName, '', prefix);
-        }
-        return new QualifiedName(name);
-    }
-}
-
 // Unified attribute information
 export class AttributeInfo {
     constructor(
-        public name: QualifiedName,
+        public name: string,
         public datatype: string,
         public use: AttributeUse,
         public defaultValue?: string,
@@ -66,10 +37,11 @@ export enum AttributeUse {
 // Validation context
 export class ValidationContext {
     constructor(
-        public children: QualifiedName[],
-        public attributes: Map<QualifiedName, string>,
+        public childrenNames: string[],
+        public attributes: Map<string, string>,
         public textContent: string,
-        public parent?: QualifiedName
+        public parent?: string,
+        public attributeOnly: boolean = false
     ) { }
 }
 
@@ -121,9 +93,10 @@ export enum GrammarType {
 // Main Grammar interface
 export interface Grammar {
     // Core validation methods
-    validateElement(element: QualifiedName, content: ValidationContext): ValidationResult;
-    getElementAttributes(element: QualifiedName): Map<QualifiedName, AttributeInfo>;
-    getDefaultAttributes(element: QualifiedName): Map<QualifiedName, string>;
+    validateElement(element: string, content: ValidationContext): ValidationResult;
+    validateAttributes(element: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult;
+    getElementAttributes(element: string): Map<string, AttributeInfo>;
+    getDefaultAttributes(element: string): Map<string, string>;
 
     // Entity resolution (for DTD compatibility)
     resolveEntity(name: string): string | undefined;
@@ -139,4 +112,7 @@ export interface Grammar {
     // Namespace support
     getTargetNamespace(): string | undefined;
     getNamespaceDeclarations(): Map<string, string>;
+
+    // Serialization support for pre-compiled grammars
+    toJSON(): any;
 }

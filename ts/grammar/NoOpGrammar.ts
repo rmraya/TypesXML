@@ -15,19 +15,23 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { AttributeInfo, Grammar, GrammarType, QualifiedName, ValidationContext, ValidationResult } from './Grammar';
+import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResult } from './Grammar';
 
 export class NoOpGrammar implements Grammar {
 
-    validateElement(element: QualifiedName, content: ValidationContext): ValidationResult {
+    validateElement(element: string, content: ValidationContext): ValidationResult {
         return ValidationResult.success();
     }
 
-    getElementAttributes(element: QualifiedName): Map<QualifiedName, AttributeInfo> {
+    validateAttributes(element: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
+        return ValidationResult.success();
+    }
+
+    getElementAttributes(element: string): Map<string, AttributeInfo> {
         return new Map();
     }
 
-    getDefaultAttributes(element: QualifiedName): Map<QualifiedName, string> {
+    getDefaultAttributes(element: string): Map<string, string> {
         return new Map();
     }
 
@@ -55,5 +59,12 @@ export class NoOpGrammar implements Grammar {
 
     getNamespaceDeclarations(): Map<string, string> {
         return new Map();
+    }
+
+    toJSON(): any {
+        return {
+            grammarType: 'none',
+            version: '1.0'
+        };
     }
 }
