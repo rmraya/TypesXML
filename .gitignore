@@ -7,3 +7,5 @@ dist/
 ts/test.ts
 test.xml
 notes/
+catalog/
+tests/
