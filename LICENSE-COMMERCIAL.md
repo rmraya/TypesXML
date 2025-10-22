@@ -1,66 +1,79 @@
 # TypesXML Commercial License
 
-Copyright (c) 2023-2025 Maxprograms
+Copyright (c) 2023–2025 Maxprograms
 
-## Commercial License Terms
+## Overview
 
-This commercial license allows you to use TypesXML in proprietary applications
-without the copyleft requirements of the AGPL-3.0 license.
+This commercial license permits the use of TypesXML in proprietary applications without the copyleft obligations of the AGPL-3.0 license. It is intended for organizations or individuals who require closed-source integration, commercial distribution, or SaaS deployment.
 
-### Permitted Uses
+## Definitions
 
-- Use in proprietary software applications
+- **License Period**: The one-year duration during which the commercial license is valid.
+- **Redistribution**: The act of bundling TypesXML with proprietary software, SaaS platforms, or commercial products.
+- **Commercial-only Features**: Functionality available exclusively to commercial license holders.
+- **Licensee**: The individual or organization that has purchased a valid commercial license from Maxprograms.
+
+## License Duration and Scope
+
+- The commercial license is granted for a period of **one (1) year** from the date of purchase.
+- Licensees may **renew** their license annually to maintain access to updates, support, and redistribution rights.
+- Licensees may **redistribute any version of TypesXML** released during their active license period.
+- Redistribution is permitted only as part of a larger proprietary or commercial product.
+
+## Permitted Uses
+
+- Integration into proprietary software applications
 - Distribution as part of commercial products
 - SaaS offerings without source code disclosure
 - Embedding in closed-source applications
-- No requirement to share source code modifications
+- No obligation to disclose source code modifications
 
-### Commercial License Includes
+## Commercial License Includes
 
-- Perpetual license for the licensed version
+- Perpetual usage rights for versions released during the active license period
 - Professional technical support
 - Access to commercial-only features (when available)
 - Legal indemnification coverage
 - Service level agreements (SLA)
 
-### License Grant
+## License Grant
 
-Subject to the terms and conditions of this license and payment of applicable
-license fees, Maxprograms grants you a non-exclusive, non-transferable license
-to use TypesXML in your commercial applications.
+Subject to the terms of this agreement and payment of applicable license fees, Maxprograms grants you a **non-exclusive, non-transferable**, time-limited license to use and redistribute TypesXML in commercial applications.
 
-### Restrictions
+## Restrictions
 
-- License is non-transferable without written consent
-- No sublicensing or redistribution of TypesXML itself
-- Must comply with export control laws
-- Cannot reverse engineer or create derivative works of the license system
+- License is non-transferable without prior written consent from Maxprograms
+- Sublicensing or redistribution of TypesXML as a standalone product is prohibited
+- Must comply with applicable export control laws
+- Reverse engineering or creation of derivative works of the license system is strictly prohibited
 
-### Support and Updates
+## Support and Updates
 
-Commercial license includes:
+Commercial license holders receive:
 
 - Email support during business hours
 - Bug fixes and security updates
-- Access to new releases during support period
+- Access to new releases during the active license period
 - Priority support queue
 
-### Termination
+## Audit Rights
 
-This license terminates automatically if you violate any terms. Upon termination,
-you must cease all use and destroy all copies of TypesXML.
+Maxprograms reserves the right to request reasonable documentation to verify compliance with license terms. Licensees will be notified in advance and given time to respond.
+
+## Termination
+
+This license terminates automatically if any terms are violated. Upon termination:
+
+- You must cease all use of TypesXML
+- You must destroy all copies of TypesXML not covered by a valid license period
 
 ---
 
 For licensing inquiries and pricing information:
 
 **Email:** <sales@maxprograms.com>  
-**Website:** <https://maxprograms.com>  
+**Website:** <https://maxprograms.com>
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+---
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
