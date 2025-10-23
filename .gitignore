@@ -7,4 +7,5 @@ dist/
 ts/test.ts
 notes/
 catalog/
-tests/
+tests/xmlschema2006-11-06
+tests/xmltest
