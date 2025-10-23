@@ -4,7 +4,7 @@ You can test how well TypesXML supports DTDs and XML Schema by running the confo
 
 ## DTD Tests
 
-- Visit <https://www.w3.org/XML/Test/> and download the DTD conformance tests.
+- Visit [https://www.w3.org/XML/Test/](https://www.w3.org/XML/Test/) and download the DTD conformance tests.
 - Decompress the downloaded file into `tests/xmltest`.
 
 ### Running the DTD Tests
@@ -14,7 +14,7 @@ You can test how well TypesXML supports DTDs and XML Schema by running the confo
 
 ## XML Schema Tests
 
-- Visit <https://www.w3.org/XML/2004/xml-schema-test-suite/index.html/> and download the XML Schema conformance tests.
+- Visit [https://www.w3.org/XML/2004/xml-schema-test-suite/](https://www.w3.org/XML/2004/xml-schema-test-suite/) and download the XML Schema conformance tests.
 - Decompress the downloaded file into `tests/xmlschema2006-11-06`.
 
 ### Running the XML Schema Tests
