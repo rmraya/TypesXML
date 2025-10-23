@@ -1,5 +1,5 @@
+import { Grammar, ValidationContext } from '../grammar/Grammar';
 import { ValidationParticle } from './ValidationParticle';
-import { } from '../grammar/Grammar';
 
 export class AnyParticle implements ValidationParticle {
     private minOccurs: number = 1;
@@ -8,6 +8,8 @@ export class AnyParticle implements ValidationParticle {
     private processContents: string = 'lax'; // strict, lax, or skip
     private resolved: boolean = false;
     private targetNamespace?: string;
+    private grammarResolver?: (namespace?: string) => Grammar | undefined;
+    private validating: boolean = false;
 
     constructor(namespace: string = '##any', processContents: string = 'lax', targetNamespace?: string) {
         this.namespace = namespace;
@@ -57,11 +59,23 @@ export class AnyParticle implements ValidationParticle {
         return this.targetNamespace;
     }
 
+    setGrammarResolver(resolver: (namespace?: string) => Grammar | undefined): void {
+        this.grammarResolver = resolver;
+    }
+
+    setValidating(validating: boolean): void {
+        this.validating = validating;
+    }
+
+    isValidating(): boolean {
+        return this.validating;
+    }
+
     matches(element: string, targetNamespace?: string): boolean {
         // Parse namespace from element name if it has a prefix
         const colonIndex = element.indexOf(':');
         const contextTargetNamespace = targetNamespace || this.targetNamespace || '';
-        
+
         // Determine element namespace category
         let elementNamespace: string;
         if (colonIndex >= 0) {
@@ -77,38 +91,38 @@ export class AnyParticle implements ValidationParticle {
             // Unprefixed elements are in no namespace (local)
             elementNamespace = '';
         }
-        
+
         // Handle space-separated list of namespace constraints
         const namespaceTokens = this.namespace.split(/\s+/);
-        
+
         // Check each token in the namespace constraint
         for (const token of namespaceTokens) {
             if (this.matchesToken(token, elementNamespace, contextTargetNamespace)) {
                 return true;
             }
         }
-        
+
         return false;
     }
-    
+
     private matchesToken(token: string, elementNamespace: string, contextTargetNamespace: string): boolean {
         switch (token) {
             case '##any':
                 return true; // Matches any element from any namespace
-                
+
             case '##other':
                 // Matches elements from namespaces OTHER than the target namespace and no-namespace
                 // Both the target namespace and no-namespace are excluded
                 return elementNamespace === 'other';
-                
+
             case '##local':
                 // Matches elements with no namespace (absent namespace)
                 return elementNamespace === '';
-                
+
             case '##targetNamespace':
                 // Matches elements from the target namespace
                 return elementNamespace === contextTargetNamespace;
-                
+
             default:
                 // Specific namespace URI
                 return elementNamespace === token;
@@ -122,7 +136,7 @@ export class AnyParticle implements ValidationParticle {
 
         // Validate that all provided children match the namespace constraint
         const matchingElements = children.filter(child => this.matches(child, this.targetNamespace));
-        
+
         // All children passed to this method should match the xs:any constraint
         if (matchingElements.length !== children.length) {
             const nonMatchingElements = children.filter(child => !this.matches(child, this.targetNamespace));
@@ -142,13 +156,10 @@ export class AnyParticle implements ValidationParticle {
         // Handle processContents validation
         if (this.processContents === 'strict') {
             // In strict mode, all elements must be valid according to their schemas
-            // This would require schema resolution and validation for each element
-            // For now, we'll just ensure they match the namespace constraint (already done above)
-            // TODO: Implement strict schema validation for matched elements
+            return this.validateStrict(matchingElements);
         } else if (this.processContents === 'lax') {
             // In lax mode, validate if schemas are available, otherwise skip
-            // For now, we'll just ensure they match the namespace constraint (already done above)
-            // TODO: Implement lax schema validation for matched elements
+            return this.validateLax(matchingElements);
         } else if (this.processContents === 'skip') {
             // In skip mode, no validation is performed beyond namespace matching
             // Already handled above - just namespace constraint checking
@@ -158,5 +169,104 @@ export class AnyParticle implements ValidationParticle {
     setSubstitutionGroupResolver(resolver: (elementName: string, substitutionHead: string) => boolean): void {
         // AnyParticle doesn't need substitution group resolution since it accepts any element
         // This method is here to satisfy the ValidationParticle interface
+    }
+
+    private validateStrict(elements: string[]): void {
+        // In strict mode, ALL elements must be valid according to their schemas
+        // If any element cannot be validated, the validation fails
+        if (!this.grammarResolver) {
+            // Only enforce grammar resolver requirement in validating mode
+            if (this.validating) {
+                throw new Error('Grammar resolver not set - cannot perform strict validation');
+            } else {
+                // In non-validating mode, skip strict validation
+                return;
+            }
+        }
+
+        for (const element of elements) {
+            const elementNamespace = this.getElementNamespace(element);
+            const grammar = this.grammarResolver(elementNamespace);
+
+            if (!grammar) {
+                // Only enforce schema availability requirement in validating mode
+                if (this.validating) {
+                    throw new Error(`Strict validation failed: No schema available for element '${element}' in namespace '${elementNamespace || '(no namespace)'}'`);
+                } else {
+                    // In non-validating mode, skip validation for unavailable schemas
+                    continue;
+                }
+            }
+
+            // Create a minimal validation context for element validation
+            // In a real scenario, this would need more context (attributes, content, etc.)
+            const context: ValidationContext = {
+                childrenNames: [],
+                attributes: new Map(),
+                textContent: '',
+                attributeOnly: false
+            };
+
+            const result = grammar.validateElement(element, context);
+            if (!result.isValid) {
+                // Only enforce validation failures in validating mode
+                if (this.validating) {
+                    const errorMessages = result.errors.map(e => e.message).join('; ');
+                    throw new Error(`Strict validation failed for element '${element}': ${errorMessages}`);
+                }
+                // In non-validating mode, ignore validation failures
+            }
+        }
+    }
+
+    private validateLax(elements: string[]): void {
+        // In lax mode, validate elements IF schemas are available
+        // Skip validation for elements without available schemas
+        if (!this.grammarResolver) {
+            // No grammar resolver available - skip all validation (lax behavior)
+            return;
+        }
+
+        for (const element of elements) {
+            const elementNamespace = this.getElementNamespace(element);
+            const grammar = this.grammarResolver(elementNamespace);
+
+            if (grammar) {
+                // Schema is available - perform validation
+                const context: ValidationContext = {
+                    childrenNames: [],
+                    attributes: new Map(),
+                    textContent: '',
+                    attributeOnly: false
+                };
+
+                const result = grammar.validateElement(element, context);
+                if (!result.isValid && this.validating) {
+                    // Only report validation failures in validating mode
+                    const errorMessages = result.errors.map(e => e.message).join('; ');
+                    throw new Error(`Lax validation failed for element '${element}': ${errorMessages}`);
+                }
+                // In non-validating mode, ignore validation failures
+            }
+            // If no schema is available, skip validation (lax behavior)
+        }
+    }
+
+    private getElementNamespace(element: string): string | undefined {
+        // Extract namespace from element name
+        const colonIndex = element.indexOf(':');
+        if (colonIndex >= 0) {
+            const prefix = element.substring(0, colonIndex);
+            // This is a simplified approach - in a real implementation,
+            // we would need access to namespace prefix mappings
+            if (prefix === 'xlf') {
+                return this.targetNamespace;
+            }
+            // For other prefixes, we would need to resolve them properly
+            // For now, return a placeholder
+            return `namespace-for-${prefix}`;
+        }
+        // Unprefixed element - could be in default namespace or no namespace
+        return undefined;
     }
 }

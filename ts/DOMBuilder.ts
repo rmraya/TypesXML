@@ -15,13 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { existsSync } from "fs";
 import { CData } from "./CData";
 import { Catalog } from "./Catalog";
 import { Constants } from "./Constants";
 import { ContentHandler } from "./ContentHandler";
 import { ProcessingInstruction } from "./ProcessingInstruction";
-import { SAXParser } from "./SAXParser";
 import { TextNode } from "./TextNode";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLComment } from "./XMLComment";
@@ -89,13 +87,13 @@ export class DOMBuilder implements ContentHandler {
         if (!this.rootElementValidated && this.validating && this.grammar) {
             const context = new ValidationContext([], new Map(), '', undefined, true);
             const result = this.grammar.validateElement(elementName, context);
-            
+
             if (!result.isValid) {
                 result.errors.forEach(error => {
                     console.error(`Root element validation error: ${error.message}`);
                 });
             }
-            
+
             this.rootElementValidated = true;
         }
     }
@@ -156,6 +154,8 @@ export class DOMBuilder implements ContentHandler {
         if (!attDecls || attDecls.size === 0) {
             return;
         }
+
+        // TODO: Additional DTD datatype validation (NMTOKEN, ENTITY, NOTATION) is now in DTDComposite
 
         for (const attribute of attributes) {
             const attName = attribute.getName();
@@ -281,7 +281,7 @@ export class DOMBuilder implements ContentHandler {
             element.getAttributes().forEach(attr => {
                 attributesMap.set(attr.getName(), attr.getValue());
             });
-            
+
             const context = new ValidationContext(
                 [], // childrenNames - empty for attribute validation
                 attributesMap,
@@ -289,9 +289,9 @@ export class DOMBuilder implements ContentHandler {
                 this.stack.length > 1 ? this.stack[this.stack.length - 2].getName() : undefined,
                 true // attributeOnly flag
             );
-            
+
             const validationResult = this.grammar.validateAttributes(name, attributesMap, context);
-            
+
             if (!validationResult.isValid) {
                 const errorMessage = validationResult.errors.length > 0 ? validationResult.errors[0].message : 'Attribute validation failed';
                 throw new Error(errorMessage);

@@ -1,5 +1,4 @@
 import { ValidationParticle } from './ValidationParticle';
-import { ValidationResult } from '../grammar/Grammar';
 
 export class ElementNameParticle implements ValidationParticle {
     private components: ValidationParticle[] = [];
@@ -86,12 +85,21 @@ export class ElementNameParticle implements ValidationParticle {
         if (this.elementName === elementName) {
             return true;
         }
-        
+
+        // Handle qualified names by comparing local names
+        const elementColonIndex = elementName.indexOf(':');
+        const elementLocalName = elementColonIndex !== -1 ? elementName.substring(elementColonIndex + 1) : elementName;
+
+        // If this particle expects a qualified name, compare local names
+        if (this.localName === elementLocalName) {
+            return true;
+        }
+
         // If we have a substitution group resolver, check if the element can substitute for this one
         if (this.substitutionGroupResolver) {
             return this.substitutionGroupResolver(elementName, this.elementName);
         }
-        
+
         return false;
     }
 }

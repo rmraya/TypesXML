@@ -1,7 +1,27 @@
-import { ValidationParticle } from './ValidationParticle';
-import { ElementNameParticle } from './ElementNameParticle';
-import { ChoiceParticle } from './ChoiceParticle';
 import { AnyParticle } from './AnyParticle';
+import { ChoiceParticle } from './ChoiceParticle';
+import { ElementNameParticle } from './ElementNameParticle';
+import { ValidationParticle } from './ValidationParticle';
+
+interface ConsumptionState {
+    position: number;
+    componentIndex: number;
+    occurrenceCounts: number[];
+    consumed: boolean[];
+}
+
+class SequenceValidationError extends Error {
+    constructor(
+        message: string,
+        public failedAtComponent: number,
+        public position: number,
+        public expectedElements: string[],
+        public actualElements: string[]
+    ) {
+        super(message);
+        this.name = 'SequenceValidationError';
+    }
+}
 
 export class SequenceParticle implements ValidationParticle {
     private components: ValidationParticle[] = [];
@@ -53,211 +73,288 @@ export class SequenceParticle implements ValidationParticle {
             throw new Error('Sequence particle must be resolved before validation');
         }
 
-
+        // Handle empty sequence case
+        if (this.components.length === 0) {
+            if (children.length > 0) {
+                throw new Error(`Empty sequence cannot contain elements. Actual elements: [${children.join(', ')}]`);
+            }
+            return;
+        }
 
         // For most common case: sequence with single repeating component
         if (this.components.length === 1) {
             const component = this.components[0];
-            
-            // If the sequence contains a single component (like a choice that can repeat),
-            // just validate all children against that component
             try {
                 component.validate(children);
-
                 return;
             } catch (e) {
-                throw new Error(
-                    `Sequence validation failed: ${(e as Error).message}. Actual elements: [${children.join(', ')}]`
+                throw new SequenceValidationError(
+                    `Sequence validation failed: ${(e as Error).message}`,
+                    0,
+                    0,
+                    this.getExpectedElementNames(),
+                    children
                 );
             }
         }
 
-        // For complex sequences with multiple components, use original logic
-        let position = 0;
+        // Use consumption tracking for complex sequences
+        const result = this.validateWithConsumptionTracking(children);
+        if (!result.success) {
+            throw new SequenceValidationError(
+                result.error!,
+                result.failedComponent!,
+                result.position!,
+                this.getExpectedElementNames(),
+                children
+            );
+        }
+    }
+
+    private validateWithConsumptionTracking(children: string[]): {
+        success: boolean;
+        error?: string;
+        failedComponent?: number;
+        position?: number;
+    } {
         let sequenceMatches = 0;
+        let position = 0;
 
         while (position < children.length && (this.maxOccurs === -1 || sequenceMatches < this.maxOccurs)) {
-            let startPosition = position;
-            let sequenceValid = true;
+            const initialPosition = position;
+            const state: ConsumptionState = {
+                position: 0,
+                componentIndex: 0,
+                occurrenceCounts: new Array(this.components.length).fill(0),
+                consumed: new Array(children.length).fill(false)
+            };
 
-
-
-            // Try to match one complete sequence
-            for (const component of this.components) {
-                if (component instanceof ElementNameParticle) {
-                    const elementName = (component as ElementNameParticle).getElementName();
-                    const minOccurs = component.getMinOccurs();
-                    const maxOccurs = component.getMaxOccurs();
-                    
-                    let matchCount = 0;
-                    
-                    // Count consecutive matching elements
-                    while (position < children.length && 
-                           (component as ElementNameParticle).matches(children[position]) && 
-                           (maxOccurs === -1 || matchCount < maxOccurs)) {
-                        position++;
-                        matchCount++;
-                    }
-                    
-                    // Check if we have enough matches
-                    if (matchCount < minOccurs) {
-                        // Not enough matches, sequence fails
-                        sequenceValid = false;
-                        break;
-                    }
-                } else if (component instanceof ChoiceParticle) {
-                    // Handle choice component - collect elements that match this choice
-                    let choiceElements: string[] = [];
-                    
-                    // Collect all consecutive elements that could match this choice
-                    const validChoiceNames = new Set<string>();
-                    const validChoiceParticles: ElementNameParticle[] = [];
-                    for (const choiceComp of component.getComponents()) {
-                        if (choiceComp instanceof ElementNameParticle) {
-                            validChoiceNames.add((choiceComp as ElementNameParticle).getElementName());
-                            validChoiceParticles.push(choiceComp as ElementNameParticle);
-                        }
-                    }
-                    
-
-
-                    // Use namespace-aware matching for choice elements
-                    while (position < children.length) {
-                        let matchesChoice = false;
-                        for (const choiceParticle of validChoiceParticles) {
-                            if (choiceParticle.matches(children[position])) {
-                                matchesChoice = true;
-                                break;
-                            }
-                        }
-                        if (matchesChoice) {
-                            choiceElements.push(children[position]);
-                            position++;
-                        } else {
-                            break;
-                        }
-                    }
-
-                    // Validate this choice
-                    try {
-                        component.validate(choiceElements);
-                    } catch (e) {
-                        // Choice validation failed, reset and exit
-                        sequenceValid = false;
-                        break;
-                    }
-                } else if (component instanceof AnyParticle) {
-                    // Handle xs:any component - collect elements that match the namespace constraint
-                    const anyParticle = component as AnyParticle;
-                    const minOccurs = anyParticle.getMinOccurs();
-                    const maxOccurs = anyParticle.getMaxOccurs();
-                    
-
-                    let matchCount = 0;
-                    let anyElements: string[] = [];
-                    
-                    // Collect consecutive elements that match the xs:any constraint
-                    while (position < children.length && (maxOccurs === -1 || matchCount < maxOccurs)) {
-                        // For this implementation, we'll assume elements match if they would be
-                        // consumed by the xs:any. In a full sequence, xs:any with namespace="##other"
-                        // should match elements from foreign namespaces
-                        const elementMatches = anyParticle.matches(children[position], anyParticle.getTargetNamespace());
-                        
-                        if (elementMatches) {
-                            anyElements.push(children[position]);
-                            position++;
-                            matchCount++;
-                        } else {
-                            break;
-                        }
-                    }
-                    
-                    // Check minimum occurrence constraint
-                    if (matchCount < minOccurs) {
-                        sequenceValid = false;
-                        break;
-                    }
-                    
-                    // Validate the collected elements against the xs:any constraint
-                    try {
-                        anyParticle.validate(anyElements);
-                    } catch (e) {
-                        sequenceValid = false;
-                        break;
-                    }
-                } else {
-                    // Handle other particle types
-                    try {
-                        component.validate(children.slice(position));
-                        // For now, assume it consumes one element (this is simplified)
-                        position++;
-                    } catch (e) {
-                        sequenceValid = false;
-                        break;
-                    }
-                }
-            }
-
-            // Check if we matched a complete sequence
-            if (sequenceValid) {
+            const sequenceResult = this.tryMatchSequence(children, position, state);
+            if (sequenceResult.success) {
+                position = sequenceResult.newPosition!;
                 sequenceMatches++;
-                // If we didn't consume any elements in this iteration but the sequence was valid
-                // (e.g., all remaining components were optional), we should stop to avoid infinite loop
-                if (position === startPosition) {
+
+                // Avoid infinite loop if no elements were consumed
+                if (position === initialPosition) {
                     break;
                 }
             } else {
-                // Reset position and break
-                position = startPosition;
+                // Check if remaining components are optional for partial match
+                if (this.canCompleteWithOptionalComponents(state.componentIndex)) {
+                    sequenceMatches++;
+                }
                 break;
             }
         }
 
-        // If we've consumed all children but haven't completed a sequence, 
-        // check if the remaining components are all optional
-        // If we've consumed all children but haven't completed a sequence, 
-        // check if the remaining components are all optional
-        if (position === children.length && sequenceMatches === 0 && this.minOccurs > 0) {
-            let canCompleteSequence = true;
-            let pos = 0;
-            
-            // Check if we can match at least one complete sequence with the given children
-            for (const component of this.components) {
-                if (component instanceof ElementNameParticle) {
-                    const elementName = (component as ElementNameParticle).getElementName();
-                    const minOccurs = component.getMinOccurs();
-                    const maxOccurs = component.getMaxOccurs();
-                    
-                    let matchCount = 0;
-                    
-                    // Count consecutive matching elements
-                    while (pos < children.length && 
-                           (component as ElementNameParticle).matches(children[pos]) && 
-                           (maxOccurs === -1 || matchCount < maxOccurs)) {
-                        pos++;
-                        matchCount++;
-                    }
-                    
-                    // Check if we have enough matches
-                    if (matchCount < minOccurs) {
-                        canCompleteSequence = false;
+        // Check if we consumed all children
+        if (position !== children.length) {
+            return {
+                success: false,
+                error: `Sequence validation failed: unconsumed elements starting at position ${position}. Actual elements: [${children.join(', ')}]`,
+                position: position
+            };
+        }
+
+        // Check sequence cardinality
+        if (sequenceMatches < this.minOccurs) {
+            return {
+                success: false,
+                error: `Sequence validation failed: expected at least ${this.minOccurs} complete sequences, got ${sequenceMatches}. Actual elements: [${children.join(', ')}]`,
+                position: 0
+            };
+        }
+
+        if (this.maxOccurs !== -1 && sequenceMatches > this.maxOccurs) {
+            return {
+                success: false,
+                error: `Sequence validation failed: expected at most ${this.maxOccurs} complete sequences, got ${sequenceMatches}. Actual elements: [${children.join(', ')}]`,
+                position: 0
+            };
+        }
+
+        return { success: true };
+    }
+
+    private tryMatchSequence(children: string[], startPosition: number, state: ConsumptionState): {
+        success: boolean;
+        newPosition?: number;
+        failedComponent?: number;
+    } {
+        let position = startPosition;
+
+        for (let componentIndex = 0; componentIndex < this.components.length; componentIndex++) {
+            const component = this.components[componentIndex];
+            const minOccurs = component.getMinOccurs();
+            const maxOccurs = component.getMaxOccurs();
+
+            const matchResult = this.matchComponent(component, children, position, minOccurs, maxOccurs);
+
+            if (!matchResult.success) {
+                if (minOccurs === 0) {
+                    // Optional component, continue to next
+                    continue;
+                } else {
+                    return {
+                        success: false,
+                        failedComponent: componentIndex
+                    };
+                }
+            }
+
+            position = matchResult.newPosition!;
+            state.occurrenceCounts[componentIndex] = matchResult.matchCount!;
+        }
+
+        return {
+            success: true,
+            newPosition: position
+        };
+    }
+
+    private matchComponent(
+        component: ValidationParticle,
+        children: string[],
+        startPosition: number,
+        minOccurs: number,
+        maxOccurs: number
+    ): {
+        success: boolean;
+        newPosition?: number;
+        matchCount?: number;
+    } {
+        let position = startPosition;
+        let matchCount = 0;
+
+        if (component instanceof ElementNameParticle) {
+            // Match consecutive elements for this component
+            while (position < children.length &&
+                (maxOccurs === -1 || matchCount < maxOccurs) &&
+                component.matches(children[position])) {
+                position++;
+                matchCount++;
+            }
+
+            if (matchCount < minOccurs) {
+                return { success: false };
+            }
+
+            return {
+                success: true,
+                newPosition: position,
+                matchCount: matchCount
+            };
+
+        } else if (component instanceof ChoiceParticle) {
+            // Collect elements that match the choice
+            const choiceElements: string[] = [];
+            const validChoiceParticles = component.getComponents()
+                .filter(comp => comp instanceof ElementNameParticle) as ElementNameParticle[];
+
+            while (position < children.length && (maxOccurs === -1 || choiceElements.length < maxOccurs)) {
+                let matchesChoice = false;
+                for (const choiceParticle of validChoiceParticles) {
+                    if (choiceParticle.matches(children[position])) {
+                        matchesChoice = true;
                         break;
                     }
                 }
+                if (matchesChoice) {
+                    choiceElements.push(children[position]);
+                    position++;
+                } else {
+                    break;
+                }
             }
-            
-            if (canCompleteSequence && pos === children.length) {
-                sequenceMatches = 1;
+
+            try {
+                component.validate(choiceElements);
+                return {
+                    success: true,
+                    newPosition: position,
+                    matchCount: choiceElements.length
+                };
+            } catch (e) {
+                return { success: false };
+            }
+
+        } else if (component instanceof AnyParticle) {
+            // Handle xs:any component
+            const anyElements: string[] = [];
+
+            while (position < children.length && (maxOccurs === -1 || anyElements.length < maxOccurs)) {
+                const elementMatches = component.matches(children[position], component.getTargetNamespace());
+                if (elementMatches) {
+                    anyElements.push(children[position]);
+                    position++;
+                } else {
+                    break;
+                }
+            }
+
+            if (anyElements.length < minOccurs) {
+                return { success: false };
+            }
+
+            try {
+                component.validate(anyElements);
+                return {
+                    success: true,
+                    newPosition: position,
+                    matchCount: anyElements.length
+                };
+            } catch (e) {
+                return { success: false };
+            }
+
+        } else {
+            // Handle other particle types (simplified)
+            if (position < children.length) {
+                try {
+                    component.validate([children[position]]);
+                    return {
+                        success: true,
+                        newPosition: position + 1,
+                        matchCount: 1
+                    };
+                } catch (e) {
+                    return { success: false };
+                }
+            } else if (minOccurs === 0) {
+                return {
+                    success: true,
+                    newPosition: position,
+                    matchCount: 0
+                };
+            } else {
+                return { success: false };
             }
         }
+    }
 
-        // Check if we consumed all children and have valid sequence count
-        if (position !== children.length || sequenceMatches < this.minOccurs || (this.maxOccurs !== -1 && sequenceMatches > this.maxOccurs)) {
-            throw new Error(
-                `Sequence validation failed: expected ${this.minOccurs}-${this.maxOccurs === -1 ? 'unbounded' : this.maxOccurs} complete sequences, got ${sequenceMatches}. Actual elements: [${children.join(', ')}]`
-            );
+    private canCompleteWithOptionalComponents(startComponentIndex: number): boolean {
+        for (let i = startComponentIndex; i < this.components.length; i++) {
+            if (this.components[i].getMinOccurs() > 0) {
+                return false;
+            }
         }
+        return true;
+    }
 
+    private getExpectedElementNames(): string[] {
+        const names: string[] = [];
+        for (const component of this.components) {
+            if (component instanceof ElementNameParticle) {
+                names.push(component.getElementName());
+            } else if (component instanceof ChoiceParticle) {
+                for (const choiceComp of component.getComponents()) {
+                    if (choiceComp instanceof ElementNameParticle) {
+                        names.push(choiceComp.getElementName());
+                    }
+                }
+            }
+        }
+        return names;
     }
 
     setSubstitutionGroupResolver(resolver: (elementName: string, substitutionHead: string) => boolean): void {

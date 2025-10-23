@@ -15,28 +15,18 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResult } from './Grammar';
-import { DTDGrammar } from '../dtd/DTDGrammar';
-import { EntityDecl } from '../dtd/EntityDecl';
-import { ElementDecl } from '../dtd/ElementDecl';
 import { AttDecl } from '../dtd/AttDecl';
-import { NotationDecl } from '../dtd/NotationDecl';
+import { DTDGrammar } from '../dtd/DTDGrammar';
+import { ElementDecl } from '../dtd/ElementDecl';
+import { EntityDecl } from '../dtd/EntityDecl';
+import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResult } from './Grammar';
 
-/**
- * DTDComposite orchestrates multiple DTDGrammar instances to provide
- * a unified view of DTD validation rules. This follows the same pattern as
- * CompositeGrammar for XML Schema support.
- * 
- * It combines:
- * - Internal DTD subset (parameter entities available to external processing)
- * - External DTD files (with access to internal parameter entities)
- * - Proper precedence rules for conflicting declarations
- */
+
 export class DTDComposite implements Grammar {
     private internalDTD: DTDGrammar | undefined;
     private externalDTDs: DTDGrammar[] = [];
     private sharedParameterEntities: Map<string, EntityDecl> = new Map();
-    
+
     constructor() {
         // Initialize with predefined entities like DTDGrammar does
         this.addPredefinedEntities();
@@ -50,34 +40,24 @@ export class DTDComposite implements Grammar {
         this.sharedParameterEntities.set('quot', new EntityDecl('quot', false, '"', '', '', ''));
     }
 
-    /**
-     * Add the internal DTD subset grammar
-     */
     addInternalDTD(dtdGrammar: DTDGrammar): void {
         this.internalDTD = dtdGrammar;
         // Extract parameter entities from internal DTD for sharing with external DTDs
         this.extractParameterEntities(dtdGrammar);
     }
 
-    /**
-     * Add an external DTD grammar
-     */
     addExternalDTD(dtdGrammar: DTDGrammar): void {
         this.externalDTDs.push(dtdGrammar);
     }
 
-    /**
-     * Get a grammar instance that includes shared parameter entities
-     * This is used when parsing external DTD files
-     */
     createSharedGrammar(): DTDGrammar {
         const sharedGrammar = new DTDGrammar();
-        
+
         // Add all shared parameter entities to the new grammar
         this.sharedParameterEntities.forEach((entity, name) => {
             sharedGrammar.addEntity(entity);
         });
-        
+
         return sharedGrammar;
     }
 
@@ -96,7 +76,7 @@ export class DTDComposite implements Grammar {
         // Check if element is declared in any DTD first
         const colonIndex = element.indexOf(':');
         const elementName = colonIndex !== -1 ? element.substring(colonIndex + 1) : element;
-        
+
         // Internal DTD takes precedence
         if (this.internalDTD && this.internalDTD.getElementDeclMap().has(elementName)) {
             return this.internalDTD.validateElement(element, content);
@@ -115,7 +95,7 @@ export class DTDComposite implements Grammar {
     validateAttributes(element: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
         // Use merged attribute information for validation
         const declaredAttributes = this.getElementAttributes(element);
-        
+
         if (declaredAttributes.size === 0) {
             // No attributes declared - any attributes present are invalid
             if (attributes.size > 0) {
@@ -126,19 +106,23 @@ export class DTDComposite implements Grammar {
         }
 
         // Check each provided attribute against declarations
+        const attributeDeclarations = this.getElementAttributeDeclarations(element);
         for (const [attrName, attrValue] of attributes) {
             if (!declaredAttributes.has(attrName)) {
                 return ValidationResult.error(`Undeclared attribute '${attrName}' found in element '${element}'`);
             }
-            
-            // Validate attribute value well-formedness
-            const wellFormednessResult = this.validateAttributeValueWellFormedness(attrName, attrValue);
-            if (!wellFormednessResult.isValid) {
-                return wellFormednessResult;
+
+            // Well-formedness validation is handled by SAXParser before entity expansion
+            // DTDComposite focuses on DTD-specific validation only
+
+            // Perform DTD datatype validation using AttDecl
+            const attDecl = attributeDeclarations.get(attrName);
+            if (attDecl) {
+                const validationResult = this.validateAttributeValue(attrName, attrValue, attDecl, element);
+                if (!validationResult.isValid) {
+                    return validationResult;
+                }
             }
-            
-            // TODO: Add specific datatype validation here if needed (NMTOKEN, ID, etc.)
-            const attrInfo = declaredAttributes.get(attrName)!;
         }
 
         // Check for required attributes that are missing
@@ -148,78 +132,6 @@ export class DTDComposite implements Grammar {
             }
         }
 
-        return ValidationResult.success();
-    }
-
-    private validateAttributeValueWellFormedness(attrName: string, attrValue: string): ValidationResult {
-        // Check for unescaped ampersands that are not part of valid entity references
-        let i = 0;
-        while (i < attrValue.length) {
-            const char = attrValue.charAt(i);
-            
-            if (char === '&') {
-                // Found ampersand - check if it's part of a valid entity or character reference
-                const remaining = attrValue.substring(i);
-                
-                // Check for character references (&#digits; or &#xhex;)
-                const charRefMatch = remaining.match(/^&#(\d+|x[0-9a-fA-F]+);/);
-                if (charRefMatch) {
-                    const refContent = charRefMatch[1];
-                    
-                    // Validate decimal character reference
-                    if (refContent.match(/^\d+$/)) {
-                        const codePoint = parseInt(refContent, 10);
-                        if (codePoint === 0 || (codePoint >= 1 && codePoint <= 8) || 
-                            (codePoint >= 11 && codePoint <= 12) || (codePoint >= 14 && codePoint <= 31) ||
-                            codePoint === 0xFFFE || codePoint === 0xFFFF || codePoint > 0x10FFFF ||
-                            (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
-                            return ValidationResult.error(`Invalid character reference: &#${refContent}; (U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML 1.0`);
-                        }
-                    }
-                    // Validate hexadecimal character reference
-                    else if (refContent.match(/^x[0-9a-fA-F]+$/)) {
-                        const hexValue = refContent.substring(1); // Remove 'x' prefix
-                        const codePoint = parseInt(hexValue, 16);
-                        if (codePoint === 0 || (codePoint >= 1 && codePoint <= 8) || 
-                            (codePoint >= 11 && codePoint <= 12) || (codePoint >= 14 && codePoint <= 31) ||
-                            codePoint === 0xFFFE || codePoint === 0xFFFF || codePoint > 0x10FFFF ||
-                            (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
-                            return ValidationResult.error(`Invalid character reference: &#x${hexValue}; (U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}) is not allowed in XML 1.0`);
-                        }
-                    }
-                    // Malformed character reference (no valid digits/hex after &#)
-                    else {
-                        return ValidationResult.error(`Malformed character reference: &#${refContent}; contains invalid characters`);
-                    }
-                    
-                    i += charRefMatch[0].length;
-                    continue;
-                }
-                
-                // Check for entity references (&name;)
-                const entityRefMatch = remaining.match(/^&([a-zA-Z_:][a-zA-Z0-9_:.-]*);/);
-                if (entityRefMatch) {
-                    // Valid entity reference format
-                    i += entityRefMatch[0].length;
-                    continue;
-                }
-                
-                // Check for malformed character reference (starts with &# but malformed)
-                const malformedCharRefMatch = remaining.match(/^&#([^;]*)/);
-                if (malformedCharRefMatch) {
-                    const content = malformedCharRefMatch[1];
-                    if (content.includes(':') || content.match(/[^0-9a-fA-F]/)) {
-                        return ValidationResult.error(`Malformed character reference: &#${content} (missing semicolon or invalid characters)`);
-                    }
-                }
-                
-                // Unescaped ampersand - this is not allowed in attribute values
-                return ValidationResult.error(`Unescaped ampersand in attribute '${attrName}' value. Use &amp; instead of &`);
-            }
-            
-            i++;
-        }
-        
         return ValidationResult.success();
     }
 
@@ -246,6 +158,110 @@ export class DTDComposite implements Grammar {
         }
 
         return combinedAttributes;
+    }
+
+    private getElementAttributeDeclarations(element: string): Map<string, AttDecl> {
+        const colonIndex = element.indexOf(':');
+        const elementName = colonIndex !== -1 ? element.substring(colonIndex + 1) : element;
+        const combinedDeclarations = new Map<string, AttDecl>();
+
+        // Add from external DTDs first (lower precedence)
+        for (const externalDTD of this.externalDTDs) {
+            const attrs = externalDTD.getElementAttributesMap(elementName);
+            if (attrs) {
+                attrs.forEach((attDecl, name) => {
+                    if (!combinedDeclarations.has(name)) {
+                        combinedDeclarations.set(name, attDecl);
+                    }
+                });
+            }
+        }
+
+        // Add from internal DTD (higher precedence)
+        if (this.internalDTD) {
+            const attrs = this.internalDTD.getElementAttributesMap(elementName);
+            if (attrs) {
+                attrs.forEach((attDecl, name) => {
+                    combinedDeclarations.set(name, attDecl); // Overrides external declarations
+                });
+            }
+        }
+
+        return combinedDeclarations;
+    }
+
+    private validateAttributeValue(attrName: string, attrValue: string, attDecl: AttDecl, element: string): ValidationResult {
+        const attrType = attDecl.getType();
+
+        // Skip ID and IDREF validation - these require document-level tracking
+        if (attrType === 'ID' || attrType === 'IDREF' || attrType === 'IDREFS') {
+            // ID/IDREF validation is handled by DOMBuilder with document-level state tracking
+            return ValidationResult.success();
+        }
+
+        // Use AttDecl's built-in validation for basic datatypes
+        if (!attDecl.isValid(attrValue)) {
+            return ValidationResult.error(`Invalid value '${attrValue}' for attribute '${attrName}' of type '${attrType}' in element '${element}'`);
+        }
+
+        // Additional validation for ENTITY/ENTITIES types - check if entities exist
+        if (attrType === 'ENTITY') {
+            if (!this.entityExists(attrValue)) {
+                return ValidationResult.error(`Entity '${attrValue}' referenced in attribute '${attrName}' is not declared in element '${element}'`);
+            }
+        } else if (attrType === 'ENTITIES') {
+            const entityNames = attrValue.split(/\s+/);
+            for (const entityName of entityNames) {
+                if (!this.entityExists(entityName)) {
+                    return ValidationResult.error(`Entity '${entityName}' referenced in attribute '${attrName}' is not declared in element '${element}'`);
+                }
+            }
+        }
+
+        // Additional validation for NOTATION types - check if notations exist
+        if (attrType.startsWith('NOTATION')) {
+            if (!this.notationExists(attrValue)) {
+                return ValidationResult.error(`Notation '${attrValue}' referenced in attribute '${attrName}' is not declared in element '${element}'`);
+            }
+        }
+
+        return ValidationResult.success();
+    }
+
+    private entityExists(entityName: string): boolean {
+        // Check internal DTD first
+        if (this.internalDTD && this.internalDTD.resolveEntity(entityName) !== undefined) {
+            return true;
+        }
+
+        // Check external DTDs
+        for (const externalDTD of this.externalDTDs) {
+            if (externalDTD.resolveEntity(entityName) !== undefined) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private notationExists(notationName: string): boolean {
+        // Check internal DTD first
+        if (this.internalDTD) {
+            const notationsMap = this.internalDTD.getNotationsMap();
+            if (notationsMap.has(notationName)) {
+                return true;
+            }
+        }
+
+        // Check external DTDs
+        for (const externalDTD of this.externalDTDs) {
+            const notationsMap = externalDTD.getNotationsMap();
+            if (notationsMap.has(notationName)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     getDefaultAttributes(element: string): Map<string, string> {
