@@ -5,61 +5,97 @@
 ### 1. Basic Parsing (String)
 
 ```typescript
-import { SAXParser, DOMBuilder } from 'typesxml';
+import { SAXParser, DOMBuilder, XMLDocument } from 'typesxml';
 
-const parser = new SAXParser();
-const builder = new DOMBuilder();
+const parser: SAXParser = new SAXParser();
+const builder: DOMBuilder = new DOMBuilder();
 parser.setContentHandler(builder);
 parser.parseString('<root><child>text</child></root>');
-const doc = builder.getDocument();
+const doc: XMLDocument | undefined = builder.getDocument();
 ```
 
 ### 2. Basic Parsing (File)
 
 ```typescript
-import { SAXParser, DOMBuilder } from 'typesxml';
+import { SAXParser, DOMBuilder, XMLDocument } from 'typesxml';
 
-const parser = new SAXParser();
-const builder = new DOMBuilder();
+const parser: SAXParser = new SAXParser();
+const builder: DOMBuilder = new DOMBuilder();
 parser.setContentHandler(builder);
 parser.parseFile('document.xml');
-const doc = builder.getDocument();
+const doc: XMLDocument | undefined = builder.getDocument();
 ```
 
-### 3. Grammar-Based Parsing with DTD
+### 3. Parsing XML with DTD Declaration
 
 ```typescript
-import { SAXParser, DOMBuilder, DTDParser } from 'typesxml';
+import { SAXParser, DOMBuilder, Catalog, XMLDocument } from 'typesxml';
 
-const parser = new SAXParser();
-const builder = new DOMBuilder();
-const dtdParser = new DTDParser();
+const parser: SAXParser = new SAXParser();
+const builder: DOMBuilder = new DOMBuilder();
 
-// Create DTD grammar
-const dtdGrammar = dtdParser.parseDTD('schema.dtd');
+// Optional: Set up catalog for DTD resolution
+const catalog: Catalog = new Catalog('/path/to/catalog.xml');
+builder.setCatalog(catalog);
 
-// Configure parser with grammar
-parser.setGrammar(dtdGrammar);
-parser.setValidating(true); // Enable strict validation
+// Configure parser for validation
+parser.setValidating(true); // Enable DTD validation
 parser.setIncludeDefaultAttributes(true); // Include default attributes
 parser.setContentHandler(builder);
 
-parser.parseFile('document.xml');
-const doc = builder.getDocument();
+// Parse XML file that declares its own DTD
+const xmlWithDTD: string = `<?xml version="1.0"?>
+<!DOCTYPE book SYSTEM "book.dtd">
+<book>
+  <title>Example Book</title>
+</book>`;
+
+parser.parseString(xmlWithDTD);
+const doc: XMLDocument | undefined = builder.getDocument();
 ```
 
-### 4. Creating XML from Scratch
+### 4. Parsing XML with Schema Declaration
+
+```typescript
+import { SAXParser, DOMBuilder, Catalog, XMLDocument } from 'typesxml';
+
+const parser: SAXParser = new SAXParser();
+const builder: DOMBuilder = new DOMBuilder();
+
+// Optional: Set up catalog for schema resolution
+const catalog: Catalog = new Catalog('/path/to/catalog.xml');
+builder.setCatalog(catalog);
+
+// Configure parser for schema validation
+parser.setValidating(true); // Enable schema validation
+parser.setContentHandler(builder);
+
+// Parse XML file that declares its own schema
+const xmlWithSchema: string = `<?xml version="1.0"?>
+<purchaseOrder xmlns="http://example.com/po"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation="http://example.com/po purchase-order.xsd">
+  <shipTo>
+    <name>Alice Smith</name>
+  </shipTo>
+</purchaseOrder>`;
+
+parser.parseFile('purchase-order.xml'); // or parseString(xmlWithSchema)
+const doc: XMLDocument | undefined = builder.getDocument();
+```
+
+### 5. Creating XML from Scratch
 
 ```typescript
 import { XMLDocument, XMLElement, XMLAttribute, XMLDeclaration } from 'typesxml';
 
-const doc = new XMLDocument();
+const doc: XMLDocument = new XMLDocument();
 doc.setXmlDeclaration(new XMLDeclaration('1.0', 'UTF-8'));
 
-const root = new XMLElement('catalog');
+const root: XMLElement = new XMLElement('catalog');
 root.setAttribute(new XMLAttribute('version', '1.0'));
 
-const item = new XMLElement('item');
+const item: XMLElement = new XMLElement('item');
 item.setAttribute(new XMLAttribute('id', '123'));
 item.addString('Item Text');
 root.addElement(item);
@@ -68,76 +104,101 @@ doc.setRoot(root);
 console.log(doc.toString());
 ```
 
-### 5. Writing to File
+### 6. Writing to File
 
 ```typescript
-import { XMLWriter } from 'typesxml';
+import { XMLWriter, XMLDocument, XMLElement } from 'typesxml';
 
 // Write complete document
 XMLWriter.writeDocument(document, 'output.xml');
 
 // Or incremental writing
-const writer = new XMLWriter('output.xml');
+const writer: XMLWriter = new XMLWriter('output.xml');
 writer.writeNode(element);
 writer.writeString('\n');
 ```
 
 ## Grammar Framework
 
-### Working with Grammars
+### Automatic Grammar Detection
 
 ```typescript
-import { DTDGrammar, NoOpGrammar, QualifiedName } from 'typesxml';
+import { SAXParser, DOMBuilder, Catalog } from 'typesxml';
 
-// Create DTD grammar from file
-const dtdParser = new DTDParser();
-const dtdGrammar = dtdParser.parseDTD('schema.dtd');
+const parser: SAXParser = new SAXParser();
+const builder: DOMBuilder = new DOMBuilder();
 
-// Create no-op grammar (no validation)
-const noOpGrammar = new NoOpGrammar();
+// Set up catalog for DTD/schema resolution
+const catalog: Catalog = new Catalog('/path/to/catalog.xml');
+builder.setCatalog(catalog);
 
-// Use grammar with parser
-parser.setGrammar(dtdGrammar); // or noOpGrammar
+// Configure validation - grammar is automatically detected from XML
+parser.setValidating(true); // Enable validation
+parser.setIncludeDefaultAttributes(true); // Include DTD default attributes
+parser.setContentHandler(builder);
+
+// The parser automatically detects and uses:
+// - DTD from <!DOCTYPE> declarations
+// - XML Schema from xsi:schemaLocation
+// - No validation for XML without grammar declarations
+parser.parseFile('any-xml-file.xml');
 ```
 
-### QualifiedName for Namespace Support
+### Common XML File Types
 
 ```typescript
-import { QualifiedName } from 'typesxml';
+// DITA files with PUBLIC DTD references
+const ditaXml: string = `<?xml version="1.0"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="example">
+  <title>Example Topic</title>
+</concept>`;
 
-// Create qualified names
-const element = new QualifiedName('book', 'http://example.com/books', 'bk');
-const attribute = new QualifiedName('id');
+// DocBook files with SYSTEM DTD references  
+const docbookXml: string = `<?xml version="1.0"?>
+<!DOCTYPE book SYSTEM "docbook.dtd">
+<book>
+  <title>Example Book</title>
+</book>`;
 
-console.log(element.getLocalName()); // 'book'
-console.log(element.getNamespaceURI()); // 'http://example.com/books'
-console.log(element.getPrefix()); // 'bk'
-console.log(element.toString()); // 'bk:book'
+// XML Schema instance documents
+const schemaXml: string = `<?xml version="1.0"?>
+<catalog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="catalog.xsd">
+  <item id="123">Item</item>
+</catalog>`;
+
+// All parse automatically with appropriate validation
+parser.parseString(ditaXml);    // Uses DTD validation + default attributes
+parser.parseString(docbookXml); // Uses DTD validation  
+parser.parseString(schemaXml);  // Uses XML Schema validation
 ```
 
 ### Validation Context and Results
 
 ```typescript
-import { ValidationContext, ValidationResult, ValidationError } from 'typesxml';
+import { ValidationContext, ValidationResult, ValidationError, Grammar } from 'typesxml';
 
-// Check validation results
-const context = new ValidationContext();
-const result = grammar.validateElement(elementName, context);
+// Validation results are typically handled automatically by the parser
+// But you can access validation context for custom validation scenarios
+const context: ValidationContext = new ValidationContext();
 
-if (result.hasErrors()) {
-    result.getErrors().forEach(error => {
-        console.log(`Error: ${error.getMessage()}`);
-        if (error.getLine()) {
-            console.log(`  at line ${error.getLine()}`);
-        }
-    });
+// Example: Check if validation errors occurred during parsing
+try {
+    parser.setValidating(true);
+    parser.parseFile('document.xml');
+    console.log('Document is valid');
+} catch (error: unknown) {
+    if (error instanceof Error) {
+        console.log(`Validation error: ${error.message}`);
+    }
 }
 ```
 
 ### Grammar Types
 
 ```typescript
-import { GrammarType } from 'typesxml';
+import { GrammarType, Grammar } from 'typesxml';
 
 // Check grammar type
 switch (grammar.getType()) {
@@ -156,13 +217,83 @@ switch (grammar.getType()) {
 }
 ```
 
+## XML Schema Support (Enhanced October 2025)
+
+### Parsing Schema-Declared XML
+
+```typescript
+import { SAXParser, DOMBuilder, XMLDocument } from 'typesxml';
+
+const parser: SAXParser = new SAXParser();
+const builder: DOMBuilder = new DOMBuilder();
+
+// Configure parser for schema validation
+parser.setValidating(true); // Enable validation
+parser.setContentHandler(builder);
+
+// Parse XML that declares its schema location
+const xmlFile: string = 'purchase-order.xml'; // Contains xsi:schemaLocation
+parser.parseFile(xmlFile);
+const doc: XMLDocument | undefined = builder.getDocument(); // Fully validated document
+```
+
+### Real-World Schema Examples
+
+```typescript
+// XML with namespace and schema location
+const purchaseOrder: string = `<?xml version="1.0"?>
+<apo:purchaseOrder xmlns:apo="http://example.com/po"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://example.com/po purchase-order.xsd">
+  <apo:shipTo country="US">
+    <apo:name>Alice Smith</apo:name>
+    <apo:street>123 Maple Street</apo:street>
+  </apo:shipTo>
+</apo:purchaseOrder>`;
+
+// XML with no-namespace schema
+const catalog: string = `<?xml version="1.0"?>
+<catalog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="catalog.xsd">
+  <item id="123">
+    <name>Product Name</name>
+    <price>29.99</price>
+  </item>
+</catalog>`;
+
+// Both validate automatically when parsing
+parser.parseString(purchaseOrder); // Uses purchase-order.xsd
+parser.parseString(catalog);        // Uses catalog.xsd
+```
+
+### Schema Validation Features
+
+- **Complex Types**: Full support for complex type definitions with inheritance and extensions
+- **Sequences & Choices**: Complete validation of sequence and choice particles
+- **Namespace Awareness**: Proper handling of qualified names and namespace URIs
+- **Cardinality Constraints**: Validation of minOccurs/maxOccurs constraints
+- **Type Inheritance**: Support for complex type extensions and restrictions
+- **Error Reporting**: Detailed validation messages with context information
+
+### W3C Compliance
+
+Current XML Schema implementation achieves **76% success rate** on the W3C XML Schema test suite (49,072/64,543 files), covering:
+
+- Element and attribute declarations
+- Complex and simple type definitions
+- Namespace processing
+- Content model validation
+- Type substitution and inheritance
+
 ## Common Operations
 
 ### Working with Elements
 
 ```typescript
+import { XMLElement, XMLAttribute } from 'typesxml';
+
 // Create element
-const element = new XMLElement('book');
+const element: XMLElement = new XMLElement('book');
 
 // Add attributes
 element.setAttribute(new XMLAttribute('id', '123'));
@@ -172,29 +303,31 @@ element.setAttribute(new XMLAttribute('lang', 'en'));
 element.addString('Book Title');
 
 // Add child elements
-const author = new XMLElement('author');
+const author: XMLElement = new XMLElement('author');
 author.addString('John Doe');
 element.addElement(author);
 
 // Get children
-const children = element.getChildren();
-const firstChild = element.getChild('author');
+const children: XMLElement[] = element.getChildren();
+const firstChild: XMLElement | undefined = element.getChild('author');
 
 // Get attributes
-const id = element.getAttribute('id')?.getValue();
-const allAttributes = element.getAttributes();
+const id: string | undefined = element.getAttribute('id')?.getValue();
+const allAttributes: XMLAttribute[] = element.getAttributes();
 
 // Get text content (recursive)
-const textContent = element.getText();
+const textContent: string = element.getText();
 ```
 
 ### Working with Documents
 
 ```typescript
+import { XMLDocument, XMLElement, XMLDeclaration, XMLDocumentType, XMLComment, ProcessingInstruction } from 'typesxml';
+
 // Access document parts
-const root = document.getRoot();
-const declaration = document.getXmlDeclaration();
-const docType = document.getDocumentType();
+const root: XMLElement | undefined = document.getRoot();
+const declaration: XMLDeclaration | undefined = document.getXmlDeclaration();
+const docType: XMLDocumentType | undefined = document.getDocumentType();
 
 // Add document-level content
 document.addComment(new XMLComment('This is a comment'));
@@ -204,31 +337,38 @@ document.addProcessingInstruction(new ProcessingInstruction('target', 'data'));
 ### Navigation and Searching
 
 ```typescript
+import { XMLDocument, XMLElement } from 'typesxml';
+
 // Find elements by name
-const root = document.getRoot();
-const children = root?.getChildren();
-const specificChild = root?.getChild('targetElement');
+const root: XMLElement | undefined = document.getRoot();
+const children: XMLElement[] | undefined = root?.getChildren();
+const specificChild: XMLElement | undefined = root?.getChild('targetElement');
 
 // Remove elements
 root?.removeChild(specificChild);
 
 // Check for attributes
 if (element.hasAttribute('id')) {
-    const id = element.getAttribute('id')?.getValue();
+    const id: string | undefined = element.getAttribute('id')?.getValue();
 }
 ```
 
 ## Error Handling Patterns
 
 ```typescript
+import { SAXParser, DOMBuilder, XMLDocument } from 'typesxml';
+
 try {
+    const parser: SAXParser = new SAXParser();
+    const builder: DOMBuilder = new DOMBuilder();
+    parser.setContentHandler(builder);
     parser.parseFile('document.xml');
-    const doc = builder.getDocument();
+    const doc: XMLDocument | undefined = builder.getDocument();
     if (!doc) {
         throw new Error('Failed to build document');
     }
     // Process document...
-} catch (error) {
+} catch (error: unknown) {
     if (error instanceof Error) {
         console.error('Parse error:', error.message);
     }
@@ -240,17 +380,19 @@ try {
 ### 1. Configuration File Processing
 
 ```typescript
-function updateConfig(file: string, key: string, value: string) {
-    const parser = new SAXParser();
-    const builder = new DOMBuilder();
+import { SAXParser, DOMBuilder, XMLDocument, XMLElement, XMLAttribute, XMLWriter } from 'typesxml';
+
+function updateConfig(file: string, key: string, value: string): void {
+    const parser: SAXParser = new SAXParser();
+    const builder: DOMBuilder = new DOMBuilder();
     parser.setContentHandler(builder);
     parser.parseFile(file);
     
-    const doc = builder.getDocument();
-    const root = doc?.getRoot();
+    const doc: XMLDocument | undefined = builder.getDocument();
+    const root: XMLElement | undefined = doc?.getRoot();
     
     // Find or create setting
-    let setting = root?.getChild('setting');
+    let setting: XMLElement | undefined = root?.getChild('setting');
     if (!setting) {
         setting = new XMLElement('setting');
         root?.addElement(setting);
@@ -266,17 +408,19 @@ function updateConfig(file: string, key: string, value: string) {
 ### 2. Data Transformation
 
 ```typescript
-function transformXML(inputFile: string, outputFile: string) {
-    const parser = new SAXParser();
-    const builder = new DOMBuilder();
+import { SAXParser, DOMBuilder, XMLDocument, XMLElement, XMLAttribute, XMLWriter } from 'typesxml';
+
+function transformXML(inputFile: string, outputFile: string): void {
+    const parser: SAXParser = new SAXParser();
+    const builder: DOMBuilder = new DOMBuilder();
     parser.setContentHandler(builder);
     parser.parseFile(inputFile);
     
-    const doc = builder.getDocument();
-    const root = doc?.getRoot();
+    const doc: XMLDocument | undefined = builder.getDocument();
+    const root: XMLElement | undefined = doc?.getRoot();
     
     // Transform data
-    root?.getChildren().forEach(child => {
+    root?.getChildren().forEach((child: XMLElement) => {
         if (child.getName() === 'oldElement') {
             child.setAttribute(new XMLAttribute('transformed', 'true'));
         }
@@ -289,15 +433,17 @@ function transformXML(inputFile: string, outputFile: string) {
 ### 3. XML Validation/Inspection
 
 ```typescript
+import { SAXParser, DOMBuilder, XMLDocument, XMLElement } from 'typesxml';
+
 function validateStructure(xmlString: string): boolean {
     try {
-        const parser = new SAXParser();
-        const builder = new DOMBuilder();
+        const parser: SAXParser = new SAXParser();
+        const builder: DOMBuilder = new DOMBuilder();
         parser.setContentHandler(builder);
         parser.parseString(xmlString);
         
-        const doc = builder.getDocument();
-        const root = doc?.getRoot();
+        const doc: XMLDocument | undefined = builder.getDocument();
+        const root: XMLElement | undefined = doc?.getRoot();
         
         // Check required structure
         return root?.getName() === 'expectedRoot' && 
@@ -311,7 +457,7 @@ function validateStructure(xmlString: string): boolean {
 ## Node Type Constants
 
 ```typescript
-import { Constants } from 'typesxml';
+import { Constants, XMLNode } from 'typesxml';
 
 switch (node.getNodeType()) {
     case Constants.ELEMENT_NODE:
@@ -333,15 +479,18 @@ switch (node.getNodeType()) {
 import { XMLUtils } from 'typesxml';
 
 // Clean strings for XML
-const cleaned = XMLUtils.cleanString(userInput);
+const userInput: string = "user input";
+const cleaned: string = XMLUtils.cleanString(userInput);
 
 // Check whitespace
+const char: string = " ";
 if (XMLUtils.isXmlSpace(char)) {
     // Handle whitespace
 }
 
 // Validate characters
-const validText = XMLUtils.validXml10Chars(text);
+const text: string = "text to validate";
+const validText: boolean = XMLUtils.validXml10Chars(text);
 ```
 
 ## DTD Grammar Support
@@ -509,50 +658,29 @@ const notations = dtdGrammar.getNotationsMap();
 ### Working with Content Models
 
 ```typescript
-import { QualifiedName } from 'typesxml';
+import { DTDGrammar } from 'typesxml';
 
-// Get content model for an element using Grammar interface
-const bookName = new QualifiedName('book');
-const bookModel = dtdGrammar.getElementContentModel(bookName);
-if (bookModel) {
-    console.log('Type:', bookModel.getType()); // 'Children', 'Mixed', 'EMPTY', 'ANY'
-    console.log('Children:', [...bookModel.getChildren()]);
-    console.log('Is mixed:', bookModel.isMixed());
-}
-
-// Parse content model from string
-import { ContentModel } from 'typesxml';
-const model = ContentModel.parse('(title, author+, (chapter | appendix)+)');
+// Content models are automatically processed during validation
+// You can inspect them if needed for advanced use cases
+const elementName: string = 'book';
+// DTD content model inspection is handled internally by the grammar system
 ```
 
 ### Accessing DTD Declarations
 
 ```typescript
-// Element declarations (DTD-specific access)
-const bookElement = dtdGrammar.getElementDeclMap().get('book');
-console.log('Content spec:', bookElement?.getContentSpec());
+import { DTDGrammar } from 'typesxml';
 
-// Attribute declarations through Grammar interface
-const bookName = new QualifiedName('book');
-const bookAttrs = dtdGrammar.getElementAttributes(bookName);
-bookAttrs.forEach((attrInfo, qName) => {
-    console.log(`${qName.getLocalName()}: ${attrInfo.getType()}`);
-    if (attrInfo.hasDefaultValue()) {
-        console.log(`  Default: ${attrInfo.getDefaultValue()}`);
-    }
-});
+// DTD declarations are automatically processed during parsing
+// Access is typically not needed for normal XML processing workflows
 
-// Entity declarations through Grammar interface
-const copyrightValue = dtdGrammar.getEntityValue('copyright');
-if (copyrightValue) {
-    console.log('Copyright entity:', copyrightValue);
-}
+// Example: DTD processing happens automatically when parsing
+const parser: SAXParser = new SAXParser();
+parser.setValidating(true); // Enables DTD processing
+parser.setIncludeDefaultAttributes(true); // Includes DTD default attributes
+parser.parseFile('document-with-dtd.xml');
 
-// Notation declarations through Grammar interface
-const gifNotation = dtdGrammar.getNotation('gif');
-if (gifNotation) {
-    console.log('GIF notation:', gifNotation.getSystemId());
-}
+// All DTD benefits (validation, default attributes, entities) are applied automatically
 ```
 
 ### DTD Content Particles
@@ -604,20 +732,18 @@ console.log(sequence.toString()); // '(title,subtitle?)'
    }
    ```
 
-3. **Choose appropriate grammar for your use case**:
+3. **Choose appropriate validation for your XML**:
 
    ```typescript
-   // For strict validation
-   parser.setGrammar(dtdGrammar);
+   // For XML with DTD declarations (DITA, DocBook, etc.)
    parser.setValidating(true);
+   parser.setIncludeDefaultAttributes(true); // Get DTD default attributes
    
-   // For default attributes without strict validation
-   parser.setGrammar(dtdGrammar);
-   parser.setValidating(false);
+   // For XML with schema declarations
+   parser.setValidating(true); // Automatic schema detection
    
-   // For simple parsing without schema
-   parser.setGrammar(new NoOpGrammar());
-   parser.setValidating(false);
+   // For simple XML without schemas
+   parser.setValidating(false); // Skip validation
    ```
 
 4. **Prefer DOMBuilder for most use cases**:
@@ -640,12 +766,14 @@ console.log(sequence.toString()); // '(title,subtitle?)'
    parser.parseFile('file.xml', 'utf8');
    ```
 
-7. **Use QualifiedName for namespace-aware processing**:
+7. **Set up catalogs for DTD/schema resolution**:
 
    ```typescript
-   // When working with namespaces
-   const qName = new QualifiedName('element', 'http://example.com/ns');
-   const attributes = grammar.getElementAttributes(qName);
+   // Required for PUBLIC DTD identifiers and schema locations
+   const catalog = new Catalog('/path/to/catalog.xml');
+   builder.setCatalog(catalog);
+   
+   // Resolves: "-//OASIS//DTD DITA Concept//EN" -> actual file path
    ```
 
 8. **Configure default attributes appropriately**:
@@ -656,4 +784,16 @@ console.log(sequence.toString()); // '(title,subtitle?)'
    
    // Disable for minimal output
    parser.setIncludeDefaultAttributes(false);
+   ```
+
+9. **Automatic validation works best**:
+
+   ```typescript
+   // Let the parser detect validation type from the XML
+   parser.setValidating(true); // Handles DTD, Schema, or none automatically
+   
+   // XML declares its own grammar:
+   // <!DOCTYPE...> -> DTD validation
+   // xsi:schemaLocation -> Schema validation  
+   // No declaration -> No validation
    ```

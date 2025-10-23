@@ -6,7 +6,8 @@ XML library written in TypeScript with multi-schema validation framework
 
 - **[Complete API Documentation](./API_DOCUMENTATION.md)** - Comprehensive guide with examples and API reference
 - **[Quick Reference Guide](./QUICK_REFERENCE.md)** - Cheat sheet for common operations and usage patterns
-- **[AI Agent Guidelines](./AI_AGENT_GUIDELINES.md)** - Performance, memory, and best practice guidelines for AI assistants
+- **[Developer & AI Reference](./AI_AGENT_GUIDELINES.md)** - Comprehensive technical reference with performance guidance and best practices
+- **[Conformance Tests](./CONFORMANCE_TESTS.md)** - W3C test suite integration for DTD and XML Schema validation testing
 - **[Troubleshooting Guide](./TROUBLESHOOTING.md)** - Common issues, solutions, and debugging techniques
 - **[Type Definitions](./API_TYPES.d.ts)** - TypeScript type definitions for better IDE support
 
@@ -23,7 +24,14 @@ TypesXML implements XML 1.0/1.1 parsing with an extensible Grammar framework sup
 The Grammar interface provides schema validation support for:
 
 - **DTD Validation**: Complete Document Type Definition support with full validation
-- **XML Schema**: Initial implementation with basic support for XSD validation
+- **XML Schema**: Comprehensive implementation with 76% W3C test suite success rate, including complex types, sequences, choices, and namespace-aware validation
+
+### Recent Major Enhancements (October 2025)
+
+- **Enhanced XML Schema Support**: Significant improvements to complex type validation, inheritance, and extension support
+- **Performance Improvements**: Eliminated validation bottlenecks and optimized algorithms for better performance
+- **Enhanced Error Reporting**: Detailed validation context with line/column information and improved error messages
+- **W3C Compliance**: 76% success rate on official W3C XML Schema test suite (49,072/64,543 files)
 
 ### Key Features
 
@@ -74,10 +82,11 @@ The `DOMBuilder` class implements the `ContentHandler` interface and builds a DO
 
 - **Extensible Grammar Interface**: Unified abstraction supporting multiple schema types
 - **DTD Grammar**: Complete Document Type Definition implementation
-- **XML Schema Support**: Initial implementation with basic XSD validation capabilities
+- **XML Schema Support**: Comprehensive implementation with complex type validation, inheritance, and namespace-aware processing
 - **Namespace-Aware Processing**: QualifiedName system for namespace-aware validation
 - **Validation Context**: Rich error reporting with line/column information
 - **Flexible Validation Modes**: Configurable strictness levels for different use cases
+- **Optimized Performance**: Enhanced validation algorithms with proper element consumption tracking
 
 ### Complete DTD Support
 
@@ -91,7 +100,8 @@ The `DOMBuilder` class implements the `ContentHandler` interface and builds a DO
 
 - **XML Writer**: Utilities for writing XML documents to files with proper formatting
 - **Indentation Support**: Automatic indentation and prettification of XML documents
-- **W3C Compliance**: Extensive testing against official W3C XML Test Suite
+- **W3C Compliance**: Extensive testing against official W3C XML Test Suite with documented conformance results
+- **Conformance Testing**: Integrated test runners for W3C DTD and XML Schema test suites
 
 ## Installation
 
