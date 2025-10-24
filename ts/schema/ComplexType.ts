@@ -15,11 +15,15 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { SchemaType } from "./SchemaType";
 import { AttributeInfo } from "../grammar/Grammar";
-import { ContentModel } from "./ContentModel";
-import { SchemaAttributeDecl } from "./Attribute";
 import { XMLUtils } from "../XMLUtils";
+import { AllModel } from "./AllModel";
+import { SchemaAttributeDecl } from "./Attribute";
+import { ChoiceModel } from "./ChoiceModel";
+import { ContentModel } from "./ContentModel";
+import { ElementModel } from "./ElementModel";
+import { SchemaType } from "./SchemaType";
+import { SequenceModel } from "./SequenceModel";
 
 export type ContentType = 'empty' | 'simple' | 'element-only' | 'mixed';
 
@@ -94,7 +98,7 @@ export class ComplexType extends SchemaType {
     setContentModel(contentModel: ContentModel): void {
         this.validateContentModel(contentModel);
         this.contentModel = contentModel;
-        
+
         // Update content type based on content model
         if (!contentModel) {
             this.contentType = 'empty';
@@ -145,26 +149,26 @@ export class ComplexType extends SchemaType {
     // Convert to Grammar framework AttributeInfo format
     getAttributeInfos(): Map<string, AttributeInfo> {
         const result = new Map<string, AttributeInfo>();
-        
+
         for (const [name, attrDecl] of this.attributes) {
             const info = attrDecl.toAttributeInfo();
             result.set(name, info);
         }
-        
+
         return result;
     }
 
     // Get default attribute values
     getDefaultAttributes(): Map<string, string> {
         const result = new Map<string, string>();
-        
+
         for (const [name, attrDecl] of this.attributes) {
             const defaultValue = attrDecl.getDefaultValue();
             if (defaultValue) {
                 result.set(name, defaultValue);
             }
         }
-        
+
         return result;
     }
 
@@ -185,13 +189,75 @@ export class ComplexType extends SchemaType {
         this.baseTypeQName = baseTypeQName;
     }
 
+    // Override base class method to handle content model merging for extensions
+    setBaseType(baseType: SchemaType): void {
+        super.setBaseType(baseType);
+
+        // If this is an extension, merge content models
+        if (this.isExtension() && baseType.isComplexType()) {
+            this.mergeContentModelForExtension(baseType as ComplexType);
+        }
+    }
+
+    private mergeContentModelForExtension(baseType: ComplexType): void {
+        const baseContentModel = baseType.getContentModel();
+        const extensionContentModel = this.contentModel;
+
+        if (baseContentModel && extensionContentModel) {
+            // Both base and extension have content models - need to merge them properly
+            const mergedModel = this.mergeContentModels(baseContentModel, extensionContentModel);
+            this.contentModel = mergedModel;
+        } else if (baseContentModel && !extensionContentModel) {
+            // Only base has content model - use it directly
+            this.contentModel = baseContentModel;
+        }
+        // If only extension has content model or neither has content model, keep current state
+    }
+
+    private mergeContentModels(baseModel: ContentModel, extensionModel: ContentModel): ContentModel {
+        // For XML Schema extensions, we generally create a sequence that combines base + extension
+        // This follows the XML Schema specification for complex type extensions
+
+        const combinedSequence = new SequenceModel(1, 1);
+
+        // Add base content model components
+        this.addContentModelToSequence(combinedSequence, baseModel);
+
+        // Add extension content model components
+        this.addContentModelToSequence(combinedSequence, extensionModel);
+
+        return combinedSequence;
+    }
+
+    private addContentModelToSequence(targetSequence: SequenceModel, sourceModel: ContentModel): void {
+        if (sourceModel instanceof SequenceModel) {
+            // Flatten sequence - add all its particles individually
+            const sourceParticles = sourceModel.getParticles();
+            for (const particle of sourceParticles) {
+                targetSequence.addParticle(particle);
+            }
+        } else if (sourceModel instanceof ChoiceModel) {
+            // Add choice as a single particle (don't flatten)
+            targetSequence.addParticle(sourceModel);
+        } else if (sourceModel instanceof ElementModel) {
+            // Add element as a single particle
+            targetSequence.addParticle(sourceModel);
+        } else if (sourceModel instanceof AllModel) {
+            // Add all as a single particle (don't flatten - all has special semantics)
+            targetSequence.addParticle(sourceModel);
+        } else {
+            // Other content model types (GroupModel, AnyModel, etc.) - add as single particle
+            targetSequence.addParticle(sourceModel);
+        }
+    }
+
     // Schema validation methods
-    
+
     private validateName(name: string): void {
         if (!name) {
             throw new Error('ComplexType name cannot be empty');
         }
-        
+
         // Skip validation for Clark notation (expanded QNames like {namespace}localName)
         if (name.startsWith('{')) {
             const closeBrace = name.indexOf('}');
@@ -204,14 +270,14 @@ export class ComplexType extends SchemaType {
                 return;
             }
         }
-        
+
         // Handle qualified names (prefix:localName) vs NCNames
         const colonIndex = name.indexOf(':');
         if (colonIndex !== -1) {
             // Qualified name - validate both prefix and local name as NCNames
             const prefix = name.substring(0, colonIndex);
             const localName = name.substring(colonIndex + 1);
-            
+
             if (!XMLUtils.isValidNCName(prefix)) {
                 throw new Error(`ComplexType name prefix '${prefix}' is not a valid NCName`);
             }
@@ -231,7 +297,7 @@ export class ComplexType extends SchemaType {
         if (this.mixed && this.contentType === 'simple') {
             throw new Error('Simple content cannot be mixed');
         }
-        
+
         // Schema spec: empty content cannot have content model
         if (this.contentType === 'empty' && contentModel) {
             throw new Error('Empty content type cannot have a content model');
@@ -243,7 +309,7 @@ export class ComplexType extends SchemaType {
         if (this.attributes.has(name)) {
             throw new Error(`Duplicate attribute declaration: '${name}'`);
         }
-        
+
         // Validate the attribute itself
         attribute.validate();
     }
@@ -252,14 +318,14 @@ export class ComplexType extends SchemaType {
         if (!baseTypeQName) {
             throw new Error('Base type reference cannot be empty');
         }
-        
+
         // Handle qualified names vs local names
         const colonIndex = baseTypeQName.indexOf(':');
         if (colonIndex !== -1) {
             // Qualified name - validate both prefix and local name as NCNames
             const prefix = baseTypeQName.substring(0, colonIndex);
             const localName = baseTypeQName.substring(colonIndex + 1);
-            
+
             if (!XMLUtils.isValidNCName(prefix)) {
                 throw new Error(`Base type prefix '${prefix}' is not a valid NCName`);
             }
@@ -291,21 +357,21 @@ export class ComplexType extends SchemaType {
         if (this.getName()) {
             this.validateName(this.getName()!);
         }
-        
+
         if (this.contentModel) {
             this.validateContentModel(this.contentModel);
         }
-        
+
         // Schema spec: abstract types with simple content restrictions
         if (this.abstract && this.hasSimpleContent() && !this.baseType && !this.baseTypeQName) {
             throw new Error('Abstract types with simple content must have a base type');
         }
-        
+
         // Validate inheritance consistency
         if (this.derivationMethod && !this.baseType && !this.baseTypeQName) {
             throw new Error(`Type derivation method '${this.derivationMethod}' specified but no base type defined`);
         }
-        
+
         // Validate all attributes
         for (const [name, attribute] of this.attributes) {
             try {
@@ -314,12 +380,12 @@ export class ComplexType extends SchemaType {
                 throw new Error(`Invalid attribute '${name}': ${(error as Error).message}`);
             }
         }
-        
+
         // Schema spec: content type consistency validation
         if (this.contentType === 'simple' && this.contentModel) {
             throw new Error('Simple content type cannot have element content model');
         }
-        
+
         if (this.contentType === 'empty' && (this.contentModel || this.mixed)) {
             throw new Error('Empty content type cannot have content model or be mixed');
         }

@@ -15,17 +15,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { Grammar, GrammarType, AttributeInfo, ValidationContext, ValidationResult, ValidationError } from "../grammar/Grammar";
 import { NotationDecl } from "../dtd/NotationDecl";
-import { SchemaType } from "./SchemaType";
-import { SimpleType } from "./SimpleType";
-import { ComplexType } from "./ComplexType";
-import { SchemaElementDecl } from "./Element";
-import { SchemaAttributeDecl } from "./Attribute";
-import { BuiltinTypes } from "./BuiltinTypes";
-import { XMLSchemaValidator } from "./XMLSchemaValidator";
-import { ContentModel } from "./ContentModel";
+import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResult } from "../grammar/Grammar";
 import { XMLUtils } from "../XMLUtils";
+import { SchemaAttributeDecl } from "./Attribute";
+import { AttributeGroup } from "./AttributeGroup";
+import { BuiltinTypes } from "./BuiltinTypes";
+import { ComplexType } from "./ComplexType";
+import { ContentModel } from "./ContentModel";
+import { SchemaElementDecl } from "./Element";
+import { SchemaType } from "./SchemaType";
 
 export class XMLSchemaGrammar implements Grammar {
     private targetNamespace: string = '';
@@ -43,15 +42,15 @@ export class XMLSchemaGrammar implements Grammar {
     // Group definitions
     private groupDefinitions: Map<string, ContentModel> = new Map();
 
+    // Attribute group definitions
+    private attributeGroupDefinitions: Map<string, AttributeGroup> = new Map();
+
     // Namespace mappings
     private namespaces: Map<string, string> = new Map();
 
     // Entity reference tracking for canonicalization compatibility
     private entityReferences: Map<string, string> = new Map();
 
-    // XML Schema validator for validation logic
-    private validator: XMLSchemaValidator;
-    
     // Validation mode (set by SAXParser)
     private validatingMode: boolean = false;
 
@@ -65,15 +64,12 @@ export class XMLSchemaGrammar implements Grammar {
 
         // Initialize built-in types
         BuiltinTypes.initialize();
-
-        // Initialize validator with this grammar
-        this.validator = new XMLSchemaValidator(this);
     }
-    
+
     setValidating(validating: boolean): void {
         this.validatingMode = validating;
     }
-    
+
     isValidating(): boolean {
         return this.validatingMode;
     }
@@ -123,7 +119,6 @@ export class XMLSchemaGrammar implements Grammar {
         return this.attributeFormDefault;
     }
 
-    // Type management
     addTypeDefinition(name: string, type: SchemaType): void {
         this.validateTypeDefinition(name, type);
         this.types.set(name, type);
@@ -132,24 +127,24 @@ export class XMLSchemaGrammar implements Grammar {
     getTypeDefinition(name: string): SchemaType | undefined {
         // Handle different name formats: local names, qualified names, and Clark notation
         let resolvedType: SchemaType | undefined;
-        
+
         // First try exact lookup (for local names and already resolved names)
         resolvedType = this.types.get(name);
         if (resolvedType) {
             return resolvedType;
         }
-        
+
         // Handle qualified names (prefix:localName)
         const colonIndex = name.indexOf(':');
         if (colonIndex !== -1) {
             const prefix = name.substring(0, colonIndex);
             const localName = name.substring(colonIndex + 1);
-            
+
             // Special handling for XML Schema namespace
             if (prefix === 'xs' || prefix === 'xsd') {
                 return BuiltinTypes.getType(name) || BuiltinTypes.getType(localName);
             }
-            
+
             // Resolve prefix to namespace URI
             const namespaceUri = this.namespaces.get(prefix);
             if (namespaceUri) {
@@ -159,7 +154,7 @@ export class XMLSchemaGrammar implements Grammar {
                 if (resolvedType) {
                     return resolvedType;
                 }
-                
+
                 // Try local name lookup if this is the target namespace
                 if (namespaceUri === this.targetNamespace) {
                     resolvedType = this.types.get(localName);
@@ -168,21 +163,21 @@ export class XMLSchemaGrammar implements Grammar {
                     }
                 }
             }
-            
+
             // For unknown prefixes, try the local name as fallback
             resolvedType = this.types.get(localName);
             if (resolvedType) {
                 return resolvedType;
             }
         }
-        
+
         // Handle Clark notation ({namespace}localName)
         if (name.startsWith('{')) {
             const closeBrace = name.indexOf('}');
             if (closeBrace !== -1) {
                 const namespaceUri = name.substring(1, closeBrace);
                 const localName = name.substring(closeBrace + 1);
-                
+
                 // Try local name lookup if this is the target namespace
                 if (namespaceUri === this.targetNamespace) {
                     resolvedType = this.types.get(localName);
@@ -192,13 +187,13 @@ export class XMLSchemaGrammar implements Grammar {
                 }
             }
         }
-        
+
         // Check built-in types (including XML Schema types)
         resolvedType = BuiltinTypes.getType(name);
         if (resolvedType) {
             return resolvedType;
         }
-        
+
         // Final fallback: try various forms of the name
         // This handles cases where qualified names weren't properly normalized
         if (colonIndex !== -1) {
@@ -208,7 +203,7 @@ export class XMLSchemaGrammar implements Grammar {
                 return resolvedType;
             }
         }
-        
+
         return undefined;
     }
 
@@ -216,7 +211,6 @@ export class XMLSchemaGrammar implements Grammar {
         return this.types;
     }
 
-    // Group definition management
     addGroupDefinition(name: string, group: ContentModel): void {
         this.groupDefinitions.set(name, group);
     }
@@ -229,7 +223,18 @@ export class XMLSchemaGrammar implements Grammar {
         return this.groupDefinitions;
     }
 
-    // Element declaration management
+    addAttributeGroupDefinition(name: string, group: AttributeGroup): void {
+        this.attributeGroupDefinitions.set(name, group);
+    }
+
+    getAttributeGroupDefinition(name: string): AttributeGroup | undefined {
+        return this.attributeGroupDefinitions.get(name);
+    }
+
+    getAttributeGroupDefinitions(): Map<string, AttributeGroup> {
+        return this.attributeGroupDefinitions;
+    }
+
     addElementDeclaration(name: string, element: SchemaElementDecl): void {
         this.validateElementDeclaration(name, element);
         this.elementDeclarations.set(name, element);
@@ -243,7 +248,6 @@ export class XMLSchemaGrammar implements Grammar {
         return this.elementDeclarations;
     }
 
-    // Attribute declaration management
     addAttributeDeclaration(name: string, attribute: SchemaAttributeDecl): void {
         this.validateAttributeDeclaration(name, attribute);
         this.attributeDeclarations.set(name, attribute);
@@ -257,25 +261,20 @@ export class XMLSchemaGrammar implements Grammar {
         return this.attributeDeclarations;
     }
 
-    // Grammar interface implementation
     validateElement(elementName: string, context: ValidationContext): ValidationResult {
+        // XMLSchemaGrammar only provides infrastructure - no validation logic
+        // Just verify element exists in schema
         const elementDecl: SchemaElementDecl | undefined = this.getElementDeclaration(elementName);
         if (!elementDecl) {
             return ValidationResult.error(`No declaration found for element '${elementName.toString()}'`);
         }
 
-        // Check if element is abstract
         if (elementDecl.isAbstract()) {
             return ValidationResult.error(`Abstract element '${elementName.toString()}' cannot be used directly`);
         }
 
-        // Validate against element's type
-        const elementType: SchemaType | undefined = elementDecl.resolveType(this);
-        if (!elementType) {
-            return ValidationResult.error(`No type found for element '${elementName.toString()}'`);
-        }
-
-        return this.validateAgainstType(elementName, context, elementType);
+        // Element exists - validation will be handled by CompositeGrammar
+        return ValidationResult.success();
     }
 
     getElementContentModel(elementName: string) {
@@ -294,6 +293,8 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     validateAttributes(elementName: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
+        // XMLSchemaGrammar only provides infrastructure - no validation logic
+        // Just verify element exists and perform basic structural checks
         const elementDecl: SchemaElementDecl | undefined = this.getElementDeclaration(elementName);
         if (!elementDecl) {
             return ValidationResult.success();
@@ -303,16 +304,14 @@ export class XMLSchemaGrammar implements Grammar {
         if (!type) {
             return ValidationResult.success();
         }
-        if (!type.isComplexType()) {
-            // Simple types don't have attributes
-            if (attributes.size > 0) {
-                return ValidationResult.error(`Element '${elementName.toString()}' with simple type cannot have attributes`);
-            }
-            return ValidationResult.success();
+
+        // Basic structural check: simple types cannot have attributes
+        if (!type.isComplexType() && attributes.size > 0) {
+            return ValidationResult.error(`Element '${elementName.toString()}' with simple type cannot have attributes`);
         }
 
-        const complexType: ComplexType = type as ComplexType;
-        return this.validator.validateAttributesForGrammar(elementName, attributes, complexType);
+        // Detailed attribute validation will be handled by CompositeGrammar
+        return ValidationResult.success();
     }
 
     getElementAttributes(elementName: string): Map<string, AttributeInfo> {
@@ -324,9 +323,9 @@ export class XMLSchemaGrammar implements Grammar {
         const type: SchemaType | undefined = elementDecl.resolveType(this);
         if (type && type.isComplexType()) {
             const complexType: ComplexType = type as ComplexType;
-            return complexType.getAttributeInfos();
+            const attrs = complexType.getAttributeInfos();
+            return attrs;
         }
-
         return new Map();
     }
 
@@ -375,48 +374,16 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     validateElementContent(elementName: string, children: string[], textContent: string, context: ValidationContext): ValidationResult {
-        const elementDecl: SchemaElementDecl | undefined = this.getElementDeclaration(elementName);
-        if (!elementDecl) {
-            return ValidationResult.error(`No declaration found for element '${elementName.toString()}'`);
-        }
-
-        const type: SchemaType | undefined = elementDecl.resolveType(this);
-        if (!type) {
-            return ValidationResult.error(`No type found for element '${elementName.toString()}'`);
-        }
-        if (type.isSimpleType()) {
-            // Simple content: no child elements allowed, validate text content
-            if (children.length > 0) {
-                return ValidationResult.error(`Element '${elementName.toString()}' with simple type cannot have child elements`);
-            }
-            return this.validateSimpleType(textContent, type as SimpleType);
-        } else {
-            const complexType: ComplexType = type as ComplexType;
-
-
-            return this.validateComplexTypeContent(children, textContent, complexType);
-        }
+        // XMLSchemaGrammar only provides structure information
+        // Actual validation is handled by CompositeGrammar
+        return ValidationResult.success();
     }
 
-    validateAttributeValue(elementName: string, attributeName: string, value: string, context: ValidationContext): ValidationResult {
-        const elementDecl: SchemaElementDecl | undefined = this.getElementDeclaration(elementName);
-        if (!elementDecl) {
-            return ValidationResult.success();
-        }
-
-        const type: SchemaType | undefined = elementDecl.resolveType(this);
-        if (!type || !type.isComplexType()) {
-            return ValidationResult.success();
-        }
-
-        const complexType: ComplexType = type as ComplexType;
-        const attrDecl: SchemaAttributeDecl | undefined = complexType.getAttribute(attributeName);
-        if (!attrDecl) {
-            return ValidationResult.error(`No declaration found for attribute '${attributeName.toString()}'`);
-        }
-
-        return this.validateSimpleType(value, attrDecl.getType());
-    }
+    // ========================================================================
+    // CONTENT VALIDATION METHODS REMOVED
+    // Content validation is now handled by CompositeGrammar
+    // XMLSchemaGrammar only provides infrastructure and schema structure validation
+    // ========================================================================
 
     resolveEntity(name: string): string | undefined {
         // Entity methods (for DTD compatibility)
@@ -456,242 +423,6 @@ export class XMLSchemaGrammar implements Grammar {
         this.entityReferences.clear();
     }
 
-    private validateAgainstType(element: string, content: ValidationContext, type: SchemaType): ValidationResult {
-        if (type.isSimpleType()) {
-            return this.validateSimpleType(content.textContent, type as SimpleType);
-        } else {
-            return this.validateComplexType(element, content, type as ComplexType);
-        }
-    }
-
-    private validateComplexType(element: string, content: ValidationContext, complexType: ComplexType): ValidationResult {
-        // Validate attributes
-        const attrResult: ValidationResult = this.validateComplexTypeAttributes(content.attributes, complexType);
-        if (!attrResult.isValid) {
-            return attrResult;
-        }
-
-        // Skip content validation if attributeOnly flag is set
-        if (content.attributeOnly) {
-            return ValidationResult.success();
-        }
-
-        // Validate content
-        // Convert string names to QualifiedName objects
-        const children: string[] = content.childrenNames;
-        return this.validateComplexTypeContent(children, content.textContent, complexType);
-    }
-
-    private validateComplexTypeAttributes(attributes: Map<string, string>, complexType: ComplexType): ValidationResult {
-        const declaredAttrs: Map<string, SchemaAttributeDecl> = complexType.getAttributes();
-        const errors: ValidationError[] = [];
-
-        // Convert attribute maps to use string keys for easier comparison
-        const attributesByKey: Map<string, string> = new Map<string, string>();
-        const attributeEntries: [string, string][] = Array.from(attributes.entries());
-        for (let [qname, value] of attributeEntries) {
-            attributesByKey.set(qname, value);
-        }
-
-        const declaredAttrsByKey: Map<string, SchemaAttributeDecl> = new Map<string, SchemaAttributeDecl>();
-        const declaredAttrEntries: [string, SchemaAttributeDecl][] = Array.from(declaredAttrs.entries());
-        for (const [qname, attrDecl] of declaredAttrEntries) {
-            declaredAttrsByKey.set(qname, attrDecl);
-        }
-
-        // Check required attributes
-        const declaredAttrEntries2: [string, SchemaAttributeDecl][] = Array.from(declaredAttrs.entries());
-        for (const [name, attrDecl] of declaredAttrEntries2) {
-            if (attrDecl.getUse() === 'required' && !attributesByKey.has(name)) {
-                errors.push(new ValidationError(`Required attribute '${name.toString()}' is missing`));
-            }
-        }
-
-        // Check prohibited attributes
-        const attributeEntries2: [string, string][] = Array.from(attributes.entries());
-        for (const [name] of attributeEntries2) {
-            const attrDecl: SchemaAttributeDecl | undefined = declaredAttrsByKey.get(name);
-            if (attrDecl && attrDecl.getUse() === 'prohibited') {
-                errors.push(new ValidationError(`Prohibited attribute '${name.toString()}' is present`));
-            }
-        }
-
-        // Validate attribute values and check for undeclared attributes
-        const attributeEntries3: [string, string][] = Array.from(attributes.entries());
-        for (const [name, value] of attributeEntries3) {
-            const attrDecl: SchemaAttributeDecl | undefined = declaredAttrsByKey.get(name);
-            if (attrDecl) {
-                // Validate declared attribute value
-                const resolvedType: SimpleType = attrDecl.resolveType(this);
-
-                // Check fixed value constraint
-                const fixedValue: string | undefined = attrDecl.getFixedValue();
-                if (fixedValue && value !== fixedValue) {
-                    errors.push(new ValidationError(`Attribute '${name.toString()}' has fixed value '${fixedValue}' but got '${value}'`));
-                    continue; // Skip further validation if fixed value doesn't match
-                }
-
-                const valueResult: ValidationResult = this.validateSimpleType(value, resolvedType);
-                if (!valueResult.isValid) {
-                    errors.push(...valueResult.errors);
-                }
-            } else {
-                // Check if undeclared attribute is allowed
-                if (!complexType.getAllowsAnyAttributes()) {
-                    // Check if it's a namespace declaration or xml: attribute (always allowed)
-                    const colonIndex: number = name.indexOf(':');
-                    const localName: string = colonIndex !== -1 ? name.substring(colonIndex + 1) : name;
-                    const prefix: string = colonIndex !== -1 ? name.substring(0, colonIndex) : '';
-
-                    if (localName !== 'xmlns' &&
-                        !name.startsWith('xmlns:') &&
-                        prefix !== 'xml') {
-                        errors.push(new ValidationError(`Undeclared attribute '${name}' not allowed`));
-                    }
-                }
-            }
-        }
-
-        return errors.length > 0 ? new ValidationResult(false, errors) : ValidationResult.success();
-    }
-
-    private validateComplexTypeContent(children: string[], textContent: string, complexType: ComplexType): ValidationResult {
-        if (complexType.isEmpty()) {
-            // Empty content: no children or text allowed
-            if (children.length > 0 || textContent.trim() !== '') {
-                return ValidationResult.error(`Element with empty content cannot have child elements or text`);
-            }
-            return ValidationResult.success();
-        } else if (complexType.hasSimpleContent()) {
-            // Simple content: no child elements allowed
-            if (children.length > 0) {
-                return ValidationResult.error(`Element with simple content cannot have child elements`);
-            }
-
-            // Validate text content against the base type
-            const baseType: SchemaType | undefined = complexType.getBaseType();
-            if (baseType && baseType.isSimpleType()) {
-                return this.validateSimpleType(textContent, baseType as SimpleType);
-            } else if (baseType && baseType.isComplexType()) {
-                // Extension of complex type with simple content - find the simple content base
-                return this.validateSimpleContentInheritance(textContent, baseType as ComplexType);
-            } else {
-                // No base type specified - treat as xs:anyType (allows any text)
-                return ValidationResult.success();
-            }
-        } else {
-            // Complex content: validate child elements against content model
-            if (!complexType.isMixed() && textContent.trim() !== '') {
-                return ValidationResult.error(`Element with element-only content cannot have text content`);
-            }
-
-            // Validate against content model if present
-            const contentModel = complexType.getContentModel();
-            if (contentModel) {
-                return contentModel.validate(children);
-            } else {
-                // No content model specified - allow any children (equivalent to xs:any)
-                return ValidationResult.success();
-            }
-        }
-    }
-
-    private validateSimpleType(textContent: string, simpleType: SimpleType): ValidationResult {
-        const errors: ValidationError[] = [];
-
-        // Use custom validator if available (for built-in types)
-        if (simpleType.hasCustomValidator()) {
-            const customResult: ValidationResult = simpleType.getCustomValidator()!(textContent);
-            if (!customResult.isValid) {
-                return customResult;
-            }
-        }
-
-        // Check enumeration constraints
-        if (simpleType.hasEnumeration()) {
-            if (!simpleType.getEnumeration().includes(textContent)) {
-                errors.push(new ValidationError(`Value '${textContent}' is not in enumeration`));
-            }
-        }
-
-        // Check pattern constraints
-        if (simpleType.hasPattern()) {
-            const patterns: RegExp[] = simpleType.getPatterns();
-            let matches: boolean = false;
-            for (const pattern of patterns) {
-                if (pattern.test(textContent)) {
-                    matches = true;
-                    break;
-                }
-            }
-            if (!matches) {
-                errors.push(new ValidationError(`Value '${textContent}' does not match required pattern`));
-            }
-        }
-
-        // Check length constraints
-        if (simpleType.hasLength() && textContent.length !== simpleType.getLength()) {
-            errors.push(new ValidationError(`Value length must be exactly ${simpleType.getLength()} characters`));
-        }
-        if (simpleType.hasMinLength() && textContent.length < simpleType.getMinLength()) {
-            errors.push(new ValidationError(`Value too short (minimum ${simpleType.getMinLength()} characters)`));
-        }
-        if (simpleType.hasMaxLength() && textContent.length > simpleType.getMaxLength()) {
-            errors.push(new ValidationError(`Value too long (maximum ${simpleType.getMaxLength()} characters)`));
-        }
-
-        // Check numeric range constraints
-        if (simpleType.isNumericType()) {
-            const numericValue: number = parseFloat(textContent);
-            if (isNaN(numericValue)) {
-                errors.push(new ValidationError(`Invalid numeric value: '${textContent}'`));
-            } else {
-                if (simpleType.hasMinInclusive() && numericValue < simpleType.getMinInclusive()) {
-                    errors.push(new ValidationError(`Value too small (minimum ${simpleType.getMinInclusive()})`));
-                }
-                if (simpleType.hasMaxInclusive() && numericValue > simpleType.getMaxInclusive()) {
-                    errors.push(new ValidationError(`Value too large (maximum ${simpleType.getMaxInclusive()})`));
-                }
-                if (simpleType.hasMinExclusive() && numericValue <= simpleType.getMinExclusive()) {
-                    errors.push(new ValidationError(`Value must be greater than ${simpleType.getMinExclusive()}`));
-                }
-                if (simpleType.hasMaxExclusive() && numericValue >= simpleType.getMaxExclusive()) {
-                    errors.push(new ValidationError(`Value must be less than ${simpleType.getMaxExclusive()}`));
-                }
-            }
-        }
-
-        return errors.length > 0 ? new ValidationResult(false, errors) : ValidationResult.success();
-    }
-
-    private validateSimpleContentInheritance(textContent: string, complexType: ComplexType): ValidationResult {
-        // For complex types with simple content, we need to trace up the inheritance chain
-        // to find the ultimate simple type that defines the text content validation
-
-        const baseType: SchemaType | undefined = complexType.getBaseType();
-        if (!baseType) {
-            // No base type - treat as xs:anyType
-            return ValidationResult.success();
-        }
-
-        if (baseType.isSimpleType()) {
-            // Found the simple base type - validate against it
-            return this.validateSimpleType(textContent, baseType as SimpleType);
-        } else if (baseType.isComplexType()) {
-            const baseComplexType: ComplexType = baseType as ComplexType;
-            if (baseComplexType.hasSimpleContent()) {
-                // Continue up the inheritance chain
-                return this.validateSimpleContentInheritance(textContent, baseComplexType);
-            } else {
-                // Base has complex content - this shouldn't happen in valid schema
-                return ValidationResult.error(`Invalid inheritance: simple content derived from complex content`);
-            }
-        }
-
-        return ValidationResult.success();
-    }
-
-    // Serialization for pre-compiled grammars
     toJSON(): any {
         return {
             targetNamespace: this.targetNamespace,
@@ -707,14 +438,14 @@ export class XMLSchemaGrammar implements Grammar {
         };
     }
 
-    // Deserialization from pre-compiled grammars
-    static fromJSON(data: { 
-        targetNamespace?: string; 
-        schemaLocation?: string; 
-        elementFormDefault?: boolean; 
-        attributeFormDefault?: boolean; 
-        namespaces?: Record<string, string>; 
+    static fromJSON(data: {
+        targetNamespace?: string;
+        schemaLocation?: string;
+        elementFormDefault?: boolean;
+        attributeFormDefault?: boolean;
+        namespaces?: Record<string, string>;
     }): XMLSchemaGrammar {
+        // Deserialization from pre-compiled grammars
         const grammar: XMLSchemaGrammar = new XMLSchemaGrammar(data.targetNamespace, data.schemaLocation);
         grammar.elementFormDefault = data.elementFormDefault || false;
         grammar.attributeFormDefault = data.attributeFormDefault || false;
@@ -731,14 +462,12 @@ export class XMLSchemaGrammar implements Grammar {
         return grammar;
     }
 
-    // Schema validation methods
-    
     private validateTypeDefinition(name: string, type: SchemaType): void {
         // Check for duplicate type definitions
         if (this.types.has(name)) {
             throw new Error(`Duplicate type definition: '${name}'`);
         }
-        
+
         // Validate the type itself
         type.validate();
     }
@@ -748,13 +477,13 @@ export class XMLSchemaGrammar implements Grammar {
         if (!typeName || typeName.trim().length === 0) {
             throw new Error('Type name cannot be empty');
         }
-        
+
         // Handle qualified names (prefix:localName)
         const colonIndex = typeName.indexOf(':');
         if (colonIndex !== -1) {
             const prefix = typeName.substring(0, colonIndex);
             const localName = typeName.substring(colonIndex + 1);
-            
+
             // XML Schema spec: both prefix and local name must be valid NCNames
             if (!XMLUtils.isValidNCName(prefix)) {
                 throw new Error(`Type name prefix '${prefix}' is not a valid NCName`);
@@ -785,10 +514,10 @@ export class XMLSchemaGrammar implements Grammar {
         if (this.elementDeclarations.has(name)) {
             throw new Error(`Duplicate element declaration: '${name}'`);
         }
-        
+
         // Validate the element itself - check for spec violations
         element.validate();
-        
+
         // Type reference validation - XML Schema spec allows forward references and cross-schema references
         // Only check for obvious syntax errors, not missing type resolution
         const typeName = element.getTypeName();
@@ -809,7 +538,7 @@ export class XMLSchemaGrammar implements Grammar {
         if (this.attributeDeclarations.has(name)) {
             throw new Error(`Duplicate attribute declaration: '${name}'`);
         }
-        
+
         // Validate the attribute itself
         attribute.validate();
     }
@@ -824,7 +553,7 @@ export class XMLSchemaGrammar implements Grammar {
         // Comprehensive grammar validation
         this.validateNamespaceConsistency();
         this.validateTypeReferences();
-        
+
         // Validate content model constraints
         this.validateContentModelConstraints();
         this.validateSubstitutionGroups();
@@ -836,22 +565,22 @@ export class XMLSchemaGrammar implements Grammar {
         // Validate that all qualified names use declared namespace prefixes
         for (const [name, elementDecl] of this.elementDeclarations) {
             this.validateQualifiedName(name, 'element');
-            
+
             const typeName = elementDecl.getTypeName();
             if (typeName && typeName.includes(':')) {
                 this.validateQualifiedName(typeName, 'type reference');
             }
-            
+
             const substitutionGroup = elementDecl.getSubstitutionGroup();
             if (substitutionGroup && substitutionGroup.includes(':')) {
                 this.validateQualifiedName(substitutionGroup, 'substitution group');
             }
         }
-        
+
         for (const [name] of this.types) {
             this.validateQualifiedName(name, 'type');
         }
-        
+
         for (const [name] of this.attributeDeclarations) {
             this.validateQualifiedName(name, 'attribute');
         }
@@ -861,12 +590,12 @@ export class XMLSchemaGrammar implements Grammar {
         const colonIndex = qname.indexOf(':');
         if (colonIndex !== -1) {
             const prefix = qname.substring(0, colonIndex);
-            
+
             // Skip validation for XML Schema namespace (xs: prefix is implicitly valid)
             if (prefix === 'xs' || prefix === 'xsd') {
                 return;
             }
-            
+
             if (!this.namespaces.has(prefix)) {
                 throw new Error(`Undefined namespace prefix '${prefix}' in ${context} '${qname}'`);
             }
@@ -876,7 +605,7 @@ export class XMLSchemaGrammar implements Grammar {
     private validateTypeReferences(): void {
         // XML Schema spec: Check that all type references are syntactically valid
         // AND that required types actually exist (this is a spec requirement)
-        
+
         for (const [name, elementDecl] of this.elementDeclarations) {
             const typeName = elementDecl.getTypeName();
             if (typeName) {
@@ -889,16 +618,16 @@ export class XMLSchemaGrammar implements Grammar {
                     }
                     // In non-validating mode, silently ignore syntax errors
                 }
-                
+
                 // XML Schema spec: Type references MUST resolve to existing types
                 // This is different from cross-schema resolution - it's about local schema validity
                 const resolvedType = this.isValidTypeReference(typeName);
                 if (!resolvedType) {
                     // Check if this is a local type that should exist
                     const isLocalReference = !typeName.includes(':') && !typeName.startsWith('{');
-                    const isBuiltinType = typeName.startsWith('xs:') || typeName.startsWith('xsd:') || 
-                                         this.isXMLSchemaBuiltinType(typeName);
-                    
+                    const isBuiltinType = typeName.startsWith('xs:') || typeName.startsWith('xsd:') ||
+                        this.isXMLSchemaBuiltinType(typeName);
+
                     if (isLocalReference && !isBuiltinType) {
                         // Local type reference that doesn't exist - this IS a spec violation
                         const errorMsg = `Element '${name}' references undefined type '${typeName}' - local type must be defined in this schema`;
@@ -913,7 +642,7 @@ export class XMLSchemaGrammar implements Grammar {
                 }
             }
         }
-        
+
         // Check complex type base type references for syntax errors and local resolution
         for (const [name, type] of this.types) {
             if (type.isComplexType()) {
@@ -928,14 +657,14 @@ export class XMLSchemaGrammar implements Grammar {
                         }
                         // In non-validating mode, silently ignore syntax errors
                     }
-                    
+
                     // Check local base type resolution
                     const resolvedBaseType = this.isValidTypeReference(baseTypeQName);
                     if (!resolvedBaseType) {
                         const isLocalReference = !baseTypeQName.includes(':') && !baseTypeQName.startsWith('{');
-                        const isBuiltinType = baseTypeQName.startsWith('xs:') || baseTypeQName.startsWith('xsd:') || 
-                                             this.isXMLSchemaBuiltinType(baseTypeQName);
-                        
+                        const isBuiltinType = baseTypeQName.startsWith('xs:') || baseTypeQName.startsWith('xsd:') ||
+                            this.isXMLSchemaBuiltinType(baseTypeQName);
+
                         if (isLocalReference && !isBuiltinType) {
                             const errorMsg = `Type '${name}' references undefined base type '${baseTypeQName}' - local base type must be defined in this schema`;
                             if (this.validatingMode) {
@@ -950,7 +679,7 @@ export class XMLSchemaGrammar implements Grammar {
             }
         }
     }
-    
+
     private isXMLSchemaBuiltinType(typeName: string): boolean {
         // Common XML Schema built-in types (without namespace prefix)
         const builtinTypes = [
@@ -974,7 +703,7 @@ export class XMLSchemaGrammar implements Grammar {
                 if (!headElement) {
                     throw new Error(`Element '${name}' references undefined substitution group head '${substitutionGroup}'`);
                 }
-                
+
                 // Schema spec: substitution group head cannot be abstract in all cases
                 // but this is a complex rule that depends on context, so we'll just warn
                 if (headElement.isAbstract()) {
@@ -991,7 +720,7 @@ export class XMLSchemaGrammar implements Grammar {
         // Check for circular dependencies in type inheritance
         const visitedTypes = new Set<string>();
         const currentPath = new Set<string>();
-        
+
         for (const [typeName, type] of this.types) {
             if (!visitedTypes.has(typeName)) {
                 this.checkCircularDependency(typeName, type, visitedTypes, currentPath);
@@ -1003,14 +732,14 @@ export class XMLSchemaGrammar implements Grammar {
         if (currentPath.has(typeName)) {
             throw new Error(`Circular dependency detected in type hierarchy: ${Array.from(currentPath).join(' -> ')} -> ${typeName}`);
         }
-        
+
         if (visited.has(typeName)) {
             return;
         }
-        
+
         visited.add(typeName);
         currentPath.add(typeName);
-        
+
         // Check base type dependencies
         if (type.isComplexType()) {
             const complexType = type as ComplexType;
@@ -1022,14 +751,14 @@ export class XMLSchemaGrammar implements Grammar {
                 }
             }
         }
-        
+
         currentPath.delete(typeName);
     }
 
     private validateGlobalUniqueness(): void {
         // Check for name conflicts between different component types
         const allNames = new Set<string>();
-        
+
         // Elements should not conflict with types in same target namespace
         for (const name of this.elementDeclarations.keys()) {
             if (this.types.has(name)) {
@@ -1039,7 +768,7 @@ export class XMLSchemaGrammar implements Grammar {
                 // In non-validating mode, silently ignore
             }
         }
-        
+
         // Check for attribute name conflicts with target namespace elements
         for (const name of this.attributeDeclarations.keys()) {
             if (name.startsWith(`{${this.targetNamespace}}`)) {
@@ -1053,18 +782,18 @@ export class XMLSchemaGrammar implements Grammar {
             }
         }
     }
-    
+
     private validateContentModelConstraints(): void {
         // XML Schema Spec: xsd:all cannot be nested inside other content model groups
         // and must only appear at the top level of a complex type's content model
-        
+
         for (const [typeName, type] of this.types) {
             if (type instanceof ComplexType) {
                 this.validateContentModelInComplexType(typeName, type);
             }
         }
     }
-    
+
     private validateContentModelInComplexType(typeName: string, complexType: ComplexType): void {
         // Check if this complex type has invalid content model nesting
         const contentModel = complexType.getContentModel();
@@ -1072,19 +801,19 @@ export class XMLSchemaGrammar implements Grammar {
             this.validateContentModelStructure(typeName, contentModel, false);
         }
     }
-    
+
     private validateContentModelStructure(typeName: string, contentModel: any, withinGroup: boolean): void {
         if (!contentModel || typeof contentModel !== 'object') {
             return;
         }
-        
+
         // Check for xsd:all inside other groups (sequence, choice)
         if (contentModel.type === 'all') {
             if (withinGroup) {
                 throw new Error(`Invalid content model in complex type '${typeName}': xsd:all cannot be nested inside other content model groups (sequence, choice)`);
             }
         }
-        
+
         // Recursively check nested content models
         if (contentModel.type === 'sequence' || contentModel.type === 'choice') {
             if (contentModel.particles) {
@@ -1093,7 +822,7 @@ export class XMLSchemaGrammar implements Grammar {
                 }
             }
         }
-        
+
         // Check for multiple xsd:all at the same level
         if (contentModel.particles) {
             let allCount = 0;

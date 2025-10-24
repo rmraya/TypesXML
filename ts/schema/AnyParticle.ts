@@ -269,4 +269,23 @@ export class AnyParticle implements ValidationParticle {
         // Unprefixed element - could be in default namespace or no namespace
         return undefined;
     }
+
+    toBNF(): string {
+        const name: string = 'any';
+        const min: number = this.minOccurs;
+        const max: number = this.maxOccurs;
+        
+        if (min === 1 && max === 1) {
+            return name;
+        } else if (min === 0 && max === 1) {
+            return `${name}?`;
+        } else if (min === 0 && max === -1) {
+            return `${name}*`;
+        } else if (min === 1 && max === -1) {
+            return `${name}+`;
+        } else {
+            const maxStr: string = max === -1 ? 'unbounded' : max.toString();
+            return `${name}{${min},${maxStr}}`;
+        }
+    }
 }

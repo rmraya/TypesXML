@@ -18,20 +18,23 @@
 
 export interface ValidationParticle {
     getComponents(): ValidationParticle[];
-    
+
     addComponent(component: ValidationParticle): void;
-    
+
     getMinOccurs(): number;
-    
+
     getMaxOccurs(): number;
-    
+
     setCardinality(minOccurs: number, maxOccurs: number): void;
-    
+
     resolve(): ValidationParticle[];
-    
+
     isResolved(): boolean;
-    
+
     validate(children: string[]): void;
-    
+
     setSubstitutionGroupResolver?(resolver: (elementName: string, substitutionHead: string) => boolean): void;
+
+    // Debug method to represent content model in BNF form
+    toBNF(): string;
 }

@@ -15,12 +15,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, Stats } from 'fs';
+import { basename, dirname, join, resolve } from 'path';
 import { DOMBuilder } from '../DOMBuilder';
 import { SAXParser } from '../SAXParser';
 import { XMLCanonicalizer } from '../XMLCanonicalizer';
-import { XMLDocument } from '../XMLDocument';
-import * as fs from 'fs';
-import * as path from 'path';
 
 /**
  * W3C XML Test Suite Runner for TypesXML v2.0.0
@@ -41,7 +40,7 @@ export class DTDTestSuite {
 
     constructor() {
         this.startTime = Date.now();
-        this.xmlTestPath = path.resolve(__dirname, '../../tests/xmltest');
+        this.xmlTestPath = resolve(__dirname, '../../tests/xmltest');
         this.results = {
             validXML: { passed: 0, failed: 0, tests: [] },
             invalidXML: { passed: 0, failed: 0, tests: [] },
@@ -55,15 +54,15 @@ export class DTDTestSuite {
 
     public async run(): Promise<void> {
         this.printHeader();
-        
+
         // Validate test suite availability
         await this.validateTestSuite();
-        
+
         // Run XML tests using W3C XML Test Suite
         this.testValidXMLDocuments();
         this.testInvalidXMLDocuments();
         this.testNotWellFormedDocuments();
-        
+
         // Print final results
         this.printResults();
         this.printCanonicalFormFailures();
@@ -82,17 +81,17 @@ export class DTDTestSuite {
 
     private async validateTestSuite(): Promise<void> {
         console.log('🔍 Validating W3C XML Test Suite...');
-        
-        if (!fs.existsSync(this.xmlTestPath)) {
+
+        if (!existsSync(this.xmlTestPath)) {
             console.log(`❌ W3C XML Test Suite not found at: ${this.xmlTestPath}`);
             console.log('   Please ensure the xmltest directory exists in /tests');
             throw new Error('Test suite not available');
         }
 
-        const validFiles: number = this.countFilesInDir(path.join(this.xmlTestPath, 'valid'));
-        const invalidFiles: number = this.countFilesInDir(path.join(this.xmlTestPath, 'invalid'));
-        const notWfFiles: number = this.countFilesInDir(path.join(this.xmlTestPath, 'not-wf'));
-        
+        const validFiles: number = this.countFilesInDir(join(this.xmlTestPath, 'valid'));
+        const invalidFiles: number = this.countFilesInDir(join(this.xmlTestPath, 'invalid'));
+        const notWfFiles: number = this.countFilesInDir(join(this.xmlTestPath, 'not-wf'));
+
         console.log(`✅ Found ${validFiles} files in valid/ directory`);
         console.log(`✅ Found ${invalidFiles} files in invalid/ directory`);
         console.log(`✅ Found ${notWfFiles} files in not-wf/ directory`);
@@ -102,15 +101,15 @@ export class DTDTestSuite {
 
     private countFilesInDir(dirPath: string): number {
         try {
-            if (!fs.existsSync(dirPath)) return 0;
-            
+            if (!existsSync(dirPath)) return 0;
+
             let count: number = 0;
-            const entries: string[] = fs.readdirSync(dirPath);
-            
+            const entries: string[] = readdirSync(dirPath);
+
             for (const entry of entries) {
-                const fullPath: string = path.join(dirPath, entry);
-                const stat: fs.Stats = fs.statSync(fullPath);
-                
+                const fullPath: string = join(dirPath, entry);
+                const stat: Stats = statSync(fullPath);
+
                 if (stat.isFile() && entry.endsWith('.xml')) {
                     count++;
                 } else if (stat.isDirectory()) {
@@ -118,7 +117,7 @@ export class DTDTestSuite {
                     count += this.countFilesInDir(fullPath);
                 }
             }
-            
+
             return count;
         } catch (error) {
             return 0;
@@ -129,19 +128,19 @@ export class DTDTestSuite {
         console.log('📋 Test 1: Valid XML Documents');
         console.log('   Testing: Can SAXParser parse valid XML files from xmltest/valid/ with validation enabled?');
         console.log('   Note: Also validates canonical form output against expected results in /out directories');
-        
+
         // Test files from valid/sa (standalone with internal DTD)
-        const validSaDir: string = path.join(this.xmlTestPath, 'valid', 'sa');
+        const validSaDir: string = join(this.xmlTestPath, 'valid', 'sa');
         console.log('   Testing standalone valid files...');
         this.testValidFilesInDirectory(validSaDir);
-        
+
         // Test files from valid/ext-sa (external standalone DTD)
-        const validExtSaDir: string = path.join(this.xmlTestPath, 'valid', 'ext-sa');
+        const validExtSaDir: string = join(this.xmlTestPath, 'valid', 'ext-sa');
         console.log('   Testing external standalone valid files...');
         this.testValidFilesInDirectory(validExtSaDir);
-        
+
         // Test files from valid/not-sa (not standalone DTD)
-        const validNotSaDir: string = path.join(this.xmlTestPath, 'valid', 'not-sa');
+        const validNotSaDir: string = join(this.xmlTestPath, 'valid', 'not-sa');
         console.log('   Testing not standalone valid files...');
         this.testValidFilesInDirectory(validNotSaDir);
     }
@@ -150,44 +149,44 @@ export class DTDTestSuite {
         console.log('📋 Test 2: Invalid XML Documents');
         console.log('   Testing: How does SAXParser handle invalid XML files from xmltest/invalid/ with validation?');
         console.log('   Note: These are well-formed XML but DTD-invalid (expected to fail validation)');
-        
+
         // Test all files in invalid/ directory (no subdirectories)
-        const invalidDir: string = path.join(this.xmlTestPath, 'invalid');
+        const invalidDir: string = join(this.xmlTestPath, 'invalid');
         this.testFilesInDirectory(invalidDir, 'invalidXML', Number.MAX_SAFE_INTEGER, false); // Test all files with validation enabled
     }
 
     private testNotWellFormedDocuments(): void {
         console.log('📋 Test 3: Not Well-formed XML Documents');
         console.log('   Testing: Does SAXParser properly reject malformed XML files from xmltest/not-wf/ with validation?');
-        
+
         // Test files from all not-wf subdirectories
-        const notWfSaDir: string = path.join(this.xmlTestPath, 'not-wf', 'sa');
-        const notWfExtSaDir: string = path.join(this.xmlTestPath, 'not-wf', 'ext-sa');
-        const notWfNotSaDir: string = path.join(this.xmlTestPath, 'not-wf', 'not-sa');
-        
+        const notWfSaDir: string = join(this.xmlTestPath, 'not-wf', 'sa');
+        const notWfExtSaDir: string = join(this.xmlTestPath, 'not-wf', 'ext-sa');
+        const notWfNotSaDir: string = join(this.xmlTestPath, 'not-wf', 'not-sa');
+
         console.log('   Testing standalone not well-formed files...');
         this.testFilesInDirectory(notWfSaDir, 'notWellFormed', Number.MAX_SAFE_INTEGER, false);
-        
+
         console.log('   Testing external standalone not well-formed files...');
         this.testFilesInDirectory(notWfExtSaDir, 'notWellFormed', Number.MAX_SAFE_INTEGER, false);
-        
+
         console.log('   Testing not standalone not well-formed files...');
         this.testFilesInDirectory(notWfNotSaDir, 'notWellFormed', Number.MAX_SAFE_INTEGER, false);
     }
 
     private getAllXmlFiles(dirPath: string): string[] {
-        if (!fs.existsSync(dirPath)) {
+        if (!existsSync(dirPath)) {
             return [];
         }
 
         const xmlFiles: string[] = [];
-        
+
         const traverse = (currentPath: string): void => {
-            const items = fs.readdirSync(currentPath, { withFileTypes: true });
-            
+            const items = readdirSync(currentPath, { withFileTypes: true });
+
             for (const item of items) {
-                const fullPath = path.join(currentPath, item.name);
-                
+                const fullPath = join(currentPath, item.name);
+
                 if (item.isDirectory()) {
                     // Skip /out directories (they contain canonical forms, not test files)
                     if (item.name !== 'out') {
@@ -198,13 +197,13 @@ export class DTDTestSuite {
                 }
             }
         };
-        
+
         traverse(dirPath);
         return xmlFiles.sort();
     }
 
     private testValidFilesInDirectory(testDir: string): void {
-        if (!fs.existsSync(testDir)) {
+        if (!existsSync(testDir)) {
             console.log(`   ⚠️  Directory not found: ${testDir}`);
             console.log('   ✅ Results: 0/0 files tested (N/A)');
             console.log('');
@@ -212,53 +211,53 @@ export class DTDTestSuite {
         }
 
         const xmlFiles: string[] = this.getAllXmlFiles(testDir).filter(file => !file.includes('/out/'));
-        const outDir = path.join(testDir, 'out');
-        
+        const outDir = join(testDir, 'out');
+
         let passed: number = 0;
         let failed: number = 0;
-        
+
         console.log(`   Testing ${xmlFiles.length} XML files...`);
-        
+
         for (let i: number = 0; i < xmlFiles.length; i++) {
             const filePath: string = xmlFiles[i];
-            const filename = path.basename(filePath);
-            const expectedCanonicalFile = path.join(outDir, filename);
-            
+            const filename = basename(filePath);
+            const expectedCanonicalFile = join(outDir, filename);
+
             let testPassed = false;
-            
+
             try {
                 // First, test if the file can be parsed successfully
                 const parseResult = this.testParseFile(filePath, true); // Always use validation for valid XML
-                
+
                 if (!parseResult.success) {
                     failed++;
                     continue;
                 }
-                
+
                 // If parsing succeeded, test canonical form (if expected canonical file exists)
-                if (fs.existsSync(expectedCanonicalFile)) {
+                if (existsSync(expectedCanonicalFile)) {
                     // Parse again to get the document for canonicalization
                     const parser = new SAXParser();
                     const domBuilder = new DOMBuilder();
                     parser.setValidating(true);
                     parser.setContentHandler(domBuilder);
-                    
+
                     const originalCwd = process.cwd();
-                    const xmlDir = path.dirname(filePath);
-                    const xmlFileName = path.basename(filePath);
-                    
+                    const xmlDir = dirname(filePath);
+                    const xmlFileName = basename(filePath);
+
                     try {
                         process.chdir(xmlDir);
                         parser.parseFile(xmlFileName);
                         const document = domBuilder.getDocument();
-                        
+
                         if (document) {
                             // Generate canonical form
                             const actualCanonical = XMLCanonicalizer.canonicalize(document);
-                            
+
                             // Read expected canonical form
-                            const expectedCanonical = fs.readFileSync(expectedCanonicalFile, 'utf8').trim();
-                            
+                            const expectedCanonical = readFileSync(expectedCanonicalFile, 'utf8').trim();
+
                             // Compare canonical forms
                             if (actualCanonical.trim() === expectedCanonical) {
                                 testPassed = true;
@@ -280,35 +279,35 @@ export class DTDTestSuite {
                     // No canonical form to check, just count parsing success
                     testPassed = true;
                 }
-                
+
             } catch (error) {
                 console.log(`   ❌ Error processing ${filename}: ${error}`);
             }
-            
+
             if (testPassed) {
                 passed++;
             } else {
                 failed++;
             }
-            
+
             // Progress indicator every 5 files
             if ((i + 1) % 5 === 0 || i === xmlFiles.length - 1) {
                 const progress: string = ((i + 1) / xmlFiles.length * 100).toFixed(0);
                 console.log(`   Progress: ${progress}% (${i + 1}/${xmlFiles.length}) - ${passed} passed, ${failed} failed`);
             }
         }
-        
+
         // Update results
         this.results.validXML.passed += passed;
         this.results.validXML.failed += failed;
-        
+
         const passRate: string = xmlFiles.length > 0 ? ((passed / xmlFiles.length) * 100).toFixed(1) : '0';
         console.log(`   ✅ Results: ${passed}/${xmlFiles.length} files processed successfully (${passRate}%)`);
         console.log('');
     }
 
     private testFilesInDirectory(dirPath: string, resultCategory: keyof DTDTestResults, maxFiles: number, skipValidation = false): void {
-        if (!fs.existsSync(dirPath)) {
+        if (!existsSync(dirPath)) {
             console.log(`   ⚠️  Directory not found: ${dirPath}`);
             console.log('   ✅ Results: 0/0 files tested (N/A)');
             console.log('');
@@ -316,25 +315,25 @@ export class DTDTestSuite {
         }
 
         const xmlFiles: string[] = this.getAllXmlFiles(dirPath).slice(0, maxFiles);
-        
+
         let passed: number = 0;
         let failed: number = 0;
-        
+
         console.log(`   Testing ${xmlFiles.length} XML files...`);
-        
+
         for (let i: number = 0; i < xmlFiles.length; i++) {
             const filePath: string = xmlFiles[i]; // xmlFiles now contains full paths
             const result: DTDTestResult = this.testParseFile(filePath, !skipValidation);
-            
+
             // Determine if this is the expected result based on test category
             let expectedToPass: boolean = true;
             if (resultCategory === 'notWellFormed') {
                 expectedToPass = false; // Not well-formed files should fail to parse
             }
             // invalidXML files are well-formed but DTD-invalid, so they should parse as XML
-            
+
             const testPassed: boolean = (result.success === expectedToPass);
-            
+
             if (testPassed) {
                 passed++;
                 (this.results[resultCategory] as DTDTestCategoryResult).passed++;
@@ -342,14 +341,14 @@ export class DTDTestSuite {
                 failed++;
                 (this.results[resultCategory] as DTDTestCategoryResult).failed++;
             }
-            
+
             // Progress indicator every 5 files
             if ((i + 1) % 5 === 0 || i === xmlFiles.length - 1) {
                 const progress: string = ((i + 1) / xmlFiles.length * 100).toFixed(0);
                 console.log(`   Progress: ${progress}% (${i + 1}/${xmlFiles.length}) - ${passed} passed, ${failed} failed`);
             }
         }
-        
+
         const passRate: string = xmlFiles.length > 0 ? ((passed / xmlFiles.length) * 100).toFixed(1) : '0';
         console.log(`   ✅ Results: ${passed}/${xmlFiles.length} files processed successfully (${passRate}%)`);
         console.log('');
@@ -357,28 +356,28 @@ export class DTDTestSuite {
 
     private testParseFile(filePath: string, enableValidation: boolean): DTDTestResult {
         const startTime: number = Date.now();
-        
+
         try {
             const parser: SAXParser = new SAXParser();
             const builder: DOMBuilder = new DOMBuilder();
-            
+
             if (enableValidation) {
                 parser.setValidating(true);
             }
             parser.setContentHandler(builder);
-            
+
             // Change working directory temporarily to help resolve relative DTD references
             const originalDir = process.cwd();
-            const xmlDir = path.dirname(filePath);
-            const xmlFileName = path.basename(filePath);
-            
+            const xmlDir = dirname(filePath);
+            const xmlFileName = basename(filePath);
+
             try {
                 process.chdir(xmlDir);
                 parser.parseFile(xmlFileName); // Use relative path from the XML directory
             } finally {
                 process.chdir(originalDir);
             }
-            
+
             const document = builder.getDocument();
             if (!document || !document.getRoot()) {
                 return {
@@ -387,13 +386,13 @@ export class DTDTestSuite {
                     duration: Date.now() - startTime
                 };
             }
-            
+
             return {
                 success: true,
                 error: null,
                 duration: Date.now() - startTime
             };
-            
+
         } catch (error) {
             return {
                 success: false,
@@ -406,22 +405,22 @@ export class DTDTestSuite {
     private printResults(): void {
         const totalDuration: number = Date.now() - this.startTime;
         this.results.performance.totalDuration = totalDuration;
-        
+
         const totalTests: number = this.results.validXML.passed + this.results.validXML.failed +
-                          this.results.invalidXML.passed + this.results.invalidXML.failed +
-                          this.results.notWellFormed.passed + this.results.notWellFormed.failed;
-        
+            this.results.invalidXML.passed + this.results.invalidXML.failed +
+            this.results.notWellFormed.passed + this.results.notWellFormed.failed;
+
         const totalPassed: number = this.results.validXML.passed +
-                           this.results.invalidXML.passed +
-                           this.results.notWellFormed.passed;
-        
+            this.results.invalidXML.passed +
+            this.results.notWellFormed.passed;
+
         const totalFailed: number = totalTests - totalPassed;
         const overallPassRate: string = totalTests > 0 ? ((totalPassed / totalTests) * 100).toFixed(1) : '0';
-        
+
         if (totalTests > 0) {
             this.results.performance.averagePerTest = Math.round(totalDuration / totalTests);
         }
-        
+
         console.log('📊 W3C XML Test Suite Results Summary');
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log(`   • Total Files Tested: ${totalTests}`);
@@ -432,9 +431,9 @@ export class DTDTestSuite {
         console.log(`      • Total Duration: ${totalDuration}ms`);
         console.log(`      • Average per File: ${this.results.performance.averagePerTest}ms`);
         console.log('');
-        
+
         this.printDetailedResults();
-        
+
         console.log('   � Detailed report saved to: dtd-test-report.json');
         console.log('');
     }
@@ -446,7 +445,7 @@ export class DTDTestSuite {
         console.log('   Dataset       | Total | Expected | Actual  | Success | Expected | Actual  | Failure | Overall |');
         console.log('                 | Cases | Success  | Success | Rate %  | Failure  | Failure | Rate %  | Rate %  |');
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
+
         // Valid XML documents (should succeed)
         const validTotal = this.results.validXML.passed + this.results.validXML.failed;
         const validExpectedSuccess = validTotal;
@@ -456,9 +455,9 @@ export class DTDTestSuite {
         const validActualFailure = this.results.validXML.failed;
         const validFailureRate = validExpectedFailure > 0 ? ((validActualFailure / validExpectedFailure) * 100).toFixed(1) : (validActualFailure > 0 ? '100.0' : '0.0');
         const validOverallRate = validTotal > 0 ? ((validActualSuccess / validTotal) * 100).toFixed(1) : '0.0';
-        
+
         console.log(`   Valid         | ${validTotal.toString().padStart(5)} | ${validExpectedSuccess.toString().padStart(8)} | ${validActualSuccess.toString().padStart(7)} | ${validSuccessRate.padStart(7)} | ${validExpectedFailure.toString().padStart(8)} | ${validActualFailure.toString().padStart(7)} | ${validFailureRate.padStart(7)} | ${validOverallRate.padStart(7)} |`);
-        
+
         // Invalid XML documents (should fail DTD validation - they are DTD-invalid!)
         const invalidTotal = this.results.invalidXML.passed + this.results.invalidXML.failed;
         const invalidExpectedSuccess = 0; // Should not pass DTD validation (they are DTD-invalid)
@@ -468,9 +467,9 @@ export class DTDTestSuite {
         const invalidActualFailure = this.results.invalidXML.failed;
         const invalidFailureRate = invalidTotal > 0 ? ((invalidActualFailure / invalidExpectedFailure) * 100).toFixed(1) : '0.0';
         const invalidOverallRate = invalidTotal > 0 ? ((invalidActualFailure / invalidTotal) * 100).toFixed(1) : '0.0'; // For invalid, success means proper validation failure
-        
+
         console.log(`   Invalid       | ${invalidTotal.toString().padStart(5)} | ${invalidExpectedSuccess.toString().padStart(8)} | ${invalidActualSuccess.toString().padStart(7)} | ${invalidSuccessRate.padStart(7)} | ${invalidExpectedFailure.toString().padStart(8)} | ${invalidActualFailure.toString().padStart(7)} | ${invalidFailureRate.padStart(7)} | ${invalidOverallRate.padStart(7)} |`);
-        
+
         // Not well-formed XML documents (should fail)
         const notWfTotal = this.results.notWellFormed.passed + this.results.notWellFormed.failed;
         const notWfExpectedSuccess = 0; // Should not succeed
@@ -480,29 +479,29 @@ export class DTDTestSuite {
         const notWfActualFailure = this.results.notWellFormed.failed;
         const notWfFailureRate = notWfTotal > 0 ? ((notWfActualFailure / notWfExpectedFailure) * 100).toFixed(1) : '0.0';
         const notWfOverallRate = notWfTotal > 0 ? ((notWfActualFailure / notWfTotal) * 100).toFixed(1) : '0.0'; // For not-wf, success means proper failure
-        
+
         console.log(`   Not-Well-Frmd | ${notWfTotal.toString().padStart(5)} | ${notWfExpectedSuccess.toString().padStart(8)} | ${notWfActualSuccess.toString().padStart(7)} | ${notWfSuccessRate.padStart(7)} | ${notWfExpectedFailure.toString().padStart(8)} | ${notWfActualFailure.toString().padStart(7)} | ${notWfFailureRate.padStart(7)} | ${notWfOverallRate.padStart(7)} |`);
-        
+
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('');
     }
 
     private printCanonicalFormFailures(): void {
-        const canonicalFailures = this.results.validXML.tests.filter(test => 
+        const canonicalFailures = this.results.validXML.tests.filter(test =>
             test.error === 'Canonical form mismatch'
         );
-        
+
         if (canonicalFailures.length === 0) {
             console.log('🎉 All valid XML files passed canonical form validation!');
             return;
         }
-        
+
         console.log('');
         console.log('📋 Canonical Form Failures Analysis');
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log(`   Found ${canonicalFailures.length} files with canonical form mismatches:`);
         console.log('');
-        
+
         // Group by directory for better organization
         const failuresByDir: { [key: string]: string[] } = {};
         canonicalFailures.forEach(failure => {
@@ -513,7 +512,7 @@ export class DTDTestSuite {
                 failuresByDir[dir].push(failure.file);
             }
         });
-        
+
         for (const [dir, files] of Object.entries(failuresByDir)) {
             console.log(`   📁 ${dir}/ directory (${files.length} files):`);
             files.forEach(file => {
@@ -521,7 +520,7 @@ export class DTDTestSuite {
             });
             console.log('');
         }
-        
+
         console.log('   💡 To analyze these failures:');
         console.log('      1. Check specific files manually');
         console.log('      2. Compare actual vs expected canonical forms');
@@ -530,8 +529,8 @@ export class DTDTestSuite {
     }
 
     private saveResults(): void {
-        const reportPath: string = path.join(__dirname, '../../dtd-test-report.json');
-        fs.writeFileSync(reportPath, JSON.stringify(this.results, null, 2));
+        const reportPath: string = join(__dirname, '../../dtd-test-report.json');
+        writeFileSync(reportPath, JSON.stringify(this.results, null, 2));
     }
 }
 

@@ -129,7 +129,7 @@ export class SequenceParticle implements ValidationParticle {
                 consumed: new Array(children.length).fill(false)
             };
 
-            const sequenceResult = this.tryMatchSequence(children, position, state);
+            const sequenceResult: { success: boolean; newPosition?: number; failedComponent?: number } = this.tryMatchSequence(children, position, state);
             if (sequenceResult.success) {
                 position = sequenceResult.newPosition!;
                 sequenceMatches++;
@@ -246,37 +246,39 @@ export class SequenceParticle implements ValidationParticle {
             };
 
         } else if (component instanceof ChoiceParticle) {
-            // Collect elements that match the choice
-            const choiceElements: string[] = [];
-            const validChoiceParticles = component.getComponents()
-                .filter(comp => comp instanceof ElementNameParticle) as ElementNameParticle[];
+            // For choices within sequences, we need to try consuming elements from current position
+            // until the choice can validate them or we can't consume any more
 
-            while (position < children.length && (maxOccurs === -1 || choiceElements.length < maxOccurs)) {
-                let matchesChoice = false;
-                for (const choiceParticle of validChoiceParticles) {
-                    if (choiceParticle.matches(children[position])) {
-                        matchesChoice = true;
-                        break;
-                    }
-                }
-                if (matchesChoice) {
-                    choiceElements.push(children[position]);
-                    position++;
-                } else {
-                    break;
+            let bestMatchPosition = position;
+            let bestMatchCount = 0;
+
+            // Try consuming different numbers of elements to see what the choice can validate
+            for (let endPos = position + 1; endPos <= children.length; endPos++) {
+                const choiceElements = children.slice(position, endPos);
+                try {
+                    component.validate(choiceElements);
+                    bestMatchPosition = endPos;
+                    bestMatchCount = choiceElements.length;
+                    // Continue trying with more elements to find the longest match
+                } catch (e) {
+                    // This number of elements doesn't work for the choice, try next size
+                    // Don't break - continue trying with more elements
                 }
             }
 
-            try {
-                component.validate(choiceElements);
-                return {
-                    success: true,
-                    newPosition: position,
-                    matchCount: choiceElements.length
-                };
-            } catch (e) {
+            if (bestMatchCount === 0 && minOccurs > 0) {
                 return { success: false };
             }
+
+            if (bestMatchCount < minOccurs) {
+                return { success: false };
+            }
+
+            return {
+                success: true,
+                newPosition: bestMatchPosition,
+                matchCount: bestMatchCount
+            };
 
         } else if (component instanceof AnyParticle) {
             // Handle xs:any component
@@ -363,6 +365,27 @@ export class SequenceParticle implements ValidationParticle {
             if (component.setSubstitutionGroupResolver) {
                 component.setSubstitutionGroupResolver(resolver);
             }
+        }
+    }
+
+    toBNF(): string {
+        const componentBNFs: string[] = this.components.map(comp => comp.toBNF());
+        let result: string = `(${componentBNFs.join(' ')})`;
+
+        const min: number = this.minOccurs;
+        const max: number = this.maxOccurs;
+
+        if (min === 1 && max === 1) {
+            return result;
+        } else if (min === 0 && max === 1) {
+            return `${result}?`;
+        } else if (min === 0 && max === -1) {
+            return `${result}*`;
+        } else if (min === 1 && max === -1) {
+            return `${result}+`;
+        } else {
+            const maxStr: string = max === -1 ? 'unbounded' : max.toString();
+            return `${result}{${min},${maxStr}}`;
         }
     }
 }

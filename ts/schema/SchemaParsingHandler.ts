@@ -23,13 +23,13 @@ import { XMLUtils } from "../XMLUtils";
 import { AllModel } from "./AllModel";
 import { AnyModel } from "./AnyModel";
 import { SchemaAttributeDecl } from "./Attribute";
+import { AttributeGroup } from "./AttributeGroup";
 import { ChoiceModel } from "./ChoiceModel";
 import { ComplexType } from "./ComplexType";
 import { ContentModel } from "./ContentModel";
 import { SchemaElementDecl } from "./Element";
 import { ElementModel } from "./ElementModel";
 import { GroupModel } from "./GroupModel";
-import { SchemaType } from "./SchemaType";
 import { SequenceModel } from "./SequenceModel";
 import { SimpleType } from "./SimpleType";
 import { XMLSchemaGrammar } from "./XMLSchemaGrammar";
@@ -41,34 +41,66 @@ export class SchemaParsingHandler implements ContentHandler {
     private targetNamespace: string = '';
     private elementFormDefault: boolean = false;
     private attributeFormDefault: boolean = false;
-    
+
     // Namespace prefix mapping
     private namespacePrefixes: Map<string, string> = new Map();
     private defaultNamespace: string = '';
-    
+
     // Schema composition tracking
     private includes: string[] = [];
-    private imports: Array<{namespace: string, location?: string}> = [];
-    
+    private imports: Array<{ namespace: string, location?: string }> = [];
+
     // Type being processed
     private currentType?: SimpleType | ComplexType;
     private currentElementDecl?: SchemaElementDecl;
     private currentAttributeDecl?: SchemaAttributeDecl;
-    
+    private currentAttributeGroup?: AttributeGroup;
+
     // Content model tracking
     private contentModelStack: ContentModel[] = [];
     private currentContentModel?: ContentModel;
-    
+
     // Group definitions storage
     private groupDefinitions: Map<string, ContentModel> = new Map();
     private currentGroupModel?: GroupModel;
 
+    // Attribute group definitions storage
+    private attributeGroupDefinitions: Map<string, AttributeGroup> = new Map();
+    private attributeGroupReferences: Array<{
+        ref: string;
+        refQName: string;
+        targetComplexType: ComplexType;
+        elementPath: string;
+    }> = [];
+
+    // Track the most recent anonymous complex type for attribute group resolution
+    private lastAnonymousComplexType?: ComplexType;
+
+    // Deferred group references (for forward references)
+    private deferredGroupReferences: Array<{
+        ref: string;
+        refQName: string;
+        localName: string;
+        minOccurs: number;
+        maxOccursValue: number;
+        parentContext: any;
+        contextType: 'sequence' | 'choice' | 'all' | 'complexType';
+    }> = [];
+
     // Cross-schema resolver for group references
     private crossSchemaResolver?: (qualifiedName: string) => ContentModel | undefined;
 
-    constructor(grammar: XMLSchemaGrammar, crossSchemaResolver?: (qualifiedName: string) => ContentModel | undefined) {
+    // Cross-schema resolver for attribute group references
+    private crossSchemaAttributeGroupResolver?: (qualifiedName: string) => AttributeGroup | undefined;
+
+    constructor(
+        grammar: XMLSchemaGrammar,
+        crossSchemaResolver?: (qualifiedName: string) => ContentModel | undefined,
+        crossSchemaAttributeGroupResolver?: (qualifiedName: string) => AttributeGroup | undefined
+    ) {
         this.grammar = grammar;
         this.crossSchemaResolver = crossSchemaResolver;
+        this.crossSchemaAttributeGroupResolver = crossSchemaAttributeGroupResolver;
     }
 
     setCatalog(catalog: Catalog): void {
@@ -91,7 +123,7 @@ export class SchemaParsingHandler implements ContentHandler {
         return this.includes;
     }
 
-    getImports(): Array<{namespace: string, location?: string}> {
+    getImports(): Array<{ namespace: string, location?: string }> {
         return this.imports;
     }
 
@@ -110,6 +142,19 @@ export class SchemaParsingHandler implements ContentHandler {
 
     getGroupDefinitions(): Map<string, ContentModel> {
         return new Map(this.groupDefinitions);
+    }
+
+    getAttributeGroupDefinitions(): Map<string, AttributeGroup> {
+        return new Map(this.attributeGroupDefinitions);
+    }
+
+    getAttributeGroupReferences(): Array<{
+        ref: string;
+        refQName: string;
+        targetComplexType: ComplexType;
+        elementPath: string;
+    }> {
+        return [...this.attributeGroupReferences];
     }
 
     getTargetNamespace(): string {
@@ -140,6 +185,12 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     endDocument(): void {
+        // Resolve any deferred group references after all definitions are processed
+        this.resolveDeferredGroupReferences();
+
+        // Note: Attribute group resolution is deferred until after include/import processing 
+        // in XMLSchemaParser to ensure all components are available
+
         // Schema parsing cleanup
     }
 
@@ -150,12 +201,12 @@ export class SchemaParsingHandler implements ContentHandler {
     startElement(name: string, attributes: XMLAttribute[]): void {
         this.currentElement = name;
         this.elementStack.push(name);
-        
+
         // Process namespace declarations first
         this.processNamespaceDeclarations(attributes);
-        
+
         const localName = this.getLocalName(name);
-        
+
         switch (localName) {
             case 'schema':
                 this.processSchemaElement(attributes);
@@ -237,7 +288,7 @@ export class SchemaParsingHandler implements ContentHandler {
 
     endElement(name: string): void {
         const localName = this.getLocalName(name);
-        
+
         switch (localName) {
             case 'complexType':
                 this.finishComplexType();
@@ -264,9 +315,9 @@ export class SchemaParsingHandler implements ContentHandler {
                 this.finishGroup();
                 break;
         }
-        
+
         this.elementStack.pop();
-        this.currentElement = this.elementStack.length > 0 ? 
+        this.currentElement = this.elementStack.length > 0 ?
             this.elementStack[this.elementStack.length - 1] : undefined;
     }
 
@@ -328,11 +379,11 @@ export class SchemaParsingHandler implements ContentHandler {
         // Extract target namespace
         this.targetNamespace = this.getAttributeValue(attributes, 'targetNamespace') || '';
         this.grammar.setTargetNamespace(this.targetNamespace);
-        
+
         // Extract form defaults
         this.elementFormDefault = this.getAttributeValue(attributes, 'elementFormDefault') === 'qualified';
         this.attributeFormDefault = this.getAttributeValue(attributes, 'attributeFormDefault') === 'qualified';
-        
+
         this.grammar.setFormDefaults(this.elementFormDefault, this.attributeFormDefault);
     }
 
@@ -340,7 +391,7 @@ export class SchemaParsingHandler implements ContentHandler {
         const name = this.getAttributeValue(attributes, 'name');
         const ref = this.getAttributeValue(attributes, 'ref');
         const type = this.getAttributeValue(attributes, 'type');
-        
+
         // Schema spec requires exactly one of 'name' or 'ref'
         if (!name && !ref) {
             throw new Error("Schema validation error: element declaration must have either 'name' or 'ref' attribute");
@@ -348,16 +399,16 @@ export class SchemaParsingHandler implements ContentHandler {
         if (name && ref) {
             throw new Error("Schema validation error: element declaration cannot have both 'name' and 'ref' attributes");
         }
-        
+
         // Names must be valid NCName tokens per XML Schema specification
         if (name && !XMLUtils.isValidNCName(name)) {
             throw new Error(`Schema validation error: element name '${name}' is not a valid NCName`);
         }
-        
+
         // Parse occurrence constraints
         const minOccurs = this.parseOccurrence(this.getAttributeValue(attributes, 'minOccurs'), 1);
         const maxOccurs = this.parseOccurrence(this.getAttributeValue(attributes, 'maxOccurs'), 1);
-        
+
         // Validate occurrence constraints
         if (minOccurs < 0) {
             throw new Error(`Schema validation error: minOccurs must be non-negative, got ${minOccurs}`);
@@ -365,11 +416,11 @@ export class SchemaParsingHandler implements ContentHandler {
         if (maxOccurs !== -1 && maxOccurs < minOccurs) {
             throw new Error(`Schema validation error: maxOccurs (${maxOccurs}) must be greater than or equal to minOccurs (${minOccurs})`);
         }
-        
+
         if (this.currentContentModel) {
             // Inside a content model (sequence/choice/all) - create element particle
             let elementName: string;
-            
+
             if (ref) {
                 // Element reference - use the referenced element's qualified name
                 elementName = this.parseQName(ref);
@@ -381,30 +432,30 @@ export class SchemaParsingHandler implements ContentHandler {
                 } else {
                     elementName = name;
                 }
-                
+
                 // Register inline elements in grammar for attribute lookup
                 const elementDecl = new SchemaElementDecl(elementName);
-                
+
                 if (type) {
                     const typeQName = this.parseQName(type);
                     elementDecl.setTypeName(typeQName);
                 }
-                
+
                 // Handle other attributes
                 elementDecl.setMinOccurs(minOccurs);
                 elementDecl.setMaxOccurs(maxOccurs === -1 ? 'unbounded' : maxOccurs);
-                
+
                 const abstract = this.getAttributeValue(attributes, 'abstract');
                 if (abstract === 'true') {
                     elementDecl.setAbstract(true);
                 }
-                
+
                 const substitutionGroup = this.getAttributeValue(attributes, 'substitutionGroup');
                 if (substitutionGroup) {
                     const substitutionGroupQName = this.parseQName(substitutionGroup);
                     elementDecl.setSubstitutionGroup(substitutionGroupQName);
                 }
-                
+
                 // Add to grammar so it can be found for attribute processing
                 this.grammar.addElementDeclaration(elementName, elementDecl);
                 this.currentElementDecl = elementDecl;
@@ -412,9 +463,11 @@ export class SchemaParsingHandler implements ContentHandler {
                 // Should never reach here due to validation above
                 return;
             }
-            
-            const particle = new ElementModel(elementName, minOccurs, maxOccurs);
-            
+
+            // For CompositeGrammar storage consistency, ensure element name has prefix
+            const elementNameForStorage: string = this.ensureElementPrefix(elementName);
+            const particle = new ElementModel(elementNameForStorage, minOccurs, maxOccurs);
+
             // Add particle to current content model based on its type
             if (this.currentContentModel instanceof SequenceModel) {
                 this.currentContentModel.addParticle(particle);
@@ -431,32 +484,32 @@ export class SchemaParsingHandler implements ContentHandler {
                 qname = prefix ? `${prefix}:${name}` : name;
             }
             const elementDecl = new SchemaElementDecl(qname);
-            
+
             if (type) {
                 const typeQName = this.parseQName(type);
                 elementDecl.setTypeName(typeQName);
             }
-            
+
             // Handle other attributes
             elementDecl.setMinOccurs(minOccurs);
             elementDecl.setMaxOccurs(maxOccurs === -1 ? 'unbounded' : maxOccurs);
-            
+
             const nillable = this.getAttributeValue(attributes, 'nillable');
             if (nillable === 'true') {
                 elementDecl.setNillable(true);
             }
-            
+
             const abstract = this.getAttributeValue(attributes, 'abstract');
             if (abstract === 'true') {
                 elementDecl.setAbstract(true);
             }
-            
+
             const substitutionGroup = this.getAttributeValue(attributes, 'substitutionGroup');
             if (substitutionGroup) {
                 const substitutionGroupQName = this.parseQName(substitutionGroup);
                 elementDecl.setSubstitutionGroup(substitutionGroupQName);
             }
-            
+
             this.currentElementDecl = elementDecl;
             this.grammar.addElementDeclaration(qname, elementDecl);
         }
@@ -466,12 +519,12 @@ export class SchemaParsingHandler implements ContentHandler {
         const name = this.getAttributeValue(attributes, 'name');
         const mixed = this.getAttributeValue(attributes, 'mixed');
         const abstract = this.getAttributeValue(attributes, 'abstract');
-        
+
         // Names must be valid NCName tokens per XML Schema specification
         if (name && !XMLUtils.isValidNCName(name)) {
             throw new Error(`Schema validation error: complexType name '${name}' is not a valid NCName`);
         }
-        
+
         // Boolean attributes must have valid values
         if (mixed && mixed !== 'true' && mixed !== 'false') {
             throw new Error(`Schema validation error: mixed attribute must be 'true' or 'false', got '${mixed}'`);
@@ -479,11 +532,11 @@ export class SchemaParsingHandler implements ContentHandler {
         if (abstract && abstract !== 'true' && abstract !== 'false') {
             throw new Error(`Schema validation error: abstract attribute must be 'true' or 'false', got '${abstract}'`);
         }
-        
+
         const complexType = new ComplexType();
         complexType.setMixed(mixed === 'true');
         complexType.setAbstract(abstract === 'true');
-        
+
         if (name) {
             // Named complex type - use qualified naming convention
             let qname = name;
@@ -491,30 +544,32 @@ export class SchemaParsingHandler implements ContentHandler {
                 const prefix = this.getPrefixForNamespace(this.targetNamespace);
                 qname = prefix ? `${prefix}:${name}` : name;
             }
-            
+
             // Prevent duplicate type definitions in same namespace
             if (this.grammar.getTypeDefinition(qname)) {
                 throw new Error(`Schema validation error: duplicate complexType definition for '${qname}'`);
             }
-            
+
             complexType.setName(qname);
             this.grammar.addTypeDefinition(qname, complexType);
         } else if (this.currentElementDecl) {
             // Anonymous type - must be within element declaration context
             this.currentElementDecl.setType(complexType);
+            // Track this as the most recent anonymous complex type
+            this.lastAnonymousComplexType = complexType;
         } else {
             // Anonymous types outside elements are invalid per schema spec
             throw new Error('Schema validation error: anonymous complexType must be defined within an element declaration');
         }
-        
+
         this.currentType = complexType;
     }
 
     private processSimpleTypeDefinition(attributes: XMLAttribute[]): void {
         const name = this.getAttributeValue(attributes, 'name');
-        
+
         const simpleType = new SimpleType();
-        
+
         if (name) {
             // Named simple type - use qualified naming convention
             let qname = name;
@@ -524,8 +579,11 @@ export class SchemaParsingHandler implements ContentHandler {
             }
             simpleType.setName(qname);
             this.grammar.addTypeDefinition(qname, simpleType);
+        } else if (this.currentElementDecl) {
+            // Anonymous inline simple type within element declaration
+            this.currentElementDecl.setType(simpleType);
         }
-        
+
         this.currentType = simpleType;
     }
 
@@ -533,7 +591,7 @@ export class SchemaParsingHandler implements ContentHandler {
         const name = this.getAttributeValue(attributes, 'name');
         const ref = this.getAttributeValue(attributes, 'ref');
         const type = this.getAttributeValue(attributes, 'type');
-        
+
         // Schema spec requires exactly one of 'name' or 'ref'
         if (!name && !ref) {
             throw new Error("Schema validation error: attribute declaration must have either 'name' or 'ref' attribute");
@@ -541,19 +599,19 @@ export class SchemaParsingHandler implements ContentHandler {
         if (name && ref) {
             throw new Error("Schema validation error: attribute declaration cannot have both 'name' and 'ref' attributes");
         }
-        
+
         // Names must be valid NCName tokens per XML Schema specification
         if (name && !XMLUtils.isValidNCName(name)) {
             throw new Error(`Schema validation error: attribute name '${name}' is not a valid NCName`);
         }
-        
+
         let attrName: string;
         let attrDecl: SchemaAttributeDecl;
-        
+
         if (ref) {
             // Attribute reference - resolve to global attribute declaration
             attrName = this.parseQName(ref);
-            
+
             // Look up the global attribute in schema grammar
             const globalAttr = this.grammar.getAttributeDeclaration(attrName);
             if (globalAttr) {
@@ -575,7 +633,7 @@ export class SchemaParsingHandler implements ContentHandler {
         } else if (name) {
             // Local or global attribute declaration with form qualification
             attrName = this.attributeFormDefault && this.targetNamespace ? `{${this.targetNamespace}}${name}` : name;
-            
+
             let attrType: SimpleType;
             if (type) {
                 const typeQName = this.parseQName(type);
@@ -587,39 +645,39 @@ export class SchemaParsingHandler implements ContentHandler {
                 attrType = new SimpleType(stringType);
                 attrType.setTypeName(stringType);
             }
-            
+
             attrDecl = new SchemaAttributeDecl(attrName, attrType);
         } else {
             // Should never reach here due to validation above
             return;
         }
-        
+
         // Set use constraint
         const use = this.getAttributeValue(attributes, 'use');
         if (use) {
             attrDecl.setUse(use as 'required' | 'optional' | 'prohibited');
         }
-        
+
         // Set default value
         const defaultValue = this.getAttributeValue(attributes, 'default');
         if (defaultValue) {
             attrDecl.setDefaultValue(defaultValue);
         }
-        
+
         // Set fixed value
         const fixed = this.getAttributeValue(attributes, 'fixed');
         if (fixed) {
             attrDecl.setFixedValue(fixed);
         }
-        
+
         // Set form (qualified/unqualified)
         const form = this.getAttributeValue(attributes, 'form');
         if (form === 'qualified' || form === 'unqualified') {
             attrDecl.setForm(form);
         }
-        
+
         this.currentAttributeDecl = attrDecl;
-        
+
         // If this is a global attribute declaration, add to grammar
         if (name && !this.currentType) {
             // Global attribute declaration
@@ -627,13 +685,18 @@ export class SchemaParsingHandler implements ContentHandler {
             attrDecl.setName(globalAttrName);
             this.grammar.addAttributeDeclaration(globalAttrName, attrDecl);
         }
-        
+
         // Add to current complex type if we're inside one
         if (this.currentType && this.currentType.isComplexType()) {
             (this.currentType as ComplexType).addAttribute(attrName, attrDecl);
         }
+
+        // Add to current attribute group if we're inside one
+        if (this.currentAttributeGroup) {
+            this.currentAttributeGroup.addAttribute(attrDecl);
+        }
     }
-    
+
     private processAnyAttribute(attributes: XMLAttribute[]): void {
         // xs:anyAttribute allows attributes from specified namespaces
         if (this.currentType && this.currentType.isComplexType()) {
@@ -676,7 +739,7 @@ export class SchemaParsingHandler implements ContentHandler {
     private processImport(attributes: XMLAttribute[]): void {
         const namespace = this.getAttributeValue(attributes, 'namespace');
         const schemaLocation = this.getAttributeValue(attributes, 'schemaLocation');
-        
+
         if (namespace) {
             this.imports.push({
                 namespace: namespace,
@@ -698,7 +761,7 @@ export class SchemaParsingHandler implements ContentHandler {
             // Already has a prefix - return as-is
             return qname;
         }
-        
+
         // No prefix - add appropriate prefix if needed
         if (this.isSchemaNamespace(qname)) {
             // XML Schema built-in types stay without prefix
@@ -708,7 +771,7 @@ export class SchemaParsingHandler implements ContentHandler {
             const prefix = this.getPrefixForNamespace(this.targetNamespace);
             return prefix ? `${prefix}:${qname}` : qname;
         }
-        
+
         return qname;
     }
 
@@ -725,7 +788,7 @@ export class SchemaParsingHandler implements ContentHandler {
             // If prefix not found, return as-is
             return qname;
         }
-        
+
         // No prefix - check if it's a schema built-in or use target namespace
         if (this.isSchemaNamespace(qname)) {
             // XML Schema built-in types don't need namespace expansion
@@ -734,10 +797,10 @@ export class SchemaParsingHandler implements ContentHandler {
             // Use target namespace for unprefixed names
             return `{${this.targetNamespace}}${qname}`;
         }
-        
+
         return qname;
     }
-    
+
     private isSchemaNamespace(localName: string): boolean {
         // Check if this is a built-in XML Schema type
         const builtinTypes: string[] = [
@@ -751,12 +814,12 @@ export class SchemaParsingHandler implements ContentHandler {
         ];
         return builtinTypes.includes(localName);
     }
-    
+
     private processNamespaceDeclarations(attributes: XMLAttribute[]): void {
         for (const attr of attributes) {
             const attrName: string = attr.getName();
             const attrValue: string = attr.getValue();
-            
+
             if (attrName === 'xmlns') {
                 // Default namespace declaration
                 this.defaultNamespace = attrValue;
@@ -769,12 +832,12 @@ export class SchemaParsingHandler implements ContentHandler {
             }
         }
     }
-    
+
     private processExtension(attributes: XMLAttribute[]): void {
         const base = this.getAttributeValue(attributes, 'base');
         if (base && this.currentType) {
             const baseTypeQName = this.parseQName(base);
-            
+
             if (this.currentType.isComplexType()) {
                 const complexType = this.currentType as ComplexType;
                 // Store the base type QName for later resolution
@@ -784,23 +847,23 @@ export class SchemaParsingHandler implements ContentHandler {
             // Note: Simple type extensions in complex content need different handling
         }
     }
-    
+
     private processGroup(attributes: XMLAttribute[]): void {
         const name: string | undefined = this.getAttributeValue(attributes, 'name');
         const ref: string | undefined = this.getAttributeValue(attributes, 'ref');
         const minOccurs: number = parseInt(this.getAttributeValue(attributes, 'minOccurs') || '1');
         const maxOccurs: string | undefined = this.getAttributeValue(attributes, 'maxOccurs');
         const maxOccursValue: number = maxOccurs === 'unbounded' ? -1 : parseInt(maxOccurs || '1');
-        
+
         if (name) {
             // Group definition - save current context and start new group
             const groupModel: GroupModel = new GroupModel(name, minOccurs, maxOccursValue);
-            
+
             // Push current content model to stack for later restoration
             this.contentModelStack.push(this.currentContentModel!);
             this.currentGroupModel = groupModel;
             this.currentContentModel = undefined;
-            
+
             // Store group with qualified naming for consistency
             let groupKey: string = name;
             if (this.targetNamespace) {
@@ -808,19 +871,22 @@ export class SchemaParsingHandler implements ContentHandler {
                 groupKey = prefix ? `${prefix}:${name}` : name;
             }
             this.groupDefinitions.set(groupKey, groupModel);
-            
+
+            // Also store in grammar for cross-schema access
+            this.grammar.addGroupDefinition(groupKey, groupModel);
+
         } else if (ref) {
             // Group reference - resolve and include in current context
             const refQName: string = this.parseQName(ref);
-            
+
             // Use qualified name for group lookup
             const groupKey: string = refQName;
-            
+
             // Extract local name for GroupModel constructor
             const colonIndex: number = refQName.indexOf(':');
             const localName: string = colonIndex !== -1 ? refQName.substring(colonIndex + 1) : refQName;
-            
-            const originalGroupModel: ContentModel | undefined = this.groupDefinitions.get(groupKey);
+
+            const originalGroupModel: ContentModel | undefined = this.groupDefinitions.get(groupKey) || this.grammar.getGroupDefinition(groupKey);
             if (originalGroupModel) {
                 if (this.currentContentModel) {
                     // Create group reference with occurrence constraints
@@ -831,7 +897,7 @@ export class SchemaParsingHandler implements ContentHandler {
                             refGroupModel.setContentModel(originalContentModel);
                         }
                     }
-                    
+
                     // Add to current content model based on its type
                     if (this.currentContentModel instanceof SequenceModel) {
                         this.currentContentModel.addParticle(refGroupModel);
@@ -845,7 +911,7 @@ export class SchemaParsingHandler implements ContentHandler {
                     // Direct group reference in complex type becomes content model
                     if (this.currentType && this.currentType.isComplexType()) {
                         const complexType: ComplexType = this.currentType as ComplexType;
-                        
+
                         // Create group reference as root content model
                         const refGroupModel: GroupModel = new GroupModel(localName, minOccurs, maxOccursValue);
                         if (originalGroupModel instanceof GroupModel) {
@@ -854,7 +920,7 @@ export class SchemaParsingHandler implements ContentHandler {
                                 refGroupModel.setContentModel(originalContentModel);
                             }
                         }
-                        
+
                         // Set as the content model for the complex type
                         complexType.setContentModel(refGroupModel);
                     }
@@ -880,7 +946,7 @@ export class SchemaParsingHandler implements ContentHandler {
                             // Non-GroupModel resolved content - use directly
                             refGroupModel.setContentModel(resolvedGroup);
                         }
-                        
+
                         if (this.currentContentModel instanceof SequenceModel || this.currentContentModel instanceof ChoiceModel) {
                             this.currentContentModel.addParticle(refGroupModel);
                         } else if (this.currentContentModel instanceof AllModel) {
@@ -900,63 +966,184 @@ export class SchemaParsingHandler implements ContentHandler {
                             } else {
                                 refGroupModel.setContentModel(resolvedGroup);
                             }
-                            
+
                             // Set as the content model for the complex type
                             complexType.setContentModel(refGroupModel);
                         }
                     }
                 } else {
-                    // Unresolved group reference - skip warnings for built-in XML Schema groups
+                    // Unresolved group reference - defer resolution for forward references
                     if (!ref.startsWith('xs:')) {
-                        console.warn(`Group reference ${ref} not found`);
+                        this.deferredGroupReferences.push({
+                            ref: ref,
+                            refQName: refQName,
+                            localName: localName,
+                            minOccurs: minOccurs,
+                            maxOccursValue: maxOccursValue,
+                            parentContext: this.currentContentModel || this.currentType,
+                            contextType: this.currentContentModel instanceof SequenceModel ? 'sequence' :
+                                this.currentContentModel instanceof ChoiceModel ? 'choice' :
+                                    this.currentContentModel instanceof AllModel ? 'all' : 'complexType'
+                        });
                     }
                 }
             }
         }
     }
-    
+
+    private resolveDeferredGroupReferences(): void {
+        for (const deferred of this.deferredGroupReferences) {
+            const originalGroupModel: ContentModel | undefined = this.groupDefinitions.get(deferred.refQName) || this.grammar.getGroupDefinition(deferred.refQName);
+
+            if (originalGroupModel) {
+                // Create group reference with occurrence constraints
+                const refGroupModel: GroupModel = new GroupModel(deferred.localName, deferred.minOccurs, deferred.maxOccursValue);
+                if (originalGroupModel instanceof GroupModel) {
+                    const originalContentModel: ContentModel | undefined = originalGroupModel.getContentModel();
+                    if (originalContentModel) {
+                        refGroupModel.setContentModel(originalContentModel);
+                    }
+                } else {
+                    refGroupModel.setContentModel(originalGroupModel);
+                }
+
+                // Add to the appropriate parent context
+                if (deferred.contextType === 'sequence' && deferred.parentContext instanceof SequenceModel) {
+                    deferred.parentContext.addParticle(refGroupModel);
+                } else if (deferred.contextType === 'choice' && deferred.parentContext instanceof ChoiceModel) {
+                    deferred.parentContext.addParticle(refGroupModel);
+                } else if (deferred.contextType === 'all' && deferred.parentContext instanceof AllModel) {
+                    // AllModel doesn't support group references - this should have been caught earlier
+                    console.warn('xs:group references are not allowed within xs:all groups');
+                } else if (deferred.contextType === 'complexType' && deferred.parentContext instanceof ComplexType) {
+                    deferred.parentContext.setContentModel(refGroupModel);
+                }
+            } else {
+                console.warn(`Group reference ${deferred.ref} could not be resolved even after deferred processing`);
+            }
+        }
+
+        // Clear the deferred list
+        this.deferredGroupReferences = [];
+    }
+
+    private resolveDeferredAttributeGroupReferences(): void {
+        // Debug: Show what attribute groups are available in the grammar
+        const availableAttributeGroups = this.grammar.getAttributeGroupDefinitions();
+
+        for (const reference of this.attributeGroupReferences) {
+
+            // First look for the attribute group definition locally in handler
+            let attributeGroup: AttributeGroup | undefined = this.attributeGroupDefinitions.get(reference.refQName);
+
+            // If not found locally, check the main grammar (which includes merged schemas)
+            if (!attributeGroup) {
+                attributeGroup = this.grammar.getAttributeGroupDefinition(reference.refQName);
+            }
+
+            // If still not found, try cross-schema resolver as fallback
+            if (!attributeGroup && this.crossSchemaAttributeGroupResolver) {
+                attributeGroup = this.crossSchemaAttributeGroupResolver(reference.refQName);
+            }
+
+            if (attributeGroup) {
+                const groupAttributes: Map<string, SchemaAttributeDecl> = attributeGroup.getAttributes();
+
+                // Copy all attributes from the resolved group to the target complex type
+                for (const [attrName, attrDecl] of Array.from(groupAttributes.entries())) {
+                    reference.targetComplexType.addAttribute(attrName, attrDecl);
+                }
+            } else {
+                console.warn(`Attribute group reference ${reference.ref} could not be resolved - definition not found`);
+            }
+        }
+
+        // Clear the references list
+        this.attributeGroupReferences = [];
+    }
+
     private processAttributeGroup(attributes: XMLAttribute[]): void {
         const name: string | undefined = this.getAttributeValue(attributes, 'name');
         const ref: string | undefined = this.getAttributeValue(attributes, 'ref');
-        
+
         if (name) {
-            // Attribute group definition - create container type
-            const groupType: ComplexType = new ComplexType();
+            // Attribute group definition - create proper AttributeGroup
+            const attributeGroup: AttributeGroup = new AttributeGroup(name, this.targetNamespace);
+
             // Use qualified naming for consistency
             let qname: string = name;
             if (this.targetNamespace) {
-                const prefix: string | undefined = this.getPrefixForNamespace(this.targetNamespace);
+                let prefix: string | undefined = this.getPrefixForNamespace(this.targetNamespace);
                 qname = prefix ? `${prefix}:${name}` : name;
             }
-            groupType.setName(qname);
-            
-            // Store as type for later reference resolution
-            this.grammar.addTypeDefinition(qname, groupType);
-            this.currentType = groupType;
+            attributeGroup.setName(qname);
+
+            // Store in dedicated attribute group storage
+            this.attributeGroupDefinitions.set(qname, attributeGroup);
+            // Also store in grammar
+            this.grammar.addAttributeGroupDefinition(qname, attributeGroup);
+
+            // Set current context for processing nested attributes
+            this.currentAttributeGroup = attributeGroup;
+
         } else if (ref) {
-            // Attribute group reference - copy attributes to current type
+            // Attribute group reference - find the target complex type
             const refQName: string = this.parseQName(ref);
-            
-            if (this.currentType && this.currentType.isComplexType()) {
-                const currentComplexType: ComplexType = this.currentType as ComplexType;
-                
-                // Resolve the referenced attribute group
-                const groupType: SchemaType | undefined = this.grammar.getTypeDefinition(refQName);
-                if (groupType && groupType.isComplexType()) {
-                    const groupComplexType: ComplexType = groupType as ComplexType;
-                    const groupAttributes: Map<string, SchemaAttributeDecl> = groupComplexType.getAttributes();
-                    
-                    // Copy all attributes from group to current type
-                    for (const [attrName, attrDecl] of Array.from(groupAttributes.entries())) {
-                        currentComplexType.addAttribute(attrName, attrDecl);
-                    }
-                } else {
-                    // Unresolved reference - defer to post-processing
-                }
+
+            // Find the target complex type based on current context
+            const targetComplexType = this.findTargetComplexType();
+
+            if (targetComplexType) {
+                const elementPath = this.elementStack.join('/');
+
+                // Store reference for post-processing
+                this.attributeGroupReferences.push({
+                    ref: ref,
+                    refQName: refQName,
+                    targetComplexType: targetComplexType,
+                    elementPath: elementPath
+                });
+            } else {
+                console.warn(`Could not determine target complex type for attribute group reference: ${ref}`);
             }
         }
     }
-    
+
+    private findTargetComplexType(): ComplexType | undefined {
+        // Look for the closest complex type in the element hierarchy
+        // This handles both named types and anonymous inline types
+
+        // Check if we're inside an element with an anonymous complex type
+        if (this.currentElementDecl) {
+            const elementType = this.currentElementDecl.getType();
+            if (elementType && elementType.isComplexType()) {
+                return elementType as ComplexType;
+            }
+        }
+
+        // Check current type context
+        if (this.currentType && this.currentType.isComplexType()) {
+            return this.currentType as ComplexType;
+        }
+
+        // If element stack shows: ..., xsd:element, xsd:complexType, xsd:attributeGroup
+        // Then we need to find the complex type that was just created for the element
+        const stackLength = this.elementStack.length;
+        if (stackLength >= 3 &&
+            this.elementStack[stackLength - 1] === 'xsd:attributeGroup' &&
+            this.elementStack[stackLength - 2] === 'xsd:complexType' &&
+            this.elementStack[stackLength - 3] === 'xsd:element') {
+
+            // We're in an inline complex type within an element
+            // Use the most recently created anonymous complex type
+            if (this.lastAnonymousComplexType) {
+                return this.lastAnonymousComplexType;
+            }
+        }
+
+        return undefined;
+    }
+
     private processUnion(attributes: XMLAttribute[]): void {
         // xs:union allows multiple simple types as alternatives
         if (this.currentType && this.currentType.isSimpleType()) {
@@ -967,7 +1154,7 @@ export class SchemaParsingHandler implements ContentHandler {
             }
         }
     }
-    
+
     private processList(attributes: XMLAttribute[]): void {
         // xs:list creates a simple type from space-separated values
         if (this.currentType && this.currentType.isSimpleType()) {
@@ -999,9 +1186,9 @@ export class SchemaParsingHandler implements ContentHandler {
     private processSequence(attributes: XMLAttribute[]): void {
         const minOccurs: number = this.parseOccurrence(this.getAttributeValue(attributes, 'minOccurs'), 1);
         const maxOccurs: number = this.parseOccurrence(this.getAttributeValue(attributes, 'maxOccurs'), 1);
-        
+
         const sequence: SequenceModel = new SequenceModel(minOccurs, maxOccurs);
-        
+
         // Push current content model to stack
         if (this.currentContentModel) {
             this.contentModelStack.push(this.currentContentModel);
@@ -1012,9 +1199,9 @@ export class SchemaParsingHandler implements ContentHandler {
     private processChoice(attributes: XMLAttribute[]): void {
         const minOccurs: number = this.parseOccurrence(this.getAttributeValue(attributes, 'minOccurs'), 1);
         const maxOccurs: number = this.parseOccurrence(this.getAttributeValue(attributes, 'maxOccurs'), 1);
-        
+
         const choice: ChoiceModel = new ChoiceModel(minOccurs, maxOccurs);
-        
+
         // Push current content model to stack
         if (this.currentContentModel) {
             this.contentModelStack.push(this.currentContentModel);
@@ -1025,7 +1212,7 @@ export class SchemaParsingHandler implements ContentHandler {
     private processAll(attributes: XMLAttribute[]): void {
         // All groups always have cardinality 1 in XML Schema
         const all: AllModel = new AllModel();
-        
+
         // Push current content model to stack
         if (this.currentContentModel) {
             this.contentModelStack.push(this.currentContentModel);
@@ -1038,9 +1225,9 @@ export class SchemaParsingHandler implements ContentHandler {
         const maxOccurs: number = this.parseOccurrence(this.getAttributeValue(attributes, 'maxOccurs'), -1);
         const namespace: string = this.getAttributeValue(attributes, 'namespace') || '##any';
         const processContents: string = this.getAttributeValue(attributes, 'processContents') || 'lax';
-        
+
         const anyModel: AnyModel = new AnyModel(namespace, processContents, minOccurs, maxOccurs);
-        
+
         // Add this xs:any to the current content model
         if (this.currentContentModel) {
             if (this.currentContentModel instanceof SequenceModel) {
@@ -1076,7 +1263,7 @@ export class SchemaParsingHandler implements ContentHandler {
             if (this.currentContentModel) {
                 this.currentGroupModel.setContentModel(this.currentContentModel);
             }
-            
+
             // Restore the previous content model
             this.currentContentModel = this.contentModelStack.pop();
             this.currentGroupModel = undefined;
@@ -1086,7 +1273,7 @@ export class SchemaParsingHandler implements ContentHandler {
     private finishContentModel(model: ContentModel): void {
         // Pop parent content model from stack
         const parentModel: ContentModel | undefined = this.contentModelStack.pop();
-        
+
         if (parentModel) {
             // Add as particle to parent content model
             if (parentModel instanceof SequenceModel) {
@@ -1096,24 +1283,49 @@ export class SchemaParsingHandler implements ContentHandler {
             }
             this.currentContentModel = parentModel;
         } else {
-            // Root content model - assign to current complex type
-            if (this.currentType && this.currentType.isComplexType()) {
-                const complexType: ComplexType = this.currentType as ComplexType;
-                complexType.setContentModel(model);
+            // No parent content model - check if we're inside a group definition
+            if (this.currentGroupModel) {
+                // Inside a group definition - keep the content model for the group to capture
+                this.currentContentModel = model;
+            } else {
+                // Root content model - assign to current complex type
+                if (this.currentType && this.currentType.isComplexType()) {
+                    const complexType: ComplexType = this.currentType as ComplexType;
+                    complexType.setContentModel(model);
+                }
+                this.currentContentModel = undefined;
             }
-            this.currentContentModel = undefined;
         }
+    }
+
+    // Helper method to ensure element names have prefixes for CompositeGrammar storage
+    private ensureElementPrefix(elementName: string): string {
+        // If element already has prefix, return as-is
+        if (elementName.includes(':')) {
+            return elementName;
+        }
+
+        // For CompositeGrammar storage, ALL elements must have prefixes
+        // This ensures consistent lookups regardless of elementFormDefault
+        if (this.targetNamespace) {
+            const prefix = this.getPrefixForNamespace(this.targetNamespace);
+            if (prefix) {
+                return `${prefix}:${elementName}`;
+            }
+        }
+
+        return elementName;
     }
 
     private parseOccurrence(value: string | undefined, defaultValue: number): number {
         if (!value) {
             return defaultValue;
         }
-        
+
         if (value === 'unbounded') {
             return -1; // -1 represents unbounded
         }
-        
+
         const parsed: number = parseInt(value, 10);
         return isNaN(parsed) ? defaultValue : parsed;
     }
@@ -1122,37 +1334,37 @@ export class SchemaParsingHandler implements ContentHandler {
         const name = this.getAttributeValue(attributes, 'name');
         const publicId = this.getAttributeValue(attributes, 'public');
         const systemId = this.getAttributeValue(attributes, 'system');
-        
+
         // Schema spec requires 'name' attribute for notation declarations
         if (!name) {
             throw new Error("Schema validation error: notation declaration must have a 'name' attribute");
         }
-        
+
         // Names must be valid NCName tokens per XML Schema specification
         if (!XMLUtils.isValidNCName(name)) {
             throw new Error(`Schema validation error: notation name '${name}' is not a valid NCName`);
         }
-        
+
         // Schema spec requires either 'public' or 'system' identifier (or both)
         if (!publicId && !systemId) {
             throw new Error("Schema validation error: notation declaration must have either 'public' or 'system' attribute");
         }
-        
+
         // Store notation declaration if needed by grammar
     }
 
     // Schema validation helper methods
-    
+
     private validateTypeReference(typeName: string): void {
         // Built-in XML Schema types are always valid
         if (this.isBuiltInType(typeName)) {
             return;
         }
-        
+
         // Defer validation to post-processing phase since types
         // can be defined later or in imported schemas
     }
-    
+
     private isBuiltInType(typeName: string): boolean {
         const builtInTypes = [
             'string', 'boolean', 'decimal', 'float', 'double', 'duration', 'dateTime', 'time', 'date',
@@ -1162,7 +1374,7 @@ export class SchemaParsingHandler implements ContentHandler {
             'negativeInteger', 'long', 'int', 'short', 'byte', 'nonNegativeInteger', 'unsignedLong',
             'unsignedInt', 'unsignedShort', 'unsignedByte', 'positiveInteger'
         ];
-        
+
         // Check local name portion for built-in types
         const localName = typeName.includes(':') ? typeName.split(':')[1] : typeName;
         return builtInTypes.includes(localName);

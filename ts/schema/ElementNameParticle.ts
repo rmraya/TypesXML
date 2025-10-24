@@ -55,8 +55,21 @@ export class ElementNameParticle implements ValidationParticle {
     }
 
     validate(children: string[]): void {
-        // ElementNameParticle doesn't validate - it just represents an allowed element name
-        // The actual validation happens at the parent level (sequence/choice)
+        // Validate that children array matches this element's occurrence constraints
+        if (children.length < this.minOccurs) {
+            throw new Error(`ElementNameParticle validation failed: expected at least ${this.minOccurs} occurrences of '${this.elementName}', got ${children.length}`);
+        }
+
+        if (this.maxOccurs !== -1 && children.length > this.maxOccurs) {
+            throw new Error(`ElementNameParticle validation failed: expected at most ${this.maxOccurs} occurrences of '${this.elementName}', got ${children.length}`);
+        }
+
+        // Validate that all children match this element
+        for (const child of children) {
+            if (!this.matches(child)) {
+                throw new Error(`ElementNameParticle validation failed: element '${child}' does not match expected element '${this.elementName}'`);
+            }
+        }
     }
 
     getElementName(): string {
@@ -101,5 +114,24 @@ export class ElementNameParticle implements ValidationParticle {
         }
 
         return false;
+    }
+
+    toBNF(): string {
+        const name: string = this.elementName;
+        const min: number = this.minOccurs;
+        const max: number = this.maxOccurs;
+
+        if (min === 1 && max === 1) {
+            return name;
+        } else if (min === 0 && max === 1) {
+            return `${name}?`;
+        } else if (min === 0 && max === -1) {
+            return `${name}*`;
+        } else if (min === 1 && max === -1) {
+            return `${name}+`;
+        } else {
+            const maxStr: string = max === -1 ? 'unbounded' : max.toString();
+            return `${name}{${min},${maxStr}}`;
+        }
     }
 }

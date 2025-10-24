@@ -15,10 +15,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { basename, join, resolve } from 'path';
 import { DOMBuilder } from '../DOMBuilder';
 import { SAXParser } from '../SAXParser';
-import * as fs from 'fs';
-import * as path from 'path';
 
 /**
  * XML Schema Test Suite Runner for TypesXML v2.0.0
@@ -38,7 +38,7 @@ export class XMLSchemaTestSuite {
 
     constructor() {
         this.startTime = Date.now();
-        this.xstsPath = path.resolve(__dirname, '../../tests/xmlschema2006-11-06');
+        this.xstsPath = resolve(__dirname, '../../tests/xmlschema2006-11-06');
         this.results = {
             schemaFileParsing: { passed: 0, failed: 0, tests: [], bySource: {} },
             instanceFileParsing: { passed: 0, failed: 0, tests: [], bySource: {} },
@@ -53,19 +53,19 @@ export class XMLSchemaTestSuite {
 
     public async run(): Promise<void> {
         this.printHeader();
-        
+
         // Validate test suite availability
         await this.validateTestSuite();
-        
+
         // Suppress verbose parser logging during tests
         const originalConsoleLog = console.log;
         const suppressedOutput: string[] = [];
-        
+
         console.log = (...args: any[]) => {
             const message = args.join(' ');
             // Suppress all verbose parser messages - keep only test progress and results
-            if (message.includes('📊') || 
-                message.includes('🎯') || 
+            if (message.includes('📊') ||
+                message.includes('🎯') ||
                 message.includes('📦') ||
                 message.includes('🏷️') ||
                 message.includes('✅ Successfully loaded XSD') ||
@@ -89,7 +89,7 @@ export class XMLSchemaTestSuite {
                 originalConsoleLog(...args);
             }
         };
-        
+
         try {
             // Run tests with actual files from the W3C test suite
             this.testSchemaFileParsing();
@@ -99,7 +99,7 @@ export class XMLSchemaTestSuite {
             // Restore original console.log
             console.log = originalConsoleLog;
         }
-        
+
         // Print final results
         console.log(`🔇 Suppressed ${suppressedOutput.length} verbose parser messages for cleaner output`);
         console.log('');
@@ -119,8 +119,8 @@ export class XMLSchemaTestSuite {
 
     private async validateTestSuite(): Promise<void> {
         console.log('🔍 Validating W3C XML Schema Test Suite...');
-        
-        if (!fs.existsSync(this.xstsPath)) {
+
+        if (!existsSync(this.xstsPath)) {
             console.log(`❌ W3C XML Schema Test Suite not found at: ${this.xstsPath}`);
             console.log('   Please ensure the xmlschema2006-11-06 directory exists in /tests');
             throw new Error('Test suite not available');
@@ -128,7 +128,7 @@ export class XMLSchemaTestSuite {
 
         const schemaFiles = this.countFiles('.xsd');
         const instanceFiles = this.countFiles('.xml');
-        
+
         console.log(`✅ Found ${schemaFiles.toLocaleString()} schema files (.xsd)`);
         console.log(`✅ Found ${instanceFiles.toLocaleString()} instance files (.xml)`);
         console.log('✅ Test suite validation complete');
@@ -145,10 +145,10 @@ export class XMLSchemaTestSuite {
 
     private countFilesRecursive(dir: string, extension: string, callback: (file: string) => void): void {
         try {
-            const files = fs.readdirSync(dir);
+            const files = readdirSync(dir);
             for (const file of files) {
-                const fullPath = path.join(dir, file);
-                const stat = fs.statSync(fullPath);
+                const fullPath = join(dir, file);
+                const stat = statSync(fullPath);
                 if (stat.isDirectory()) {
                     this.countFilesRecursive(fullPath, extension, callback);
                 } else if (file.endsWith(extension)) {
@@ -203,20 +203,20 @@ export class XMLSchemaTestSuite {
     private testSchemaFileParsing(): void {
         console.log('📋 Test 1: Schema File Validation');
         console.log('   Testing: Does SAXParser correctly validate .xsd schema files according to W3C expected results?');
-        
+
         // Parse test metadata to get expected results
         const testCases = this.parseSchemaTestMetadata();
         const testSources = this.categorizeSchemaTestCases(testCases);
         this.displaySchemaTestSourceSummary(testSources);
-        
+
         // Test ALL schema files with known expected results
         const testFiles = testCases;
-        
+
         let correctResults = 0;
         let wrongResults = 0;
         let validFilesTestedCorrectly = 0;
         let invalidFilesTestedCorrectly = 0;
-        
+
         // Track detailed failures for analysis
         const failures: Array<{
             file: string;
@@ -224,32 +224,32 @@ export class XMLSchemaTestSuite {
             actual: string;
             error: string | null;
         }> = [];
-        
+
         console.log(`   Testing ${testFiles.length} schema files with expected results from ${Object.keys(testSources).length} test sources...`);
-        
+
         for (let i = 0; i < testFiles.length; i++) {
             const testCase = testFiles[i];
             const result = this.testParseFile(testCase.schemaPath);
             const source = this.getTestSourceFromPath(testCase.schemaPath);
-            
+
             // Initialize source tracking if needed
             if (!this.results.schemaFileParsing.bySource[source]) {
                 this.results.schemaFileParsing.bySource[source] = { passed: 0, failed: 0, total: 0 };
             }
-            
+
             // Check if parser result matches expected result
             const expectedToSucceed = testCase.expectedValidity === 'valid';
             const actuallySucceeded = result.success;
             const isCorrect = expectedToSucceed === actuallySucceeded;
-            
+
             // Track unified results
             this.trackUnifiedResult(source, testCase.expectedValidity, actuallySucceeded);
-            
+
             if (isCorrect) {
                 correctResults++;
                 this.results.schemaFileParsing.passed++;
                 this.results.schemaFileParsing.bySource[source].passed++;
-                
+
                 if (expectedToSucceed) {
                     validFilesTestedCorrectly++;
                 } else {
@@ -259,27 +259,27 @@ export class XMLSchemaTestSuite {
                 wrongResults++;
                 this.results.schemaFileParsing.failed++;
                 this.results.schemaFileParsing.bySource[source].failed++;
-                
+
                 // Record detailed failure information
                 failures.push({
-                    file: path.basename(testCase.schemaPath),
+                    file: basename(testCase.schemaPath),
                     expected: testCase.expectedValidity,
                     actual: result.success ? 'valid' : 'invalid',
                     error: result.error || 'No error message'
                 });
             }
             this.results.schemaFileParsing.bySource[source].total++;
-            
+
             // Progress indicator every 1000 files
             if ((i + 1) % 1000 === 0 || i === testFiles.length - 1) {
                 const progress = ((i + 1) / testFiles.length * 100).toFixed(0);
                 console.log(`   Progress: ${progress}% (${i + 1}/${testFiles.length}) - ${correctResults} correct, ${wrongResults} wrong - Last: ${source}`);
             }
         }
-        
+
         const accuracy = ((correctResults / testFiles.length) * 100).toFixed(1);
         console.log(`   ✅ Validation Accuracy: ${correctResults}/${testFiles.length} (${accuracy}%) - ${validFilesTestedCorrectly} valid + ${invalidFilesTestedCorrectly} invalid correctly identified`);
-        
+
         // Display first few failures for analysis
         if (failures.length > 0) {
             console.log(`\n   📋 Analysis: First ${Math.min(5, failures.length)} failed test cases:`);
@@ -290,27 +290,27 @@ export class XMLSchemaTestSuite {
                 console.log(`      Error: ${failure.error}`);
             }
         }
-        
+
         console.log('');
     }
 
     private testInstanceFileParsing(): void {
         console.log('📋 Test 2: Instance Document Validation');
         console.log('   Testing: Does SAXParser correctly validate .xml instance files according to W3C expected results?');
-        
+
         // Parse test metadata to get expected results for instance documents
         const testCases = this.parseInstanceTestMetadata();
         const testSources = this.categorizeInstanceTestCases(testCases);
         this.displayInstanceTestSourceSummary(testSources);
-        
+
         // Test ALL instance files with known expected results
         const testFiles = testCases;
-        
+
         let correctResults = 0;
         let wrongResults = 0;
         let validFilesTestedCorrectly = 0;
         let invalidFilesTestedCorrectly = 0;
-        
+
         // Track detailed failures for analysis
         const failures: Array<{
             file: string;
@@ -318,32 +318,32 @@ export class XMLSchemaTestSuite {
             actual: string;
             error: string | null;
         }> = [];
-        
+
         console.log(`   Testing ${testFiles.length} instance files with expected results from ${Object.keys(testSources).length} test sources...`);
-        
+
         for (let i = 0; i < testFiles.length; i++) {
             const testCase = testFiles[i];
             const result = this.testParseFile(testCase.instancePath);
             const source = this.getTestSourceFromPath(testCase.instancePath);
-            
+
             // Initialize source tracking if needed
             if (!this.results.instanceFileParsing.bySource[source]) {
                 this.results.instanceFileParsing.bySource[source] = { passed: 0, failed: 0, total: 0 };
             }
-            
+
             // Check if parser result matches expected result
             const expectedToSucceed = testCase.expectedValidity === 'valid';
             const actuallySucceeded = result.success;
             const isCorrect = expectedToSucceed === actuallySucceeded;
-            
+
             // Track unified results
             this.trackUnifiedResult(source, testCase.expectedValidity, actuallySucceeded);
-            
+
             if (isCorrect) {
                 correctResults++;
                 this.results.instanceFileParsing.passed++;
                 this.results.instanceFileParsing.bySource[source].passed++;
-                
+
                 if (expectedToSucceed) {
                     validFilesTestedCorrectly++;
                 } else {
@@ -353,27 +353,27 @@ export class XMLSchemaTestSuite {
                 wrongResults++;
                 this.results.instanceFileParsing.failed++;
                 this.results.instanceFileParsing.bySource[source].failed++;
-                
+
                 // Record detailed failure information
                 failures.push({
-                    file: path.basename(testCase.instancePath),
+                    file: basename(testCase.instancePath),
                     expected: testCase.expectedValidity,
                     actual: result.success ? 'valid' : 'invalid',
                     error: result.error || 'No error message'
                 });
             }
             this.results.instanceFileParsing.bySource[source].total++;
-            
+
             // Progress indicator every 1000 files
             if ((i + 1) % 1000 === 0 || i === testFiles.length - 1) {
                 const progress = ((i + 1) / testFiles.length * 100).toFixed(0);
                 console.log(`   Progress: ${progress}% (${i + 1}/${testFiles.length}) - ${correctResults} correct, ${wrongResults} wrong - Last: ${source}`);
             }
         }
-        
+
         const accuracy = ((correctResults / testFiles.length) * 100).toFixed(1);
         console.log(`   ✅ Validation Accuracy: ${correctResults}/${testFiles.length} (${accuracy}%) - ${validFilesTestedCorrectly} valid + ${invalidFilesTestedCorrectly} invalid correctly identified`);
-        
+
         // Display first few failures for analysis
         if (failures.length > 0) {
             console.log(`\n   📋 Analysis: First ${Math.min(5, failures.length)} failed test cases:`);
@@ -384,21 +384,21 @@ export class XMLSchemaTestSuite {
                 console.log(`      Error: ${failure.error}`);
             }
         }
-        
+
         console.log('');
     }
 
     private testParseFile(filePath: string): TestResult {
         const startTime = Date.now();
-        
+
         try {
             const parser = new SAXParser();
             const builder = new DOMBuilder();
-            
+
             parser.setValidating(true); // Enable validation for proper testing
             parser.setContentHandler(builder);
             parser.parseFile(filePath);
-            
+
             const document = builder.getDocument();
             if (!document || !document.getRoot()) {
                 return {
@@ -407,13 +407,13 @@ export class XMLSchemaTestSuite {
                     duration: Date.now() - startTime
                 };
             }
-            
+
             return {
                 success: true,
                 error: null,
                 duration: Date.now() - startTime
             };
-            
+
         } catch (error) {
             return {
                 success: false,
@@ -425,7 +425,7 @@ export class XMLSchemaTestSuite {
 
     private parseSchemaTestMetadata(): SchemaTestCase[] {
         const testCases: SchemaTestCase[] = [];
-        
+
         // Parse metadata from all test sources (Microsoft, NIST, Boeing, Sun)
         const metaSources = [
             { dir: 'msMeta', pattern: '_w3c.xml' },
@@ -433,16 +433,16 @@ export class XMLSchemaTestSuite {
             { dir: 'boeingMeta', pattern: '.testSet' },
             { dir: 'sunMeta', pattern: '.testSet' }
         ];
-        
+
         for (const metaSource of metaSources) {
-            const metaPath = path.join(this.xstsPath, metaSource.dir);
-            
-            if (fs.existsSync(metaPath)) {
-                const metaFiles = fs.readdirSync(metaPath).filter(f => f.endsWith(metaSource.pattern));
-                
+            const metaPath = join(this.xstsPath, metaSource.dir);
+
+            if (existsSync(metaPath)) {
+                const metaFiles = readdirSync(metaPath).filter(f => f.endsWith(metaSource.pattern));
+
                 for (const metaFile of metaFiles) {
                     try {
-                        const content = fs.readFileSync(path.join(metaPath, metaFile), 'utf-8');
+                        const content = readFileSync(join(metaPath, metaFile), 'utf-8');
                         const testFilesCases = this.extractTestCasesFromMetadata(content, metaSource.dir);
                         testCases.push(...testFilesCases);
                     } catch (error) {
@@ -451,34 +451,34 @@ export class XMLSchemaTestSuite {
                 }
             }
         }
-        
+
         return testCases;
     }
-    
+
     private extractTestCasesFromMetadata(xmlContent: string, metaDir: string): SchemaTestCase[] {
         const testCases: SchemaTestCase[] = [];
-        
+
         // Simple regex parsing to extract test cases with expected validity
         const testGroupRegex = /<testGroup name="([^"]+)"[\s\S]*?<\/testGroup>/g;
         let testGroupMatch;
-        
+
         while ((testGroupMatch = testGroupRegex.exec(xmlContent)) !== null) {
             const testGroupContent = testGroupMatch[0];
             const testName = testGroupMatch[1];
-            
+
             // Look for schemaTest with expected validity
             const schemaTestRegex = /<schemaTest name="[^"]*"[\s\S]*?<schemaDocument xlink:href="([^"]+)"[\s\S]*?<expected validity="([^"]+)"[\s\S]*?<\/schemaTest>/;
             const schemaMatch = schemaTestRegex.exec(testGroupContent);
-            
+
             if (schemaMatch) {
                 const relativePath = schemaMatch[1];
                 const expectedValidity = schemaMatch[2];
-                
+
                 // Convert xlink:href relative path to absolute path  
                 // The href is relative to the metadata file location (metaDir directory)
-                const schemaPath = path.resolve(this.xstsPath, metaDir, relativePath);
-                
-                if (fs.existsSync(schemaPath)) {
+                const schemaPath = resolve(this.xstsPath, metaDir, relativePath);
+
+                if (existsSync(schemaPath)) {
                     testCases.push({
                         name: testName,
                         schemaPath: schemaPath,
@@ -487,16 +487,16 @@ export class XMLSchemaTestSuite {
                 }
             }
         }
-        
+
         return testCases;
     }
-    
+
     private categorizeSchemaTestCases(testCases: SchemaTestCase[]): { [source: string]: { count: number, valid: number, invalid: number } } {
         const categories: { [source: string]: { count: number, valid: number, invalid: number } } = {};
-        
+
         for (const testCase of testCases) {
             let source = 'Unknown';
-            
+
             if (testCase.schemaPath.includes('/msData/')) {
                 source = 'Microsoft';
             } else if (testCase.schemaPath.includes('/nistData/')) {
@@ -506,11 +506,11 @@ export class XMLSchemaTestSuite {
             } else if (testCase.schemaPath.includes('/boeingData/')) {
                 source = 'Boeing';
             }
-            
+
             if (!categories[source]) {
                 categories[source] = { count: 0, valid: 0, invalid: 0 };
             }
-            
+
             categories[source].count++;
             if (testCase.expectedValidity === 'valid') {
                 categories[source].valid++;
@@ -518,16 +518,16 @@ export class XMLSchemaTestSuite {
                 categories[source].invalid++;
             }
         }
-        
+
         return categories;
     }
-    
+
     private displaySchemaTestSourceSummary(testSources: { [source: string]: { count: number, valid: number, invalid: number } }): void {
         console.log('   📊 Schema Test Cases by Source:');
-        
+
         const sortedSources = Object.entries(testSources)
-            .sort(([,a], [,b]) => b.count - a.count);
-        
+            .sort(([, a], [, b]) => b.count - a.count);
+
         for (const [source, data] of sortedSources) {
             const percentage = ((data.count / Object.values(testSources).reduce((sum, s) => sum + s.count, 0)) * 100).toFixed(1);
             console.log(`      • ${source}: ${data.count} tests (${percentage}%) - ${data.valid} valid, ${data.invalid} invalid expected`);
@@ -537,7 +537,7 @@ export class XMLSchemaTestSuite {
 
     private parseInstanceTestMetadata(): InstanceTestCase[] {
         const testCases: InstanceTestCase[] = [];
-        
+
         // Parse metadata from all test sources (Microsoft, NIST, Boeing, Sun)
         const metaSources = [
             { dir: 'msMeta', pattern: '_w3c.xml' },
@@ -545,16 +545,16 @@ export class XMLSchemaTestSuite {
             { dir: 'boeingMeta', pattern: '.testSet' },
             { dir: 'sunMeta', pattern: '.testSet' }
         ];
-        
+
         for (const metaSource of metaSources) {
-            const metaPath = path.join(this.xstsPath, metaSource.dir);
-            
-            if (fs.existsSync(metaPath)) {
-                const metaFiles = fs.readdirSync(metaPath).filter(f => f.endsWith(metaSource.pattern));
-                
+            const metaPath = join(this.xstsPath, metaSource.dir);
+
+            if (existsSync(metaPath)) {
+                const metaFiles = readdirSync(metaPath).filter(f => f.endsWith(metaSource.pattern));
+
                 for (const metaFile of metaFiles) {
                     try {
-                        const content = fs.readFileSync(path.join(metaPath, metaFile), 'utf-8');
+                        const content = readFileSync(join(metaPath, metaFile), 'utf-8');
                         const testFilesCases = this.extractInstanceTestCasesFromMetadata(content, metaSource.dir);
                         testCases.push(...testFilesCases);
                     } catch (error) {
@@ -563,34 +563,34 @@ export class XMLSchemaTestSuite {
                 }
             }
         }
-        
+
         return testCases;
     }
-    
+
     private extractInstanceTestCasesFromMetadata(xmlContent: string, metaDir: string): InstanceTestCase[] {
         const testCases: InstanceTestCase[] = [];
-        
+
         // Simple regex parsing to extract instance test cases with expected validity
         const testGroupRegex = /<testGroup name="([^"]+)"[\s\S]*?<\/testGroup>/g;
         let testGroupMatch;
-        
+
         while ((testGroupMatch = testGroupRegex.exec(xmlContent)) !== null) {
             const testGroupContent = testGroupMatch[0];
             const testName = testGroupMatch[1];
-            
+
             // Look for instanceTest with expected validity
             const instanceTestRegex = /<instanceTest name="[^"]*"[\s\S]*?<instanceDocument xlink:href="([^"]+)"[\s\S]*?<expected validity="([^"]+)"[\s\S]*?<\/instanceTest>/g;
             let instanceMatch;
-            
+
             while ((instanceMatch = instanceTestRegex.exec(testGroupContent)) !== null) {
                 const relativePath = instanceMatch[1];
                 const expectedValidity = instanceMatch[2];
-                
+
                 // Convert xlink:href relative path to absolute path
                 // The href is relative to the metadata file location (metaDir directory)
-                const instancePath = path.resolve(this.xstsPath, metaDir, relativePath);
-                
-                if (fs.existsSync(instancePath)) {
+                const instancePath = resolve(this.xstsPath, metaDir, relativePath);
+
+                if (existsSync(instancePath)) {
                     testCases.push({
                         name: testName,
                         instancePath: instancePath,
@@ -599,16 +599,16 @@ export class XMLSchemaTestSuite {
                 }
             }
         }
-        
+
         return testCases;
     }
-    
+
     private categorizeInstanceTestCases(testCases: InstanceTestCase[]): { [source: string]: { count: number, valid: number, invalid: number } } {
         const categories: { [source: string]: { count: number, valid: number, invalid: number } } = {};
-        
+
         for (const testCase of testCases) {
             let source = 'Unknown';
-            
+
             if (testCase.instancePath.includes('/msData/')) {
                 source = 'Microsoft';
             } else if (testCase.instancePath.includes('/nistData/')) {
@@ -618,11 +618,11 @@ export class XMLSchemaTestSuite {
             } else if (testCase.instancePath.includes('/boeingData/')) {
                 source = 'Boeing';
             }
-            
+
             if (!categories[source]) {
                 categories[source] = { count: 0, valid: 0, invalid: 0 };
             }
-            
+
             categories[source].count++;
             if (testCase.expectedValidity === 'valid') {
                 categories[source].valid++;
@@ -630,16 +630,16 @@ export class XMLSchemaTestSuite {
                 categories[source].invalid++;
             }
         }
-        
+
         return categories;
     }
-    
+
     private displayInstanceTestSourceSummary(testSources: { [source: string]: { count: number, valid: number, invalid: number } }): void {
         console.log('   📊 Instance Test Cases by Source:');
-        
+
         const sortedSources = Object.entries(testSources)
-            .sort(([,a], [,b]) => b.count - a.count);
-        
+            .sort(([, a], [, b]) => b.count - a.count);
+
         for (const [source, data] of sortedSources) {
             const percentage = ((data.count / Object.values(testSources).reduce((sum, s) => sum + s.count, 0)) * 100).toFixed(1);
             console.log(`      • ${source}: ${data.count} tests (${percentage}%) - ${data.valid} valid, ${data.invalid} invalid expected`);
@@ -649,10 +649,10 @@ export class XMLSchemaTestSuite {
 
     private categorizeTestFiles(files: string[]): { [source: string]: { count: number, files: string[] } } {
         const categories: { [source: string]: { count: number, files: string[] } } = {};
-        
+
         for (const file of files) {
             let source = 'Unknown';
-            
+
             if (file.includes('/boeingData/') || file.includes('/boeingMeta/')) {
                 source = 'Boeing';
             } else if (file.includes('/msData/') || file.includes('/msMeta/')) {
@@ -662,23 +662,23 @@ export class XMLSchemaTestSuite {
             } else if (file.includes('/sunData/') || file.includes('/sunMeta/')) {
                 source = 'Sun';
             }
-            
+
             if (!categories[source]) {
                 categories[source] = { count: 0, files: [] };
             }
             categories[source].count++;
             categories[source].files.push(file);
         }
-        
+
         return categories;
     }
 
     private displayTestSourceSummary(fileType: string, testSources: { [source: string]: { count: number, files: string[] } }): void {
         console.log(`   📊 ${fileType} by Test Source:`);
-        
+
         const sortedSources = Object.entries(testSources)
-            .sort(([,a], [,b]) => b.count - a.count);
-        
+            .sort(([, a], [, b]) => b.count - a.count);
+
         for (const [source, data] of sortedSources) {
             const percentage = ((data.count / Object.values(testSources).reduce((sum, s) => sum + s.count, 0)) * 100).toFixed(1);
             console.log(`      • ${source}: ${data.count} files (${percentage}%)`);
@@ -702,17 +702,17 @@ export class XMLSchemaTestSuite {
     private testValidationModeToggle(): void {
         console.log('📋 Test 3: Validation Mode Testing');
         console.log('   Testing: Can parser toggle validation modes with real files?');
-        
+
         // Get a few test files
         const instanceFiles: string[] = [];
         this.countFilesRecursive(this.xstsPath, '.xml', (file) => {
             instanceFiles.push(file);
         });
-        
+
         const testFiles = instanceFiles; // Test with all XML files
         let passed = 0;
         let failed = 0;
-        
+
         for (const testFile of testFiles) {
             const result = this.testParsingWithValidation(testFile);
             if (result.success) {
@@ -723,7 +723,7 @@ export class XMLSchemaTestSuite {
                 this.results.validationMode.failed++;
             }
         }
-        
+
         const passRate = ((passed / testFiles.length) * 100).toFixed(1);
         console.log(`   ✅ Results: ${passed}/${testFiles.length} validation mode tests work (${passRate}%)`);
         console.log('');
@@ -731,21 +731,21 @@ export class XMLSchemaTestSuite {
 
     private testParsingWithValidation(filePath: string): TestResult {
         const startTime = Date.now();
-        
+
         try {
             const parser = new SAXParser();
             const builder = new DOMBuilder();
-            
+
             parser.setValidating(true);
             parser.setContentHandler(builder);
             parser.parseFile(filePath);
-            
+
             return {
                 success: true,
                 error: null,
                 duration: Date.now() - startTime
             };
-            
+
         } catch (error) {
             // Even if parsing with validation fails, the method exists and was called
             return {
@@ -759,22 +759,22 @@ export class XMLSchemaTestSuite {
     private printResults(): void {
         const totalDuration = Date.now() - this.startTime;
         this.results.performance.totalDuration = totalDuration;
-        
+
         const totalTests = this.results.schemaFileParsing.passed + this.results.schemaFileParsing.failed +
-                          this.results.instanceFileParsing.passed + this.results.instanceFileParsing.failed +
-                          this.results.validationMode.passed + this.results.validationMode.failed;
-        
+            this.results.instanceFileParsing.passed + this.results.instanceFileParsing.failed +
+            this.results.validationMode.passed + this.results.validationMode.failed;
+
         const totalPassed = this.results.schemaFileParsing.passed +
-                           this.results.instanceFileParsing.passed +
-                           this.results.validationMode.passed;
-        
+            this.results.instanceFileParsing.passed +
+            this.results.validationMode.passed;
+
         const totalFailed = totalTests - totalPassed;
         const overallPassRate = totalTests > 0 ? ((totalPassed / totalTests) * 100).toFixed(1) : '0';
-        
+
         if (totalTests > 0) {
             this.results.performance.averagePerTest = Math.round(totalDuration / totalTests);
         }
-        
+
         console.log('📊 W3C XML Schema Test Suite Results Summary');
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log(`   • Total Files Tested: ${totalTests}`);
@@ -790,10 +790,10 @@ export class XMLSchemaTestSuite {
         console.log(`      • Instance Files (.xml): ${this.results.instanceFileParsing.passed}/${this.results.instanceFileParsing.passed + this.results.instanceFileParsing.failed} parsed`);
         console.log(`      • Validation Mode: ${this.results.validationMode.passed}/${this.results.validationMode.passed + this.results.validationMode.failed} tests passed`);
         console.log('');
-        
+
         // Display detailed results by test source
         this.printResultsBySource();
-        
+
         console.log(`   📄 Detailed report saved to: w3c-schema-test-report.json`);
         console.log('');
     }
@@ -802,35 +802,35 @@ export class XMLSchemaTestSuite {
         console.log('   📊 Comprehensive Test Results by Source:');
         console.log('');
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('   Test Source  | Total | Expected | Actual  | Valid % | Expected | Actual   | Invalid % | Overall %');
-        console.log('                | Cases | Valid    | Valid   |         | Invalid  | Invalid  |           |          ');
+        console.log('   Test Source | Total | Expected |  Actual | Valid % |Expected |  Actual  | Invalid % | Overall %');
+        console.log('               | Cases |    Valid |   Valid |         | Invalid |  Invalid |           |          ');
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
+
         const sources = Object.keys(this.results.unified).sort((a, b) => {
             return this.results.unified[b].totalCases - this.results.unified[a].totalCases;
         });
-        
+
         for (const source of sources) {
             const stats = this.results.unified[source];
-            
+
             if (stats.totalCases === 0) continue;
-            
+
             // Calculate percentages
             const validPercent = stats.expectedValid > 0 ? ((stats.correctValid / stats.expectedValid) * 100).toFixed(1) : '0.0';
             const invalidPercent = stats.expectedInvalid > 0 ? ((stats.correctInvalid / stats.expectedInvalid) * 100).toFixed(1) : '0.0';
             const overallPercent = ((stats.overallCorrect / stats.totalCases) * 100).toFixed(1);
-            
-            // Format the row with proper spacing
+
+            // Format the row with proper spacing to match header exactly
             const sourceName = source.padEnd(11);
-            const totalCases = stats.totalCases.toString().padStart(5);
-            const expectedValid = stats.expectedValid.toString().padStart(8);
-            const actualValid = stats.actualValid.toString().padStart(7);
-            const validPercentStr = (validPercent + '%').padStart(7);
-            const expectedInvalid = stats.expectedInvalid.toString().padStart(8);
+            const totalCases = stats.totalCases.toString().padStart(6);
+            const expectedValid = stats.expectedValid.toString().padEnd(9);
+            const actualValid = stats.actualValid.toString().padStart(9);
+            const validPercentStr = (validPercent + '%').padStart(8);
+            const expectedInvalid = stats.expectedInvalid.toString().padEnd(8);
             const actualInvalid = stats.actualInvalid.toString().padStart(8);
-            const invalidPercentStr = (invalidPercent + '%').padStart(9);
-            const overallPercentStr = (overallPercent + '%').padStart(8);
-            
+            const invalidPercentStr = (invalidPercent + '%').padStart(10);
+            const overallPercentStr = (overallPercent + '%').padStart(10);
+
             console.log(`   ${sourceName} |${totalCases} |${expectedValid} |${actualValid} |${validPercentStr} |${expectedInvalid} |${actualInvalid} |${invalidPercentStr} |${overallPercentStr}`);
         }
         console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -838,22 +838,22 @@ export class XMLSchemaTestSuite {
     }
 
     private saveResults(): void {
-        const reportPath = path.join(__dirname, '../../w3c-schema-test-report.json');
-        fs.writeFileSync(reportPath, JSON.stringify(this.results, null, 2));
+        const reportPath = join(__dirname, '../../w3c-schema-test-report.json');
+        writeFileSync(reportPath, JSON.stringify(this.results, null, 2));
     }
 }
 
 // Type definitions
 interface TestResults {
-    schemaFileParsing: { 
-        passed: number; 
-        failed: number; 
+    schemaFileParsing: {
+        passed: number;
+        failed: number;
         tests: any[];
         bySource: { [source: string]: { passed: number; failed: number; total: number } };
     };
-    instanceFileParsing: { 
-        passed: number; 
-        failed: number; 
+    instanceFileParsing: {
+        passed: number;
+        failed: number;
         tests: any[];
         bySource: { [source: string]: { passed: number; failed: number; total: number } };
     };

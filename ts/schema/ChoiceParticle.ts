@@ -31,13 +31,23 @@ export class ChoiceParticle implements ValidationParticle {
     }
 
     resolve(): ValidationParticle[] {
-        // Only resolve child components, but keep this choice as a unit
+        // Flatten all components by resolving them and replacing with their resolved particles
+        const newComponents: ValidationParticle[] = [];
+        
         for (let i = 0; i < this.components.length; i++) {
             const component = this.components[i];
             if (!component.isResolved()) {
-                component.resolve();
+                const resolvedParticles = component.resolve();
+                // Add all resolved particles to replace this component
+                newComponents.push(...resolvedParticles);
+            } else {
+                // Component already resolved, keep as-is
+                newComponents.push(component);
             }
         }
+        
+        // Replace components with flattened list
+        this.components = newComponents;
         this.resolved = true;
         return [this]; // Return self as a resolved choice particle
     }
@@ -71,43 +81,105 @@ export class ChoiceParticle implements ValidationParticle {
             throw new Error('Choice particle must be resolved before validation');
         }
         
-        const validElementNames = new Set<string>();
-        const validElementParticles: ElementNameParticle[] = [];
-        
-        for (const component of this.components) {
-            if (component instanceof ElementNameParticle) {
-                const elementName = (component as ElementNameParticle).getElementName();
-                validElementNames.add(elementName);
-                validElementParticles.push(component as ElementNameParticle);
+        // Handle empty children case
+        if (children.length === 0) {
+            if (this.minOccurs > 0) {
+                throw new Error(`Choice validation failed: expected at least ${this.minOccurs} choice selections, got 0`);
             }
+            return;
         }
-
-        // Check each child element against valid choices
-        for (const childName of children) {
-            let isValidChoice = false;
-            for (const particle of validElementParticles) {
-                const matches = particle.matches(childName);
-                if (matches) {
-                    isValidChoice = true;
-                    break;
+        
+        // Try to consume all children by repeatedly applying the choice
+        let remainingChildren = [...children];
+        let choiceCount = 0;
+        
+        while (remainingChildren.length > 0 && (this.maxOccurs === -1 || choiceCount < this.maxOccurs)) {
+            let matchFound = false;
+            let bestMatch: { component: ValidationParticle, consumed: number } | null = null;
+            let componentErrors: string[] = [];
+            
+            // Try each choice component to see which one can consume the most elements
+            for (const component of this.components) {
+                try {
+                    // For ElementNameParticle, we need to see how many elements it can consume
+                    if (component instanceof ElementNameParticle) {
+                        const elementName = component.getElementName();
+                        let consumed = 0;
+                        
+                        // Count how many consecutive matching elements we can consume
+                        for (const child of remainingChildren) {
+                            if (child === elementName && (component.getMaxOccurs() === -1 || consumed < component.getMaxOccurs())) {
+                                consumed++;
+                            } else {
+                                break;
+                            }
+                        }
+                        
+                        if (consumed >= component.getMinOccurs()) {
+                            // This component can consume some elements
+                            if (!bestMatch || consumed > bestMatch.consumed) {
+                                bestMatch = { component, consumed };
+                            }
+                            matchFound = true;
+                        }
+                    } else {
+                        // For other particle types, try to validate a subset of children
+                        // This is a simplified approach - may need refinement for complex particles
+                        component.validate(remainingChildren);
+                        bestMatch = { component, consumed: remainingChildren.length };
+                        matchFound = true;
+                        break;
+                    }
+                } catch (error) {
+                    const errorMsg = (error as Error).message;
+                    componentErrors.push(`${component.constructor.name}: ${errorMsg}`);
                 }
             }
-            if (!isValidChoice) {
-                const validNames = Array.from(validElementNames).join(', ');
-                const actualElements = children.join(', ');
-                throw new Error(
-                    `Choice validation failed: element '${childName}' is not a valid choice. Valid options: [${validNames}]. Actual elements: [${actualElements}]`
-                );
+            
+            if (!matchFound || !bestMatch) {
+                // No component could match any remaining children
+                const allErrors = componentErrors.join('; ');
+                throw new Error(`Choice validation failed: none of the choice components could validate the remaining children [${remainingChildren.join(', ')}]. Errors: ${allErrors}`);
+            }
+            
+            // Consume the matched elements
+            remainingChildren = remainingChildren.slice(bestMatch.consumed);
+            choiceCount++;
+        }
+        
+        // Check if we have unconsumed children
+        if (remainingChildren.length > 0) {
+            if (this.maxOccurs === -1) {
+                throw new Error(`Choice validation failed: all choice components rejected the remaining children [${remainingChildren.join(', ')}]`);
+            } else {
+                throw new Error(`Choice validation failed: reached maximum occurrences (${this.maxOccurs}) but still have unconsumed children [${remainingChildren.join(', ')}]`);
             }
         }
+        
+        // Check if we meet minimum occurrences
+        if (choiceCount < this.minOccurs) {
+            throw new Error(`Choice validation failed: expected at least ${this.minOccurs} choice selections, got ${choiceCount}`);
+        }
+    }
 
-        // Then check cardinality (treat -1 as unbounded)
-        if (children.length < this.minOccurs || (this.maxOccurs !== -1 && children.length > this.maxOccurs)) {
-            const validNames = Array.from(validElementNames).join(', ');
-            const maxStr = this.maxOccurs === -1 ? 'unbounded' : this.maxOccurs.toString();
-            throw new Error(
-                `Choice validation failed: expected ${this.minOccurs}-${maxStr} elements from [${validNames}], got ${children.length}`
-            );
+    toBNF(): string {
+        const componentBNFs: string[] = this.components.map(comp => comp.toBNF());
+        let result: string = `(${componentBNFs.join(' | ')})`;
+        
+        const min: number = this.minOccurs;
+        const max: number = this.maxOccurs;
+        
+        if (min === 1 && max === 1) {
+            return result;
+        } else if (min === 0 && max === 1) {
+            return `${result}?`;
+        } else if (min === 0 && max === -1) {
+            return `${result}*`;
+        } else if (min === 1 && max === -1) {
+            return `${result}+`;
+        } else {
+            const maxStr: string = max === -1 ? 'unbounded' : max.toString();
+            return `${result}{${min},${maxStr}}`;
         }
     }
 }

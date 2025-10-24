@@ -39,22 +39,22 @@ export class BuiltinTypes {
         this.createType("token", xsNamespace, this.validateToken);
         this.createType("language", xsNamespace, this.validateLanguage);
         this.createType("Name", xsNamespace, this.validateName);
-        this.createType("NCName", xsNamespace, this.validateNCName);
+        this.createType("NCName", xsNamespace, BuiltinTypes.validateNCName);
         this.createType("ID", xsNamespace, this.validateID);
         this.createType("IDREF", xsNamespace, this.validateIDREF);
-        this.createType("ENTITY", xsNamespace, this.validateNCName);
+        this.createType("ENTITY", xsNamespace, BuiltinTypes.validateNCName);
         this.createType("NMTOKEN", xsNamespace, this.validateNMTOKEN);
         
         // Numeric types
         this.createType("decimal", xsNamespace, this.validateDecimal);
-        this.createType("integer", xsNamespace, this.validateInteger);
+        this.createType("integer", xsNamespace, BuiltinTypes.validateInteger);
         this.createType("nonPositiveInteger", xsNamespace, this.validateNonPositiveInteger);
         this.createType("negativeInteger", xsNamespace, this.validateNegativeInteger);
         this.createType("long", xsNamespace, this.validateLong);
         this.createType("int", xsNamespace, this.validateInt);
         this.createType("short", xsNamespace, this.validateShort);
         this.createType("byte", xsNamespace, this.validateByte);
-        this.createType("nonNegativeInteger", xsNamespace, this.validateNonNegativeInteger);
+        this.createType("nonNegativeInteger", xsNamespace, BuiltinTypes.validateNonNegativeInteger);
         this.createType("positiveInteger", xsNamespace, this.validatePositiveInteger);
         this.createType("unsignedLong", xsNamespace, this.validateUnsignedLong);
         this.createType("unsignedInt", xsNamespace, this.validateUnsignedInt);
@@ -120,7 +120,7 @@ export class BuiltinTypes {
 
     private static validateToken(value: string): ValidationResult {
         // normalizedString + no leading/trailing/consecutive spaces
-        const normalized = this.validateNormalizedString(value);
+        const normalized = BuiltinTypes.validateNormalizedString(value);
         if (!normalized.isValid) {
             return normalized;
         }
@@ -150,24 +150,24 @@ export class BuiltinTypes {
     }
 
     private static validateNCName(value: string): ValidationResult {
-        // Name without colons
-        const nameResult = this.validateName(value);
+        // Name without colon
+        const nameResult = BuiltinTypes.validateName(value);
         if (!nameResult.isValid) {
             return nameResult;
         }
         
         if (value.includes(':')) {
-            return ValidationResult.error("NCName cannot contain colons");
+            return ValidationResult.error("NCName cannot contain colon");
         }
         return ValidationResult.success();
     }
 
     private static validateID(value: string): ValidationResult {
-        return this.validateNCName(value);
+        return BuiltinTypes.validateNCName(value);
     }
 
     private static validateIDREF(value: string): ValidationResult {
-        return this.validateNCName(value);
+        return BuiltinTypes.validateNCName(value);
     }
 
     private static validateNMTOKEN(value: string): ValidationResult {
@@ -197,7 +197,7 @@ export class BuiltinTypes {
     }
 
     private static validateNonPositiveInteger(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -210,7 +210,7 @@ export class BuiltinTypes {
     }
 
     private static validateNegativeInteger(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -223,7 +223,7 @@ export class BuiltinTypes {
     }
 
     private static validateLong(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -236,7 +236,7 @@ export class BuiltinTypes {
     }
 
     private static validateInt(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -249,7 +249,7 @@ export class BuiltinTypes {
     }
 
     private static validateShort(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -262,7 +262,7 @@ export class BuiltinTypes {
     }
 
     private static validateByte(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -275,7 +275,7 @@ export class BuiltinTypes {
     }
 
     private static validateNonNegativeInteger(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -288,7 +288,7 @@ export class BuiltinTypes {
     }
 
     private static validatePositiveInteger(value: string): ValidationResult {
-        const intResult = this.validateInteger(value);
+        const intResult = BuiltinTypes.validateInteger(value);
         if (!intResult.isValid) {
             return intResult;
         }
@@ -301,7 +301,7 @@ export class BuiltinTypes {
     }
 
     private static validateUnsignedLong(value: string): ValidationResult {
-        const nonNegResult = this.validateNonNegativeInteger(value);
+        const nonNegResult = BuiltinTypes.validateNonNegativeInteger(value);
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
@@ -314,7 +314,7 @@ export class BuiltinTypes {
     }
 
     private static validateUnsignedInt(value: string): ValidationResult {
-        const nonNegResult = this.validateNonNegativeInteger(value);
+        const nonNegResult = BuiltinTypes.validateNonNegativeInteger(value);
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
@@ -327,7 +327,7 @@ export class BuiltinTypes {
     }
 
     private static validateUnsignedShort(value: string): ValidationResult {
-        const nonNegResult = this.validateNonNegativeInteger(value);
+        const nonNegResult = BuiltinTypes.validateNonNegativeInteger(value);
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
@@ -340,7 +340,7 @@ export class BuiltinTypes {
     }
 
     private static validateUnsignedByte(value: string): ValidationResult {
-        const nonNegResult = this.validateNonNegativeInteger(value);
+        const nonNegResult = BuiltinTypes.validateNonNegativeInteger(value);
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
@@ -497,7 +497,7 @@ export class BuiltinTypes {
         }
         
         for (const part of parts) {
-            const ncNameResult = this.validateNCName(part);
+            const ncNameResult = BuiltinTypes.validateNCName(part);
             if (!ncNameResult.isValid) {
                 return ValidationResult.error("Invalid QName: " + ncNameResult.errors[0].message);
             }

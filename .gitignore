@@ -9,3 +9,5 @@ notes/
 catalog/
 tests/xmlschema2006-11-06
 tests/xmltest
+w3c-schema-test-report.json
+dtd-test-report.json

@@ -49,6 +49,9 @@ export class GrammarHandler {
         schemaParser.setCrossSchemaResolver((qualifiedName: string) => {
             return this.compositeGrammar.resolveCrossSchemaGroup(qualifiedName);
         });
+        schemaParser.setCrossSchemaAttributeGroupResolver((qualifiedName: string) => {
+            return this.compositeGrammar.resolveAttributeGroup(qualifiedName);
+        });
     }
 
     setCatalog(catalog: Catalog): void {
