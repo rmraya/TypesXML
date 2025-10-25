@@ -678,7 +678,7 @@ export class SAXParser {
             }
         }
 
-        if (this.buffer.charAt(this.pointer) === '-') {
+        if (comment.endsWith('-')) {
             // Edge case: comment ends with '-' before closing
             throw new Error('Malformed comment: comment cannot end with a "-" before closing "-->"');
         }
