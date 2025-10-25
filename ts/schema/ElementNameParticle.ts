@@ -1,19 +1,14 @@
-import { ValidationParticle } from './ValidationParticle';
-
-export class ElementNameParticle implements ValidationParticle {
-    private components: ValidationParticle[] = [];
-    private minOccurs: number = 1;
-    private maxOccurs: number = 1;
-    private elementName: string;
-    private prefix: string;
-    private localName: string;
-    private resolved: boolean = false;
-    private namespaceResolver?: (prefix: string) => string;
-    private substitutionGroupResolver?: (elementName: string, substitutionHead: string) => boolean;
-
-    constructor(elementName: string) {
-        this.elementName = elementName;
-        // Parse qualified name
+/*******************************************************************************
+ * Copyright (c) 2023-2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
         const colonIndex = elementName.indexOf(':');
         if (colonIndex !== -1) {
             this.prefix = elementName.substring(0, colonIndex);

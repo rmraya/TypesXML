@@ -1,19 +1,14 @@
-import { XMLSchemaParser } from "../schema/XMLSchemaParser";
-import { Catalog } from "../Catalog";
-import { XMLSchemaGrammar } from "../schema/XMLSchemaGrammar";
-import { writeFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
-
-export class GrammarPrecompiler {
-    private catalog: Catalog;
-    private schemaParser: XMLSchemaParser;
-
-    constructor(catalogPath: string) {
-        this.catalog = new Catalog(catalogPath);
-        this.schemaParser = XMLSchemaParser.getInstance();
-        this.schemaParser.setCatalog(this.catalog);
-    }
-
+/*******************************************************************************
+ * Copyright (c) 2023-2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
     async serializeXMLSchema(): Promise<boolean> {
         console.log('Processing xml.xsd (W3C XML namespace schema)...');
         

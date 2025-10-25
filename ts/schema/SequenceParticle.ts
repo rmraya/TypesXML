@@ -1,19 +1,14 @@
-import { AnyParticle } from './AnyParticle';
-import { ChoiceParticle } from './ChoiceParticle';
-import { ElementNameParticle } from './ElementNameParticle';
-import { ValidationParticle } from './ValidationParticle';
-
-interface ConsumptionState {
-    position: number;
-    componentIndex: number;
-    occurrenceCounts: number[];
-    consumed: boolean[];
-}
-
-class SequenceValidationError extends Error {
-    constructor(
-        message: string,
-        public failedAtComponent: number,
+/*******************************************************************************
+ * Copyright (c) 2023-2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
         public position: number,
         public expectedElements: string[],
         public actualElements: string[]

@@ -13,7 +13,7 @@ XML library written in TypeScript with multi-schema validation framework
 
 ## Licensing
 
-TypesXML is available under two licenses: [AGPL-3.0](./LICENSE) for open source projects and a [Commercial License](./LICENSE-COMMERCIAL.md) for proprietary use. For commercial licensing inquiries, contact [sales@maxprograms.com](mailto:sales@maxprograms.com).
+TypesXML is available under the [Eclipse Public License 1.0](./LICENSE). This permissive license allows you to use, modify, and distribute the software freely, including in commercial applications.
 
 ## Overview
 

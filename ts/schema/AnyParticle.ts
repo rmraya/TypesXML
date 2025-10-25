@@ -1,19 +1,14 @@
-import { Grammar, ValidationContext } from '../grammar/Grammar';
-import { ValidationParticle } from './ValidationParticle';
-
-export class AnyParticle implements ValidationParticle {
-    private minOccurs: number = 1;
-    private maxOccurs: number = 1;
-    private namespace: string; // Values: ##any, ##other, ##local, ##targetNamespace, or specific URIs
-    private processContents: string = 'lax'; // strict, lax, or skip
-    private resolved: boolean = false;
-    private targetNamespace?: string;
-    private grammarResolver?: (namespace?: string) => Grammar | undefined;
-    private validating: boolean = false;
-
-    constructor(namespace: string = '##any', processContents: string = 'lax', targetNamespace?: string) {
-        this.namespace = namespace;
-        this.processContents = processContents;
+/*******************************************************************************
+ * Copyright (c) 2023-2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
         this.targetNamespace = targetNamespace;
     }
 

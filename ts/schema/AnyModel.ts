@@ -1,19 +1,14 @@
-import { ValidationResult } from '../grammar/Grammar';
-import { ContentModel } from './ContentModel';
-import { ValidationParticle } from './ValidationParticle';
-import { AnyParticle } from './AnyParticle';
-import { Model, ValidationContext } from './Model';
-
-export class AnyModel extends ContentModel implements Model {
-    private namespace: string;
-    private processContents: string;
-    
-    constructor(namespace: string = '##any', processContents: string = 'lax', minOccurs?: number, maxOccurs?: number) {
-        super(minOccurs, maxOccurs);
-        this.namespace = namespace;
-        this.processContents = processContents;
-    }
-    
+/*******************************************************************************
+ * Copyright (c) 2023-2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
     getNamespace(): string {
         return this.namespace;
     }

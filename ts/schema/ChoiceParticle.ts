@@ -1,19 +1,14 @@
-import { ValidationParticle } from './ValidationParticle';
-import { ElementNameParticle } from './ElementNameParticle';
-
-export class ChoiceParticle implements ValidationParticle {
-    private components: ValidationParticle[] = [];
-    private minOccurs: number = 1;
-    private maxOccurs: number = 1;
-    private resolved: boolean = false;
-    private namespaceResolver?: (prefix: string) => string;
-    private substitutionGroupResolver?: (elementName: string, substitutionHead: string) => boolean;
-
-    getComponents(): ValidationParticle[] {
-        return this.components;
-    }
-
-    addComponent(component: ValidationParticle): void {
+/*******************************************************************************
+ * Copyright (c) 2023-2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
         this.components.push(component);
     }
 
