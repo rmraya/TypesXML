@@ -17,6 +17,7 @@
 
 import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
+import { DTDContentModelParser } from "./DTDContentModelParser";
 
 export class ElementDecl implements XMLNode {
 
@@ -26,6 +27,20 @@ export class ElementDecl implements XMLNode {
     constructor(name: string, contentSpec: string) {
         this.name = name;
         this.contentSpec = contentSpec;
+        this.validateContentSpec();
+    }
+
+    validateContentSpec() {
+        const validSpecs = ['EMPTY', 'ANY'];
+        if (validSpecs.includes(this.contentSpec)) {
+            return;
+        }
+        // Build and validate the content model using the complete parser
+        const parser = new DTDContentModelParser(this.contentSpec);
+        const model = parser.parse();
+        if (!model.validate()) {
+            throw new Error(`Invalid content specification: ${this.contentSpec}`);
+        }
     }
 
     getName(): string {

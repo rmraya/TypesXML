@@ -340,6 +340,12 @@ export class DTDTestSuite {
             } else {
                 failed++;
                 (this.results[resultCategory] as DTDTestCategoryResult).failed++;
+                
+                // Log incorrectly accepted not well-formed files
+                if (resultCategory === 'notWellFormed' && result.success === true) {
+                    const fileName = basename(filePath);
+                    console.log(`   ❌ INCORRECTLY ACCEPTED: ${fileName}`);
+                }
             }
 
             // Progress indicator every 5 files

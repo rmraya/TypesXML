@@ -17,18 +17,23 @@
 
 import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
+import { XMLUtils } from "../XMLUtils";
 
 export class AttDecl implements XMLNode {
     private name: string;
     private attType: string;
     private defaultDecl: string;
     private defaultValue: string;
+    private enumeration: string[] = [];
 
     constructor(name: string, attType: string, defaultDecl: string, defaultValue: string) {
         this.name = name;
         this.attType = attType;
         this.defaultDecl = defaultDecl;
         this.defaultValue = defaultValue;
+        
+        // Validate the attribute type immediately during construction
+        this.getType();
     }
 
     getName(): string {
@@ -36,6 +41,40 @@ export class AttDecl implements XMLNode {
     }
 
     getType(): string {
+        let standardTypes: string[] = ['CDATA', 'ID', 'IDREF', 'IDREFS', 'NMTOKEN', 'NMTOKENS', 'ENTITY', 'ENTITIES'];
+        if (!standardTypes.includes(this.attType)) {
+            if (this.attType.startsWith('NOTATION')) {
+                const match = this.attType.match(/NOTATION\s+\(([^)]+)\)/);
+                if (!match) {
+                    throw new Error(`Invalid NOTATION attribute type: ${this.attType}`);
+                }
+                // Validate each NOTATION name
+                const notationNames = match[1].split('|').map(v => v.trim());
+                if (notationNames.length === 0) {
+                    throw new Error(`Empty NOTATION name list: ${this.attType}`);
+                }
+                for (const name of notationNames) {
+                    if (!this.isValidName(name)) {
+                        throw new Error(`Invalid NOTATION name "${name}" in attribute type: ${this.attType}`);
+                    }
+                }
+            } else if (this.attType.startsWith('(') && this.attType.endsWith(')')) {
+                // Check for valid enumeration values
+                const enumValues = this.attType.slice(1, -1).split('|').map(v => v.trim());
+                if (enumValues.length === 0) {
+                    throw new Error(`Empty enumeration attribute type: ${this.attType}`);
+                }
+                // Ensure all enumeration values are valid
+                for (const value of enumValues) {
+                    if (!XMLUtils.isValidNMTOKEN(value)) {
+                        throw new Error(`Invalid enumeration value "${value}" for attribute type: ${this.attType}`);
+                    }
+                    this.enumeration.push(value);
+                }
+            } else {
+                throw new Error(`Invalid attribute type: ${this.attType}`);
+            }
+        }
         return this.attType;
     }
 
@@ -116,11 +155,11 @@ export class AttDecl implements XMLNode {
         // XML name must start with letter or underscore, followed by name characters
         const nameStart = /[A-Za-z_:]/;
         const nameChar = /[A-Za-z0-9._:-]/;
-        
+
         if (name.length === 0 || !nameStart.test(name.charAt(0))) {
             return false;
         }
-        
+
         for (let i = 1; i < name.length; i++) {
             if (!nameChar.test(name.charAt(i))) {
                 return false;
@@ -132,16 +171,20 @@ export class AttDecl implements XMLNode {
     private isValidNmtoken(token: string): boolean {
         // NMTOKEN can contain name characters but doesn't need to start with letter
         const nameChar = /[A-Za-z0-9._:-]/;
-        
+
         if (token.length === 0) {
             return false;
         }
-        
+
         for (let i = 0; i < token.length; i++) {
             if (!nameChar.test(token.charAt(i))) {
                 return false;
             }
         }
         return true;
+    }
+
+    getEnumeration(): string[] {
+        return this.enumeration;
     }
 }

@@ -34,6 +34,7 @@ export class DTDParser {
     private source: string = '';
     private currentFile: string = '';
     private baseDirectory: string = '';
+    private validating: boolean = false;
 
     constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
@@ -44,6 +45,10 @@ export class DTDParser {
         if (baseDirectory) {
             this.baseDirectory = baseDirectory;
         }
+    }
+
+    setValidating(validating: boolean): void {
+        this.validating = validating;
     }
 
     setCatalog(catalog: Catalog) {
@@ -197,6 +202,7 @@ export class DTDParser {
                 } else if (entity.getSystemId() !== '' || entity.getPublicId() !== '') {
                     let location = this.resolveEntity(entity.getPublicId(), entity.getSystemId());
                     let parser: DTDParser = new DTDParser(this.grammar);
+                    parser.setValidating(this.validating);
                     if (this.catalog) {
                         parser.setCatalog(this.catalog);
                     }
@@ -216,7 +222,7 @@ export class DTDParser {
             }
             throw new Error('Error parsing ' + this.currentFile + ' at ' + this.source.substring(this.pointer - 10, this.pointer) + ' @ ' + this.source.substring(this.pointer, this.pointer + 30));
         }
-        
+
         return this.grammar;
     }
 
@@ -259,12 +265,12 @@ export class DTDParser {
             let originalFile = this.currentFile;
             let originalSource = this.source;
             let originalPointer = this.pointer;
-            
+
             // Temporarily switch context to external file
             this.currentFile = filePath;
             this.source = content;
             this.pointer = 0;
-            
+
             try {
                 // Parse the external DTD content in the current context
                 this.parse();
@@ -275,41 +281,14 @@ export class DTDParser {
                 this.pointer = originalPointer;
             }
         } catch (error) {
-            console.warn(`Warning: Could not parse external DTD file ${filePath}: ${(error as Error).message}`);
-            // Fallback to the old approach for partial parsing
-            this.extractAndImportEntitiesLegacy(filePath);
-        }
-    }
-    
-    private extractAndImportEntitiesLegacy(filePath: string): void {
-        // Read the file content
-        let content = this.readFileContent(filePath);
-        let pointer = 0;
-        
-        while (pointer < content.length) {
-            // Look for entity declarations
-            let entityStart = content.indexOf('<!ENTITY', pointer);
-            if (entityStart === -1) break;
-            
-            // Find the end of this entity declaration
-            let entityEnd = this.findDeclarationEndInContent(content, entityStart);
-            if (entityEnd === -1) break;
-            
-            let entityDeclaration = content.substring(entityStart, entityEnd + 1);
-            
-            try {
-                // Try to parse just this entity declaration
-                let entityDecl = this.parseEntityDeclaration(entityDeclaration);
-                this.grammar.addEntity(entityDecl);
-            } catch (error) {
-                // Skip entities that can't be parsed due to unresolved references
-                console.warn(`Skipped unparseable entity declaration: ${entityDeclaration.substring(0, 50)}...`);
+            if (this.validating) {
+                throw error;
             }
-            
-            pointer = entityEnd + 1;
+            console.warn(`Warning: Could not parse external DTD file ${filePath}: ${(error as Error).message}`);
+
         }
     }
-    
+
     private readFileContent(filePath: string): string {
         let stats: Stats = statSync(filePath, { bigint: false, throwIfNoEntry: true });
         let blockSize: number = stats.blksize;
@@ -323,35 +302,6 @@ export class DTDParser {
         }
         closeSync(fileHandle);
         return content;
-    }
-    
-    private findDeclarationEndInContent(content: string, startPos: number): number {
-        let depth = 0;
-        let inString = false;
-        let stringChar = '';
-        
-        for (let i = startPos; i < content.length; i++) {
-            let char = content.charAt(i);
-            
-            if (!inString) {
-                if (char === '"' || char === "'") {
-                    inString = true;
-                    stringChar = char;
-                } else if (char === '<') {
-                    depth++;
-                } else if (char === '>') {
-                    depth--;
-                    if (depth === 0) {
-                        return i;
-                    }
-                }
-            } else {
-                if (char === stringChar) {
-                    inString = false;
-                }
-            }
-        }
-        return -1;
     }
 
     endConditionalSection() {

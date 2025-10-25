@@ -41,6 +41,9 @@ export class SAXParser {
     xmlVersion: string;
     validating: boolean;
     inCDATA: boolean;
+    inComment: boolean = false;
+    inDoctype: boolean = false;
+    inProcessingInstruction: boolean = false;
     silent: boolean;
     grammarHandler: GrammarHandler;
     currentFile: string = '';
@@ -254,13 +257,43 @@ export class SAXParser {
         if (this.elementStack !== 0) {
             throw new Error('Malformed XML document: unclosed elements');
         }
-        this.cleanCharacterRun();
         if (this.rootParsed) {
             this.contentHandler!.endDocument();
+            this.checkRemainingText();
+        } else {
+            throw new Error('Malformed XML document: no root element found');
+        }
+    }
+
+    checkRemainingText(): void {
+        // Check for remaining non-whitespace content after document end
+        if (this.rootParsed) {
+            if (this.pointer < this.buffer.length) {
+                const remainingContent = this.buffer.substring(this.pointer);
+                for (let i = 0; i < remainingContent.length; i++) {
+                    const char = remainingContent.charAt(i);
+                    if (!XMLUtils.isXmlSpace(char)) {
+                        throw new Error('Malformed XML document: content found after root element');
+                    }
+                }
+            }
+            while (this.reader?.dataAvailable()) {
+                const additionalData = this.reader.read();
+                for (let i = 0; i < additionalData.length; i++) {
+                    const char = additionalData.charAt(i);
+                    if (!XMLUtils.isXmlSpace(char)) {
+                        throw new Error('Malformed XML document: content found after root element');
+                    }
+                }
+            }
         }
     }
 
     parseEntityReference() {
+        if ((!this.rootParsed || (this.rootParsed && this.elementStack === 0)) &&
+            !this.inComment && !this.inDoctype && !this.inProcessingInstruction) {
+            throw new Error('Entity reference not allowed in this context');
+        }
         this.cleanCharacterRun();
         this.pointer++; // skip '&'
         let name: string = '';
@@ -484,6 +517,10 @@ export class SAXParser {
         }
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
+
+        if (this.elementStack === 0) {
+            this.checkRemainingText();
+        }
     }
 
     endElement() {
@@ -543,6 +580,10 @@ export class SAXParser {
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
+
+        if (this.elementStack === 0) {
+            this.checkRemainingText();
+        }
     }
 
     cleanCharacterRun(): void {
@@ -593,6 +634,7 @@ export class SAXParser {
         let comment: string = '';
         this.pointer += 4; // skip '<!--'
 
+        this.inComment = true;
         while (!this.lookingAt('-->')) {
             // Check if we need more data in the buffer
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
@@ -622,6 +664,13 @@ export class SAXParser {
             }
         }
 
+        const isValid: boolean = this.xmlVersion === '1.0' ?
+            XMLUtils.validXml10Chars(comment) === comment :
+            XMLUtils.validXml11Chars(comment) === comment;
+        if (!isValid) {
+            throw new Error(`Invalid XML characters found in comment for XML ${this.xmlVersion}`);
+        }
+
         // Final validation check for non-validating mode
         if (!this.validating && comment.includes('--')) {
             if (!this.silent) {
@@ -629,9 +678,14 @@ export class SAXParser {
             }
         }
 
+        if (this.buffer.charAt(this.pointer) === '-') {
+            // Edge case: comment ends with '-' before closing
+            throw new Error('Malformed comment: comment cannot end with a "-" before closing "-->"');
+        }
         this.buffer = this.buffer.substring(this.pointer + 3); // skip '-->'
         this.pointer = 0;
         this.contentHandler!.comment(comment);
+        this.inComment = false;
     }
 
     parseProcessingInstruction(): void {
@@ -641,6 +695,7 @@ export class SAXParser {
         let data: string = '';
         this.pointer += 2; // skip '<?'
 
+        this.inProcessingInstruction = true;
         while (!this.lookingAt('?>')) {
             // Check if we need more data in the buffer
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
@@ -698,13 +753,22 @@ export class SAXParser {
             throw new Error('Invalid processing instruction: target cannot be "xml"');
         }
 
+        const isValid: boolean = this.xmlVersion === '1.0' ?
+            XMLUtils.validXml10Chars(data) === data :
+            XMLUtils.validXml11Chars(data) === data;
+        if (!isValid) {
+            throw new Error(`Invalid XML characters found in processing instruction for XML ${this.xmlVersion}`);
+        }
+
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
         this.contentHandler!.processingInstruction(target, data);
+        this.inProcessingInstruction = false;
     }
 
     parseDoctype() {
         this.cleanCharacterRun();
+        this.inDoctype = true;
         this.pointer += 9; // skip '<!DOCTYPE'
         // skip spaces before root name
         for (; this.pointer < this.buffer.length; this.pointer++) {
@@ -813,6 +877,7 @@ export class SAXParser {
             this.grammarHandler.processDoctype(name, publicId, systemId, '');
         }
         this.contentHandler!.endDTD();
+        this.inDoctype = false;
     }
 
     parsePublicDeclaration(): string[] {

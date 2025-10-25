@@ -249,4 +249,20 @@ export class XMLUtils {
             (code >= 0x10000 && code <= 0xEFFFF)  // [#x10000-#xEFFFF]
         );
     }
+
+    static isValidNMTOKEN(token: string): boolean {
+        if (token.length === 0) {
+            return false;
+        }
+
+        // NMTOKEN can contain name characters but doesn't need to start with letter
+        for (let i = 0; i < token.length; i++) {
+            const char = token.charAt(i);
+            if (!XMLUtils.isNameChar(char)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

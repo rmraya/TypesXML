@@ -46,16 +46,16 @@ export class AttListDecl implements XMLNode {
         let index: number = 0;
         while (index < parts.length) {
             let name: string = parts[index++];
-            
+
             // Validate attribute name
             if (!XMLUtils.isValidXMLName(name)) {
                 throw new Error(`Invalid attribute name in ATTLIST declaration: "${name}"`);
             }
-            
+
             let attType: string = parts[index++];
             let defaultDecl: string = '';
             let defaultValue: string = '';
-            
+
             if (AttListDecl.attTypes.includes(attType)) {
                 // Standard attribute type
                 if (index < parts.length) {
@@ -75,8 +75,8 @@ export class AttListDecl implements XMLNode {
                         defaultDecl = nextPart;
                         defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes
                     } else {
-                        // Fallback
-                        defaultDecl = nextPart || '';
+                        // Invalid: unquoted default value
+                        throw new Error(`Invalid attribute declaration: default value "${nextPart}" must be quoted`);
                     }
                 }
             } else {
@@ -139,10 +139,10 @@ export class AttListDecl implements XMLNode {
         let result: string[] = [];
         let word: string = '';
         let inQuotes: boolean = false;
-        
+
         for (let i: number = 0; i < text.length; i++) {
             let c: string = text.charAt(i);
-            
+
             if (c === '"' && !inQuotes) {
                 // Start of quoted string
                 inQuotes = true;
@@ -156,34 +156,21 @@ export class AttListDecl implements XMLNode {
                     result.push(word);
                     word = '';
                 }
-            } else if (c === '(' && !inQuotes) {
-                // Start of enumeration
-                if (word.length > 0) {
-                    result.push(word);
-                    word = '';
-                }
-                let enumeration: string = '(';
-                while (c !== ')') {
-                    c = text.charAt(++i);
-                    enumeration += c;
-                }
-                result.push(enumeration);
             } else if ((c === ' ' || c === '\n' || c === '\r' || c === '\t') && !inQuotes) {
-                // Whitespace outside quotes
+                // Whitespace outside quotes - split here
                 if (word.length > 0) {
                     result.push(word);
                     word = '';
                 }
             } else {
-                // Regular character
+                // Regular character (including parentheses)
                 word += c;
             }
         }
-        
+
         if (word.length > 0) {
             result.push(word);
         }
-        
         return result;
     }
 

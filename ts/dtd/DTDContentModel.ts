@@ -15,34 +15,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *******************************************************************************/
 
-import { DTDGrammar } from "./DTDGrammar";
-import { Constants } from "../Constants";
-import { XMLNode } from "../XMLNode";
-import { DTDParser } from "./DTDParser";
+export interface DTDContentModel {
 
-export class InternalSubset implements XMLNode {
-
-    declarationText: string;
-    grammar: DTDGrammar;
-
-    constructor(declaration: string) {
-        this.declarationText = declaration;
-        let parser:DTDParser = new DTDParser();
-        this.grammar = parser.parseString(declaration.substring(1, declaration.length - 1));
-    }
-
-    getNodeType(): number {
-        return Constants.INTERNAL_SUBSET_NODE;
-    }
-
-    toString(): string {
-        return this.declarationText;
-    }
-
-    equals(node: XMLNode): boolean {
-        if (node instanceof InternalSubset) {
-            return this.declarationText === node.declarationText;
-        }
-        return false;
-    }
+    getType(): string;
+    validate(): boolean;
+    toBNF(): string;
 }

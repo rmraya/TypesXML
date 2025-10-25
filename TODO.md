@@ -4,18 +4,6 @@ This document tracks outstanding tasks, missing features, and improvements neede
 
 ## Core Parser Features
 
-### DTD Validation Enhancements
-
-#### Content Model Validation
-
-- **Location**: DTD grammar processing
-- **Description**: Enhance element content model validation
-- **Details**:
-  - Improve sequence and choice validation
-  - Better cardinality checking (?, *, +)
-  - Mixed content model validation
-- **Priority**: Medium
-
 ### XML Schema Support
 
 #### Complete XML Schema Implementation
@@ -30,28 +18,6 @@ This document tracks outstanding tasks, missing features, and improvements neede
   - Identity constraints (key, keyref, unique)
 - **Priority**: High
 - **Status**: Framework ready, needs full implementation
-
-#### Complex Type Extension and Derivation Support
-
-- **Location**: `ts/schema/` directory, complex type handling
-- **Description**: Handle complex type extensions and restrictions properly
-- **Details**:
-  - Implement complex type extension validation (e.g., USAddress extending AddressType)
-  - Support for `<complexContent><extension>` patterns
-  - Proper inheritance chain validation for extended sequences
-  - Handle type substitution with `xsi:type` attributes
-- **Priority**: Medium
-- **Status**: Framework ready, needs specific implementation
-
-#### AnyParticle Namespace Constraint Enhancement
-
-- **Location**: `ts/schema/AnyParticle.ts`
-- **Description**: Improve xs:any namespace constraint validation
-- **Details**:
-  - Fix namespace constraint validation for `##other`, `##any`, `##targetNamespace`
-  - Proper wildcard namespace matching in sequences
-  - Better error reporting for namespace constraint violations
-- **Priority**: Medium
 
 #### JSON Conversion Support
 
@@ -120,16 +86,6 @@ This document tracks outstanding tasks, missing features, and improvements neede
   - PI-specific content validation
 - **Priority**: Low
 
-### Comment Validation Enhancements
-
-- **Location**: `ts/SAXParser.ts`, parseComment method
-- **Description**: Improve comment validation and error reporting
-- **Details**:
-  - Better handling of "--" sequences in comments
-  - Configurable validation strictness
-  - Performance optimization for large comments
-- **Priority**: Low
-
 ## Grammar Framework Improvements
 
 ### Cross-Schema Group Resolution
@@ -163,16 +119,6 @@ This document tracks outstanding tasks, missing features, and improvements neede
 - **Priority**: Medium
 
 ## Testing and Quality Assurance
-
-### W3C XML Schema Test Suite Integration
-
-- **Location**: Test framework
-- **Description**: Add comprehensive XML Schema test suite
-- **Details**:
-  - Integrate W3C XML Schema test cases
-  - Automated regression testing
-  - Performance benchmarking
-- **Priority**: Medium
 
 ### Error Reporting Enhancement
 

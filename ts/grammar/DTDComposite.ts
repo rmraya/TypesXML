@@ -23,6 +23,8 @@ import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResul
 
 
 export class DTDComposite implements Grammar {
+    
+    private validating: boolean = false;
     private internalDTD: DTDGrammar | undefined;
     private externalDTDs: DTDGrammar[] = [];
     private sharedParameterEntities: Map<string, EntityDecl> = new Map();
@@ -38,6 +40,10 @@ export class DTDComposite implements Grammar {
         this.sharedParameterEntities.set('amp', new EntityDecl('amp', false, '&', '', '', ''));
         this.sharedParameterEntities.set('apos', new EntityDecl('apos', false, "'", '', '', ''));
         this.sharedParameterEntities.set('quot', new EntityDecl('quot', false, '"', '', '', ''));
+    }
+
+    setValidating(validating: boolean): void {
+        this.validating = validating;
     }
 
     addInternalDTD(dtdGrammar: DTDGrammar): void {
@@ -224,7 +230,22 @@ export class DTDComposite implements Grammar {
                 return ValidationResult.error(`Notation '${attrValue}' referenced in attribute '${attrName}' is not declared in element '${element}'`);
             }
         }
-
+        if (attrType.startsWith('(') && attrType.endsWith(')')) {
+            const enumeration = attDecl.getEnumeration();
+            if (!enumeration.includes(attrValue)) {
+                return ValidationResult.error(`Value '${attrValue}' for attribute '${attrName}' is not in the enumeration ${attDecl.getType()} in element '${element}'`);
+            }
+        }
+        // check for entities inside attribute value
+        const entityReferences = attrValue.match(/&([a-zA-Z0-9._:-]+);/g);
+        if (entityReferences) {
+            for (const entityRef of entityReferences) {
+                const entityName = entityRef.slice(1, -1); // Remove the '&' and ';'
+                if (!this.entityExists(entityName)) {
+                    return ValidationResult.error(`Entity '${entityName}' referenced in attribute '${attrName}' is not declared in element '${element}'`);
+                }
+            }
+        }
         return ValidationResult.success();
     }
 

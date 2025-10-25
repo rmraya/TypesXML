@@ -111,6 +111,9 @@ export class GrammarHandler {
                 (grammar as any).setValidating(validating);
             }
         }
+        if (this.dtdComposite) {
+            this.dtdComposite.setValidating(validating);
+        }
     }
 
     processDoctype(name: string, publicId: string, systemId: string, internalSubset: string): void {
@@ -194,6 +197,7 @@ export class GrammarHandler {
         try {
             const dtdGrammar = new DTDGrammar();
             const dtdParser: DTDParser = new DTDParser(dtdGrammar, this.currentFile ? dirname(this.currentFile) : '');
+            dtdParser.setValidating(this.validating);   
 
             if (this.catalog) {
                 dtdParser.setCatalog(this.catalog);
@@ -220,6 +224,7 @@ export class GrammarHandler {
             if (this.catalog) {
                 // Use catalog for resolution if available
                 const tempParser = new DTDParser(dtdGrammar, this.currentFile ? dirname(this.currentFile) : '');
+                tempParser.setValidating(this.validating);
                 tempParser.setCatalog(this.catalog);
                 location = tempParser.resolveEntity(publicId, systemId);
             } else if (systemId) {
@@ -237,7 +242,7 @@ export class GrammarHandler {
                     // Create DTDParser with DTD file's directory as base for entity resolution within DTD
                     const dtdFileDir = dirname(location);
                     const dtdParser: DTDParser = new DTDParser(dtdGrammar, dtdFileDir);
-                    
+                    dtdParser.setValidating(this.validating);
                     if (this.catalog) {
                         dtdParser.setCatalog(this.catalog);
                     }
@@ -400,6 +405,7 @@ export class GrammarHandler {
     private loadDTDForNamespace(location: string, namespace: string): DTDGrammar | null {
         try {
             const dtdParser: DTDParser = new DTDParser();
+            dtdParser.setValidating(this.validating);
             if (this.catalog) {
                 dtdParser.setCatalog(this.catalog);
             }
