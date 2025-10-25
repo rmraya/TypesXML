@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { ValidationResult } from '../grammar/Grammar';
+import { ContentModel } from './ContentModel';
+import { ValidationParticle } from './ValidationParticle';
+import { AnyParticle } from './AnyParticle';
+import { Model, ValidationContext } from './Model';
+
+export class AnyModel extends ContentModel implements Model {
+    private namespace: string;
+    private processContents: string;
+    
+    constructor(namespace: string = '##any', processContents: string = 'lax', minOccurs?: number, maxOccurs?: number) {
+        super(minOccurs, maxOccurs);
+        this.namespace = namespace;
+        this.processContents = processContents;
+    }
+    
     getNamespace(): string {
         return this.namespace;
     }

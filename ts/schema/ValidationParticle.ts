@@ -10,7 +10,6 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-
 export interface ValidationParticle {
     getComponents(): ValidationParticle[];
 

@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { ValidationResult } from '../grammar/Grammar';
+import { ContentModel } from './ContentModel';
+import { ValidationParticle } from './ValidationParticle';
+import { ChoiceParticle } from './ChoiceParticle';
+import { ValidationContext } from './Model';
+
+export class ChoiceModel extends ContentModel {
+    private particles: ContentModel[] = [];
+    
+    constructor(minOccurs?: number, maxOccurs?: number) {
+        super(minOccurs, maxOccurs);
+    }
+    
+    getType(): string {
+        return 'choice';
+    }
     
     addParticle(particle: ContentModel): void {
         this.particles.push(particle);

@@ -11,7 +11,6 @@
  *******************************************************************************/
 
 import { Catalog } from "./Catalog";
-import { SAXParser } from "./SAXParser";
 import { XMLAttribute } from "./XMLAttribute";
 import { GrammarHandler } from "./grammar/GrammarHandler";
 

@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { ValidationResult } from '../grammar/Grammar';
+import { ContentModel } from './ContentModel';
+import { ValidationParticle } from './ValidationParticle';
+import { SequenceParticle } from './SequenceParticle';
+import { ChoiceParticle } from './ChoiceParticle';
+import { ValidationContext } from './Model';
+
+export class GroupModel extends ContentModel {
+    private name: string;
+    private contentModel?: ContentModel;
+    
+    constructor(name: string, minOccurs?: number, maxOccurs?: number) {
+        super(minOccurs, maxOccurs);
+        this.name = name;
+    }
+    
     getName(): string {
         return this.name;
     }

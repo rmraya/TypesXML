@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { ValidationResult, ValidationError } from "../grammar/Grammar";
+import { ValidationParticle } from "./ValidationParticle";
+import { ElementNameParticle } from "./ElementNameParticle";
+import { SequenceParticle } from "./SequenceParticle";
+import { ChoiceParticle } from "./ChoiceParticle";
+import { Model, ValidationContext } from "./Model";
+
+export abstract class ContentModel implements Model {
+    protected minOccurs: number;
+    protected maxOccurs: number;
+    
+    constructor(minOccurs?: number, maxOccurs?: number) {
+        this.minOccurs = minOccurs ?? 1;
+        this.maxOccurs = maxOccurs ?? 1;
+    }
+    
     getMinOccurs(): number {
         return this.minOccurs;
     }

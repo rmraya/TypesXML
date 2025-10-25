@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { XMLSchemaParser } from "../schema/XMLSchemaParser";
+import { Catalog } from "../Catalog";
+import { XMLSchemaGrammar } from "../schema/XMLSchemaGrammar";
+import { writeFileSync, existsSync } from 'fs';
+import { resolve, dirname } from 'path';
+
+export class GrammarPrecompiler {
+    private catalog: Catalog;
+    private schemaParser: XMLSchemaParser;
+
+    constructor(catalogPath: string) {
+        this.catalog = new Catalog(catalogPath);
+        this.schemaParser = XMLSchemaParser.getInstance();
+        this.schemaParser.setCatalog(this.catalog);
+    }
+
     async serializeXMLSchema(): Promise<boolean> {
         console.log('Processing xml.xsd (W3C XML namespace schema)...');
         

@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { AnyParticle } from './AnyParticle';
+import { ChoiceParticle } from './ChoiceParticle';
+import { ElementNameParticle } from './ElementNameParticle';
+import { ValidationParticle } from './ValidationParticle';
+
+interface ConsumptionState {
+    position: number;
+    componentIndex: number;
+    occurrenceCounts: number[];
+    consumed: boolean[];
+}
+
+class SequenceValidationError extends Error {
+    constructor(
+        message: string,
+        public failedAtComponent: number,
         public position: number,
         public expectedElements: string[],
         public actualElements: string[]

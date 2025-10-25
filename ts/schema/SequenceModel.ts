@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { ValidationResult } from '../grammar/Grammar';
+import { ContentModel } from './ContentModel';
+import { ValidationParticle } from './ValidationParticle';
+import { SequenceParticle } from './SequenceParticle';
+import { ValidationContext } from './Model';
+
+export class SequenceModel extends ContentModel {
+    private particles: ContentModel[] = [];
+    
+    constructor(minOccurs?: number, maxOccurs?: number) {
+        super(minOccurs, maxOccurs);
+    }
+    
+    addParticle(particle: ContentModel): void {
+        this.particles.push(particle);
+    }
     
     getParticles(): ContentModel[] {
         return this.particles;

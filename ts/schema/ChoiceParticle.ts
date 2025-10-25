@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { ValidationParticle } from './ValidationParticle';
+import { ElementNameParticle } from './ElementNameParticle';
+
+export class ChoiceParticle implements ValidationParticle {
+    private components: ValidationParticle[] = [];
+    private minOccurs: number = 1;
+    private maxOccurs: number = 1;
+    private resolved: boolean = false;
+    private namespaceResolver?: (prefix: string) => string;
+    private substitutionGroupResolver?: (elementName: string, substitutionHead: string) => boolean;
+
+    getComponents(): ValidationParticle[] {
+        return this.components;
+    }
+
+    addComponent(component: ValidationParticle): void {
         this.components.push(component);
     }
 

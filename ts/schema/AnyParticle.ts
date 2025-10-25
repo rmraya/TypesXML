@@ -9,6 +9,23 @@
  * Contributors:
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
+
+import { Grammar, ValidationContext } from '../grammar/Grammar';
+import { ValidationParticle } from './ValidationParticle';
+
+export class AnyParticle implements ValidationParticle {
+    private minOccurs: number = 1;
+    private maxOccurs: number = 1;
+    private namespace: string; // Values: ##any, ##other, ##local, ##targetNamespace, or specific URIs
+    private processContents: string = 'lax'; // strict, lax, or skip
+    private resolved: boolean = false;
+    private targetNamespace?: string;
+    private grammarResolver?: (namespace?: string) => Grammar | undefined;
+    private validating: boolean = false;
+
+    constructor(namespace: string = '##any', processContents: string = 'lax', targetNamespace?: string) {
+        this.namespace = namespace;
+        this.processContents = processContents;
         this.targetNamespace = targetNamespace;
     }
 
