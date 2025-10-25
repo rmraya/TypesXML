@@ -6,18 +6,66 @@ This document tracks outstanding tasks, missing features, and improvements neede
 
 ### XML Schema Support
 
-#### Complete XML Schema Implementation
+#### Complex Type Extension and Derivation Implementation
 
-- **Location**: `ts/schema/` directory
-- **Description**: XML Schema validation is currently in initial implementation stage
+- **Location**: `ts/schema/ComplexType.ts`, `ts/schema/XMLSchemaGrammar.ts`
+- **Description**: Complex type extension and restriction validation needs implementation
 - **Details**:
-  - Complete complex type validation
-  - Simple type restriction validation
-  - Namespace-aware validation
-  - Schema imports and includes
-  - Identity constraints (key, keyref, unique)
+  - Implement runtime validation for complex type extensions (e.g., USAddress extending AddressType)
+  - Support for `<complexContent><extension>` pattern validation
+  - Inheritance chain validation for extended sequences
+  - Type substitution with `xsi:type` attributes
+  - Base type resolution and validation
 - **Priority**: High
-- **Status**: Framework ready, needs full implementation
+- **Status**: Framework ready with derivationMethod and baseType fields, needs validation logic
+
+#### Simple Type Restriction Validation
+
+- **Location**: `ts/schema/SimpleType.ts`, `ts/schema/BuiltinTypes.ts`
+- **Description**: Simple type restrictions and facet validation needs enhancement
+- **Details**:
+  - Pattern validation (regex facets)
+  - Length, minLength, maxLength validation
+  - Enumeration validation
+  - Range validation (minInclusive, maxInclusive, etc.)
+  - Union and list type validation
+- **Priority**: High
+- **Status**: Basic framework exists, needs facet validation logic
+
+#### Schema Imports and Includes
+
+- **Location**: `ts/schema/XMLSchemaParser.ts`, `ts/schema/XMLSchemaGrammar.ts`
+- **Description**: Support for importing and including external schemas
+- **Details**:
+  - `<xs:import>` statement processing
+  - `<xs:include>` statement processing
+  - Namespace resolution across imported schemas
+  - Circular import detection and handling
+- **Priority**: Medium
+- **Status**: Parser structure ready, needs import/include logic
+
+#### AnyParticle Content Validation Enhancement
+
+- **Location**: `ts/schema/AnyParticle.ts`
+- **Description**: Improve xs:any content validation and processing control
+- **Details**:
+  - Implement processContents validation (strict, lax, skip)
+  - Add proper schema location hints processing
+  - Enhance validation error reporting for any element validation
+- **Priority**: Medium
+- **Status**: Namespace validation implemented, needs processContents support
+
+#### Identity Constraints
+
+- **Location**: New classes needed in `ts/schema/`
+- **Description**: Support for key, keyref, and unique constraints
+- **Details**:
+  - `<xs:key>`, `<xs:keyref>`, `<xs:unique>` element processing
+  - XPath selector and field evaluation
+  - Cross-element constraint validation
+  - Constraint violation error reporting
+- **Priority**: Medium
+- **Status**: Not yet implemented
 
 #### JSON Conversion Support
 
@@ -68,55 +116,51 @@ This document tracks outstanding tasks, missing features, and improvements neede
 ### Entity Content Processing
 
 - **Location**: `ts/SAXParser.ts`, handleEntityContent method
-- **Description**: The current entity content handling is simplified
+- **Description**: Entity content handling needs improvement for complex markup cases
 - **Details**:
-  - Improve markup content detection and parsing
-  - Better handling of complex entity content
-  - More sophisticated content type analysis
+  - Fix handling of entities with partial/malformed markup (e.g., `<!ENTITY e "</foo><foo>">`)
+  - Proper well-formedness validation for entity-expanded content
+  - Handle entities containing multiple elements or fragments
+  - Improve markup detection beyond simple regex patterns
 - **Priority**: Low
-- **Impact**: Edge case handling
-
-### Processing Instruction Validation
-
-- **Location**: `ts/SAXParser.ts`, parseProcessingInstruction method
-- **Description**: Enhanced PI validation and processing
-- **Details**:
-  - Validate PI target names more thoroughly
-  - Better error messages for malformed PIs
-  - PI-specific content validation
-- **Priority**: Low
+- **Impact**: Edge case handling, affects XML specification compliance
 
 ## Grammar Framework Improvements
 
-### Cross-Schema Group Resolution
+### Cross-Schema Group Resolution Enhancement
 
 - **Location**: `ts/grammar/CompositeGrammar.ts`, resolveAllGroupReferences method
-- **Description**: Post-loading resolution of cross-schema group references
+- **Description**: Complete post-loading batch resolution for unresolved group references
 - **Details**:
-  - Implement unresolved group reference tracking
-  - Add resolution phase after all schemas are loaded
-  - Handle circular group dependencies
-- **Priority**: Medium
+  - Core cross-schema resolution is implemented via `resolveCrossSchemaGroup`
+  - Individual schema parsers have immediate and deferred resolution mechanisms
+  - Optional: Implement batch post-loading resolution for edge cases with circular dependencies
+- **Priority**: Low
+- **Status**: Core functionality implemented, placeholder method remains for potential batch processing
 
 ### Advanced Namespace Resolution
 
 - **Location**: `ts/grammar/CompositeGrammar.ts`, findElementNameForLookup method
-- **Description**: Enhance context-aware element lookup
+- **Description**: Enhance context-aware element lookup for local elements
 - **Details**:
-  - Implement local element resolution with parent context
-  - Better handling of elementFormDefault settings
-  - Improved qualified name resolution
+  - Implement local element resolution with parent context (placeholder exists at line 1105-1107)
+  - elementFormDefault handling is implemented and working
+  - Basic qualified name resolution works for global elements
+  - Missing: Context-aware lookup for local elements within complex types
 - **Priority**: Medium
+- **Status**: Global element resolution complete, local element context resolution needed
 
 ### Simple Type Validation Enhancement
 
 - **Location**: `ts/grammar/CompositeGrammar.ts`, validateSimpleType method
-- **Description**: Expand simple type validation capabilities
+- **Description**: Add union and list type validation to simple type validation
 - **Details**:
-  - Add comprehensive built-in type validation
-  - Implement restriction facets (pattern, length, etc.)
-  - Union and list type validation
+  - Comprehensive built-in type validation is implemented via BuiltinTypes module
+  - Restriction facets are implemented (pattern, length, enumeration, numeric ranges)
+  - Missing: Union type validation (SimpleType.getVariety() === 'union')
+  - Missing: List type validation (SimpleType.getVariety() === 'list')
 - **Priority**: Medium
+- **Status**: Atomic types and facets complete, union and list types need implementation
 
 ## Testing and Quality Assurance
 
@@ -177,13 +221,16 @@ This document tracks outstanding tasks, missing features, and improvements neede
 
 ### URI Validation Enhancement
 
-- **Location**: `ts/schema/BuiltinTypes.ts`
-- **Description**: The URI validation is currently very basic
+- **Location**: `ts/schema/BuiltinTypes.ts`, validateAnyURI method
+- **Description**: The URI validation is currently very basic and overly permissive
 - **Details**:
-  - Implement comprehensive URI validation
-  - Support for different URI schemes
-  - Better error messages for invalid URIs
+  - Current implementation uses URL() constructor then falls back to allowing any non-empty string
+  - Implement RFC 3986 compliant URI validation
+  - Add proper validation for relative URIs vs absolute URIs
+  - Support for different URI schemes with scheme-specific validation
+  - Better error messages for invalid URI formats
 - **Priority**: Low
+- **Status**: Basic validation exists but needs comprehensive RFC compliance
 
 ## Future Enhancements
 
@@ -234,5 +281,5 @@ This document tracks outstanding tasks, missing features, and improvements neede
 
 ---
 
-*Last updated: January 2025*
+*Last updated: October 2025*
 *TypesXML Version: 2.0.0*
