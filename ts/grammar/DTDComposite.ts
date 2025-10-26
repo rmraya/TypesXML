@@ -19,13 +19,33 @@ import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResul
 
 export class DTDComposite implements Grammar {
     
+    private static instance: DTDComposite | undefined;
     private validating: boolean = false;
     private internalDTD: DTDGrammar | undefined;
     private externalDTDs: DTDGrammar[] = [];
     private sharedParameterEntities: Map<string, EntityDecl> = new Map();
-
-    constructor() {
+    
+    private constructor() {
         // Initialize with predefined entities like DTDGrammar does
+        this.addPredefinedEntities();
+    }
+
+    static getInstance(): DTDComposite {
+        if (!DTDComposite.instance) {
+            DTDComposite.instance = new DTDComposite();
+        }
+        return DTDComposite.instance;
+    }
+
+    static resetInstance(): void {
+        DTDComposite.instance = undefined;
+    }
+
+    reset(): void {
+        this.validating = false;
+        this.internalDTD = undefined;
+        this.externalDTDs = [];
+        this.sharedParameterEntities.clear();
         this.addPredefinedEntities();
     }
 

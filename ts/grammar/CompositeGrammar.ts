@@ -21,14 +21,26 @@ import { XMLSchemaGrammar } from '../schema/XMLSchemaGrammar';
 import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationError, ValidationResult } from './Grammar';
 
 export class CompositeGrammar implements Grammar {
+    private static instance: CompositeGrammar | undefined;
     private grammars: Map<string, Grammar> = new Map();
     private primaryGrammar: Grammar | undefined;
     private prefixToNamespace: Map<string, string> = new Map<string, string>();
     private defaultNamespace: string = '';
     private xsiTypeMap: Map<string, string> = new Map();
 
-    constructor() {
+    private constructor() {
         this.loadPrecompiledGrammars();
+    }
+
+    static getInstance(): CompositeGrammar {
+        if (!CompositeGrammar.instance) {
+            CompositeGrammar.instance = new CompositeGrammar();
+        }
+        return CompositeGrammar.instance;
+    }
+
+    static resetInstance(): void {
+        CompositeGrammar.instance = undefined;
     }
 
     private loadPrecompiledGrammars(): void {

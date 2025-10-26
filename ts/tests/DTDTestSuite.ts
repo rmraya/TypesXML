@@ -50,6 +50,11 @@ export class DTDTestSuite {
                 mostCommonErrorCount: 0,
                 errorCategories: [],
                 recommendations: []
+            },
+            canonicalFormAnalysis: {
+                totalFailures: 0,
+                failuresByDirectory: {},
+                failedFiles: []
             }
         };
     }
@@ -67,11 +72,10 @@ export class DTDTestSuite {
 
         // Print final results
         this.printResults();
-        this.printCanonicalFormFailures();
+        this.storeCanonicalFormFailures();
         
         // Perform error analysis
         this.performErrorAnalysis();
-        this.printErrorAnalysis();
         
         this.saveResults();
     }
@@ -273,7 +277,6 @@ export class DTDTestSuite {
                             if (actualCanonical.trim() === expectedCanonical) {
                                 testPassed = true;
                             } else {
-                                console.log(`   ❌ Canonical form mismatch: ${filename}`);
                                 // Track failed canonical form files for detailed analysis
                                 this.results.validXML.tests.push({
                                     file: filename,
@@ -521,21 +524,16 @@ export class DTDTestSuite {
         console.log('');
     }
 
-    private printCanonicalFormFailures(): void {
+    private storeCanonicalFormFailures(): void {
         const canonicalFailures = this.results.validXML.tests.filter(test =>
             test.error === 'Canonical form mismatch'
         );
 
-        if (canonicalFailures.length === 0) {
-            console.log('🎉 All valid XML files passed canonical form validation!');
-            return;
-        }
-
-        console.log('');
-        console.log('📋 Canonical Form Failures Analysis');
-        console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`   Found ${canonicalFailures.length} files with canonical form mismatches:`);
-        console.log('');
+        // Store canonical form analysis data
+        this.results.canonicalFormAnalysis.totalFailures = canonicalFailures.length;
+        this.results.canonicalFormAnalysis.failedFiles = canonicalFailures
+            .map(failure => failure.file)
+            .filter(file => file !== undefined) as string[];
 
         // Group by directory for better organization
         const failuresByDir: { [key: string]: string[] } = {};
@@ -548,19 +546,7 @@ export class DTDTestSuite {
             }
         });
 
-        for (const [dir, files] of Object.entries(failuresByDir)) {
-            console.log(`   📁 ${dir}/ directory (${files.length} files):`);
-            files.forEach(file => {
-                console.log(`      • ${file}`);
-            });
-            console.log('');
-        }
-
-        console.log('   💡 To analyze these failures:');
-        console.log('      1. Check specific files manually');
-        console.log('      2. Compare actual vs expected canonical forms');
-        console.log('      3. Identify patterns in canonicalizer behavior');
-        console.log('');
+        this.results.canonicalFormAnalysis.failuresByDirectory = failuresByDir;
     }
 
     private saveResults(): void {
@@ -755,38 +741,6 @@ export class DTDTestSuite {
 
         return recommendations;
     }
-
-    private printErrorAnalysis(): void {
-        console.log('');
-        console.log('🔍 Error Analysis Results');
-        console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`   • Total Unique Error Types: ${this.results.errorAnalysis.totalUniqueErrors}`);
-        
-        if (this.results.errorAnalysis.mostCommonError) {
-            console.log(`   • Most Common Error: "${this.results.errorAnalysis.mostCommonError}" (${this.results.errorAnalysis.mostCommonErrorCount} occurrences)`);
-        }
-        
-        console.log('');
-        console.log('   📊 Error Categories (by frequency):');
-        for (let i = 0; i < this.results.errorAnalysis.errorCategories.length && i < 7; i++) {
-            const category = this.results.errorAnalysis.errorCategories[i];
-            console.log(`      ${i + 1}. ${category}`);
-        }
-        
-        console.log('');
-        console.log('   💡 Top Recommendations:');
-        for (let i = 0; i < this.results.errorAnalysis.recommendations.length && i < 5; i++) {
-            console.log(`      ${i + 1}. ${this.results.errorAnalysis.recommendations[i]}`);
-        }
-        
-        console.log('');
-        console.log('   📋 Next Steps:');
-        console.log('      • Review dtd-test-report.json for detailed error information');
-        console.log('      • Focus on the most frequent error categories first');
-        console.log('      • Use example files from the report to reproduce issues');
-        console.log('      • Re-run tests after fixes to measure improvement');
-        console.log('');
-    }
 }
 
 // Type definitions
@@ -815,6 +769,11 @@ interface DTDTestResults {
         mostCommonErrorCount: number;
         errorCategories: string[];
         recommendations: string[];
+    };
+    canonicalFormAnalysis: {
+        totalFailures: number;
+        failuresByDirectory: { [key: string]: string[] };
+        failedFiles: string[];
     };
 }
 

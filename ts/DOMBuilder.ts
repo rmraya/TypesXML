@@ -121,7 +121,6 @@ export class DOMBuilder implements ContentHandler {
         if (!this.validating || !this.grammar) {
             return;
         }
-
         const attDecls = this.grammar.getElementAttributes(elementName);
         if (!attDecls || attDecls.size === 0) {
             if (attributes.length > 0) {
@@ -436,13 +435,23 @@ export class DOMBuilder implements ContentHandler {
     }
 
     startDTD(name: string, publicId: string, systemId: string): void {
-        let docType: XMLDocumentType = new XMLDocumentType(name, publicId, systemId);
+        const docType = new XMLDocumentType(name, publicId, systemId);
         this.document?.setDocumentType(docType);
-        // DOMBuilder delegates DTD processing to its GrammarHandler
+        // DOMBuilder tells GrammarHandler to start DTD processing
+        if (this.grammarHandler) {
+            this.grammarHandler.startDTDProcessing(name, publicId, systemId);
+            const newGrammar = this.grammarHandler.getGrammar();
+            this.grammar = newGrammar;
+        }
     }
 
     endDTD(): void {
         // DOMBuilder delegates DTD processing to its GrammarHandler
+        // Update grammar reference to get the newly created DTDComposite
+        if (this.grammarHandler) {
+            const newGrammar = this.grammarHandler.getGrammar();
+            this.grammar = newGrammar;
+        }
     }
 
     skippedEntity(name: string): void {

@@ -37,7 +37,7 @@ export class GrammarHandler {
     private validating: boolean = false; // Track validating mode
 
     constructor(defaultNamespace?: string) {
-        this.compositeGrammar = new CompositeGrammar();
+        this.compositeGrammar = CompositeGrammar.getInstance();
 
         // Set up cross-schema resolver for XMLSchemaParser
         const schemaParser = XMLSchemaParser.getInstance();
@@ -111,9 +111,17 @@ export class GrammarHandler {
         }
     }
 
+    startDTDProcessing(name: string, publicId: string, systemId: string): void {
+        // Get singleton DTD composite when DOCTYPE is detected
+        this.dtdComposite = DTDComposite.getInstance();
+        this.dtdComposite.reset(); // Reset state for new document
+    }
+
     processDoctype(name: string, publicId: string, systemId: string, internalSubset: string): void {
-        // Create a composite DTD grammar to orchestrate internal and external DTD sources
-        this.dtdComposite = new DTDComposite();
+        // DTDComposite should already be created by startDTDProcessing
+        if (!this.dtdComposite) {
+            this.dtdComposite = DTDComposite.getInstance();
+        }
 
         // Handle internal subset first to populate parameter entities
         if (internalSubset !== '') {
@@ -201,10 +209,16 @@ export class GrammarHandler {
             dtdParser.parseString(internalSubset);
             return dtdGrammar;
         } catch (error) {
-            if (!this.silent) {
-                console.warn('DTD parsing warning:', (error as Error).message);
+            if (this.validating) {
+                // In validating mode, DTD parsing errors are fatal
+                throw new Error(`DTD parsing error: ${(error as Error).message}`);
+            } else {
+                // In non-validating mode, log warning and continue
+                if (!this.silent) {
+                    console.warn('DTD parsing warning:', (error as Error).message);
+                }
+                return undefined;
             }
-            return undefined;
         }
     }
 
@@ -245,15 +259,27 @@ export class GrammarHandler {
                     dtdParser.extractAndImportEntities(location);
                     return dtdGrammar;
                 } catch (extractError) {
-                    if (!this.silent) {
-                        console.warn('Warning: External DTD extraction failed for \'' + systemId + '\': ' + (extractError as Error).message);
+                    if (this.validating) {
+                        // In validating mode, external DTD extraction failures can be fatal
+                        throw new Error(`External DTD extraction failed for '${systemId}': ${(extractError as Error).message}`);
+                    } else {
+                        // In non-validating mode, log warning and continue
+                        if (!this.silent) {
+                            console.warn('Warning: External DTD extraction failed for \'' + systemId + '\': ' + (extractError as Error).message);
+                        }
+                        // If extraction fails, silently continue - entities might be defined elsewhere
                     }
-                    // If extraction fails, silently continue - entities might be defined elsewhere
                 }
             }
         } catch (error) {
-            if (!this.silent) {
-                console.warn('Warning: External DTD processing \'' + systemId + '\': ' + (error as Error).message);
+            if (this.validating) {
+                // In validating mode, external DTD processing failures can be fatal
+                throw new Error(`External DTD processing failed for '${systemId}': ${(error as Error).message}`);
+            } else {
+                // In non-validating mode, log warning and continue
+                if (!this.silent) {
+                    console.warn('Warning: External DTD processing \'' + systemId + '\': ' + (error as Error).message);
+                }
             }
         }
         return undefined;
@@ -385,15 +411,27 @@ export class GrammarHandler {
                     if (dtdGrammar) {
                         this.compositeGrammar.addGrammar(namespace, dtdGrammar);
                     } else {
-                        console.warn('Failed to load schema for namespace "' + namespace + '"');
+                        if (this.validating) {
+                            throw new Error(`Failed to load schema for namespace "${namespace}"`);
+                        } else if (!this.silent) {
+                            console.warn('Failed to load schema for namespace "' + namespace + '"');
+                        }
                     }
                 }
             } catch (error) {
-                console.warn('Exception loading schema for namespace "' + namespace + '": ' + (error as Error).message);
-                // Schema loading failed - will be reported in validation
+                if (this.validating) {
+                    throw new Error(`Exception loading schema for namespace "${namespace}": ${(error as Error).message}`);
+                } else if (!this.silent) {
+                    console.warn('Exception loading schema for namespace "' + namespace + '": ' + (error as Error).message);
+                    // Schema loading failed - will be reported in validation
+                }
             }
         } else {
-            console.warn('No location found for namespace "' + namespace + '"');
+            if (this.validating) {
+                throw new Error(`No location found for namespace "${namespace}"`);
+            } else if (!this.silent) {
+                console.warn('No location found for namespace "' + namespace + '"');
+            }
         }
     }
 
@@ -412,8 +450,8 @@ export class GrammarHandler {
         }
     }
 
-    reset(defaultNamespace?: string): void {
-        this.compositeGrammar = new CompositeGrammar();
+    reset(): void {
+        this.compositeGrammar = CompositeGrammar.getInstance();
         this.dtdComposite = undefined;
         this.currentFile = undefined;
     }
