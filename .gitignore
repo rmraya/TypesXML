@@ -5,6 +5,7 @@ dist/
 .vscode/
 .scannerwork/
 ts/test.ts
+ts/testDecl.ts
 notes/
 catalog/
 tests/xmlschema2006-11-06

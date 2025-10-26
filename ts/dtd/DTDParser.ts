@@ -193,7 +193,6 @@ export class DTDParser {
                     let start: string = this.source.substring(0, this.pointer);
                     let end: string = this.source.substring(index + ';'.length);
                     this.source = start + value + end;
-                    this.pointer += value.length;
                 } else if (entity.getSystemId() !== '' || entity.getPublicId() !== '') {
                     let location = this.resolveEntity(entity.getPublicId(), entity.getSystemId());
                     let parser: DTDParser = new DTDParser(this.grammar);

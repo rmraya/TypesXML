@@ -42,7 +42,14 @@ export class XMLSchemaTestSuite {
                 totalDuration: 0,
                 averagePerTest: 0
             },
-            unified: {}
+            unified: {},
+            errorAnalysis: {
+                totalUniqueErrors: 0,
+                mostCommonError: '',
+                mostCommonErrorCount: 0,
+                errorCategories: [],
+                recommendations: []
+            }
         };
     }
 
@@ -90,6 +97,9 @@ export class XMLSchemaTestSuite {
             this.testSchemaFileParsing();
             this.testInstanceFileParsing();
             this.testValidationModeToggle();
+            
+            // Perform error analysis
+            this.performErrorAnalysis();
         } finally {
             // Restore original console.log
             console.log = originalConsoleLog;
@@ -99,6 +109,7 @@ export class XMLSchemaTestSuite {
         console.log(`🔇 Suppressed ${suppressedOutput.length} verbose parser messages for cleaner output`);
         console.log('');
         this.printResults();
+        this.printErrorAnalysis();
         this.saveResults();
     }
 
@@ -240,6 +251,14 @@ export class XMLSchemaTestSuite {
             // Track unified results
             this.trackUnifiedResult(source, testCase.expectedValidity, actuallySucceeded);
 
+            // Store test result with error details
+            this.results.schemaFileParsing.tests.push({
+                ...result,
+                expected: testCase.expectedValidity,
+                source: source,
+                testCase: testCase.name
+            });
+
             if (isCorrect) {
                 correctResults++;
                 this.results.schemaFileParsing.passed++;
@@ -334,6 +353,14 @@ export class XMLSchemaTestSuite {
             // Track unified results
             this.trackUnifiedResult(source, testCase.expectedValidity, actuallySucceeded);
 
+            // Store test result with error details
+            this.results.instanceFileParsing.tests.push({
+                ...result,
+                expected: testCase.expectedValidity,
+                source: source,
+                testCase: testCase.name
+            });
+
             if (isCorrect) {
                 correctResults++;
                 this.results.instanceFileParsing.passed++;
@@ -396,24 +423,36 @@ export class XMLSchemaTestSuite {
 
             const document = builder.getDocument();
             if (!document || !document.getRoot()) {
+                const errorMessage = 'No root element found in parsed document';
                 return {
                     success: false,
-                    error: 'No root element found in parsed document',
-                    duration: Date.now() - startTime
+                    error: errorMessage,
+                    duration: Date.now() - startTime,
+                    file: basename(filePath),
+                    normalizedError: this.normalizeErrorMessage(errorMessage),
+                    errorCategory: this.categorizeError(errorMessage)
                 };
             }
 
             return {
                 success: true,
                 error: null,
-                duration: Date.now() - startTime
+                duration: Date.now() - startTime,
+                file: basename(filePath)
             };
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const normalizedError = this.normalizeErrorMessage(errorMessage);
+            const errorCategory = this.categorizeError(normalizedError);
+            
             return {
                 success: false,
-                error: error instanceof Error ? error.message : String(error),
-                duration: Date.now() - startTime
+                error: errorMessage,
+                duration: Date.now() - startTime,
+                file: basename(filePath),
+                normalizedError: normalizedError,
+                errorCategory: errorCategory
             };
         }
     }
@@ -836,6 +875,268 @@ export class XMLSchemaTestSuite {
         const reportPath = join(__dirname, '../../w3c-schema-test-report.json');
         writeFileSync(reportPath, JSON.stringify(this.results, null, 2));
     }
+
+    private normalizeErrorMessage(errorMessage: string): string {
+        // Normalize error messages to group similar errors together
+        let normalized = errorMessage;
+
+        // Remove file-specific information
+        normalized = normalized.replace(/at line \d+/g, 'at line X');
+        normalized = normalized.replace(/column \d+/g, 'column X');
+        normalized = normalized.replace(/position \d+/g, 'position X');
+        normalized = normalized.replace(/line:\s*\d+/g, 'line: X');
+        
+        // Remove specific element/attribute names for grouping
+        normalized = normalized.replace(/"[^"]+"/g, '"ELEMENT_NAME"');
+        normalized = normalized.replace(/'[^']+'/g, "'ELEMENT_NAME'");
+        
+        // Remove specific file paths
+        normalized = normalized.replace(/\/[^\s]+\.xml/g, '/PATH/file.xml');
+        normalized = normalized.replace(/\/[^\s]+\.xsd/g, '/PATH/file.xsd');
+
+        // Remove specific namespace URIs
+        normalized = normalized.replace(/http:\/\/[^\s]+/g, 'http://NAMESPACE_URI');
+        
+        // Normalize common patterns
+        normalized = normalized.replace(/\b\d+\b/g, 'N');
+        
+        return normalized.trim();
+    }
+
+    private categorizeError(normalizedError: string): string {
+        const error = normalizedError.toLowerCase();
+
+        // Schema-related errors
+        if (error.includes('schema') || error.includes('xsd')) {
+            return 'Schema Processing';
+        }
+
+        // Namespace-related errors
+        if (error.includes('namespace') || error.includes('xmlns')) {
+            return 'Namespace Issues';
+        }
+
+        // Element validation errors
+        if (error.includes('element') && (error.includes('not allowed') || error.includes('invalid') || error.includes('unexpected'))) {
+            return 'Element Validation';
+        }
+
+        // Attribute validation errors
+        if (error.includes('attribute') && (error.includes('not allowed') || error.includes('invalid') || error.includes('required'))) {
+            return 'Attribute Validation';
+        }
+
+        // Type validation errors
+        if (error.includes('type') && (error.includes('invalid') || error.includes('conversion') || error.includes('constraint'))) {
+            return 'Type Validation';
+        }
+
+        // Content model errors
+        if (error.includes('content model') || error.includes('content is not allowed') || error.includes('sequence') || error.includes('choice')) {
+            return 'Content Model';
+        }
+
+        // Well-formedness errors
+        if (error.includes('not well-formed') || error.includes('malformed') || error.includes('syntax error')) {
+            return 'Well-formedness';
+        }
+
+        // Reference resolution errors
+        if (error.includes('reference') || error.includes('resolve') || error.includes('not found') || error.includes('import') || error.includes('include')) {
+            return 'Reference Resolution';
+        }
+
+        // Complex type errors
+        if (error.includes('complex type') || error.includes('simple type') || error.includes('extension') || error.includes('restriction')) {
+            return 'Type Definition';
+        }
+
+        // Encoding errors
+        if (error.includes('encoding') || error.includes('charset') || error.includes('character')) {
+            return 'Encoding Issues';
+        }
+
+        // Document structure errors
+        if (error.includes('root element') || error.includes('document') || error.includes('structure')) {
+            return 'Document Structure';
+        }
+
+        return 'Other';
+    }
+
+    private performErrorAnalysis(): void {
+        const allErrorsByType = new Map<string, ErrorTypeInfo>();
+        const allErrorsByCategory = new Map<string, ErrorCategoryInfo>();
+
+        // Helper function to collect errors from test results
+        const collectErrors = (tests: any[], errorsByType: Map<string, ErrorTypeInfo>, errorsByCategory: Map<string, ErrorCategoryInfo>) => {
+            // Only collect errors from files that were expected to be valid but failed
+            const testsWithErrors = tests.filter(t => 
+                !t.success && 
+                t.normalizedError && 
+                t.errorCategory && 
+                t.expected === 'valid'  // Only collect errors from files expected to be valid
+            );
+            
+            for (const test of testsWithErrors) {
+                // Track by error type
+                if (errorsByType.has(test.normalizedError)) {
+                    const errorInfo = errorsByType.get(test.normalizedError)!;
+                    errorInfo.count++;
+                    if (test.file && errorInfo.exampleFiles.length < 5) {
+                        errorInfo.exampleFiles.push(test.file);
+                    }
+                    if (test.error && errorInfo.originalMessages.length < 3) {
+                        errorInfo.originalMessages.push(test.error);
+                    }
+                } else {
+                    errorsByType.set(test.normalizedError, {
+                        count: 1,
+                        normalizedMessage: test.normalizedError,
+                        originalMessages: test.error ? [test.error] : [],
+                        exampleFiles: test.file ? [test.file] : [],
+                        category: test.errorCategory
+                    });
+                }
+
+                // Track by category
+                if (errorsByCategory.has(test.errorCategory)) {
+                    const categoryInfo = errorsByCategory.get(test.errorCategory)!;
+                    categoryInfo.totalCount++;
+                    if (test.file && !categoryInfo.exampleFiles.includes(test.file)) {
+                        categoryInfo.exampleFiles.push(test.file);
+                    }
+                    if (!categoryInfo.errorTypes.includes(test.normalizedError)) {
+                        categoryInfo.errorTypes.push(test.normalizedError);
+                    }
+                } else {
+                    errorsByCategory.set(test.errorCategory, {
+                        totalCount: 1,
+                        errorTypes: [test.normalizedError],
+                        exampleFiles: test.file ? [test.file] : []
+                    });
+                }
+
+                // Also add to global maps
+                if (allErrorsByType.has(test.normalizedError)) {
+                    allErrorsByType.get(test.normalizedError)!.count++;
+                } else {
+                    allErrorsByType.set(test.normalizedError, { ...errorsByType.get(test.normalizedError)! });
+                }
+
+                if (allErrorsByCategory.has(test.errorCategory)) {
+                    allErrorsByCategory.get(test.errorCategory)!.totalCount++;
+                } else {
+                    allErrorsByCategory.set(test.errorCategory, { ...errorsByCategory.get(test.errorCategory)! });
+                }
+            }
+        };
+
+        // Collect errors from schema parsing
+        const schemaErrorsByType = new Map<string, ErrorTypeInfo>();
+        const schemaErrorsByCategory = new Map<string, ErrorCategoryInfo>();
+        collectErrors(this.results.schemaFileParsing.tests, schemaErrorsByType, schemaErrorsByCategory);
+        this.results.schemaFileParsing.errorAnalysis = { errorsByType: schemaErrorsByType, errorsByCategory: schemaErrorsByCategory };
+
+        // Collect errors from instance parsing
+        const instanceErrorsByType = new Map<string, ErrorTypeInfo>();
+        const instanceErrorsByCategory = new Map<string, ErrorCategoryInfo>();
+        collectErrors(this.results.instanceFileParsing.tests, instanceErrorsByType, instanceErrorsByCategory);
+        this.results.instanceFileParsing.errorAnalysis = { errorsByType: instanceErrorsByType, errorsByCategory: instanceErrorsByCategory };
+
+        // Find most common error overall
+        let mostCommonError = '';
+        let mostCommonCount = 0;
+        for (const [error, info] of allErrorsByType) {
+            if (info.count > mostCommonCount) {
+                mostCommonCount = info.count;
+                mostCommonError = error;
+            }
+        }
+
+        // Update global error analysis
+        this.results.errorAnalysis = {
+            totalUniqueErrors: allErrorsByType.size,
+            mostCommonError: mostCommonError,
+            mostCommonErrorCount: mostCommonCount,
+            errorCategories: Array.from(allErrorsByCategory.keys()).sort((a, b) => 
+                allErrorsByCategory.get(b)!.totalCount - allErrorsByCategory.get(a)!.totalCount
+            ),
+            recommendations: this.generateRecommendations(allErrorsByCategory)
+        };
+    }
+
+    private generateRecommendations(errorsByCategory: Map<string, ErrorCategoryInfo>): string[] {
+        const recommendations: string[] = [];
+        
+        const sortedCategories = Array.from(errorsByCategory.entries())
+            .sort(([, a], [, b]) => b.totalCount - a.totalCount)
+            .slice(0, 5); // Top 5 categories
+
+        for (const [category, info] of sortedCategories) {
+            switch (category) {
+                case 'Schema Processing':
+                    recommendations.push(`Fix schema processing (${info.totalCount} errors): Review XSD loading, schema compilation, and grammar building`);
+                    break;
+                case 'Namespace Issues':
+                    recommendations.push(`Fix namespace handling (${info.totalCount} errors): Check namespace resolution, prefix mapping, and default namespaces`);
+                    break;
+                case 'Element Validation':
+                    recommendations.push(`Fix element validation (${info.totalCount} errors): Improve element content validation and occurrence constraints`);
+                    break;
+                case 'Attribute Validation':
+                    recommendations.push(`Fix attribute validation (${info.totalCount} errors): Review attribute type checking and constraint validation`);
+                    break;
+                case 'Type Validation':
+                    recommendations.push(`Fix type validation (${info.totalCount} errors): Enhance built-in and user-defined type validation`);
+                    break;
+                case 'Content Model':
+                    recommendations.push(`Fix content model validation (${info.totalCount} errors): Improve complex type content validation`);
+                    break;
+                case 'Reference Resolution':
+                    recommendations.push(`Fix reference resolution (${info.totalCount} errors): Enhance schema import/include and component resolution`);
+                    break;
+                case 'Type Definition':
+                    recommendations.push(`Fix type definitions (${info.totalCount} errors): Review complex/simple type processing and derivation`);
+                    break;
+                default:
+                    recommendations.push(`Address ${category} issues (${info.totalCount} errors): Investigate and fix specific error patterns`);
+            }
+        }
+
+        return recommendations;
+    }
+
+    private printErrorAnalysis(): void {
+        console.log('🔍 Schema Validation Error Analysis');
+        console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`   • Total Unique Error Types: ${this.results.errorAnalysis.totalUniqueErrors}`);
+        
+        if (this.results.errorAnalysis.mostCommonError) {
+            console.log(`   • Most Common Error: "${this.results.errorAnalysis.mostCommonError}" (${this.results.errorAnalysis.mostCommonErrorCount} occurrences)`);
+        }
+        
+        console.log('');
+        console.log('   📊 Error Categories (by frequency):');
+        for (let i = 0; i < this.results.errorAnalysis.errorCategories.length && i < 7; i++) {
+            const category = this.results.errorAnalysis.errorCategories[i];
+            console.log(`      ${i + 1}. ${category}`);
+        }
+        
+        console.log('');
+        console.log('   💡 Top Recommendations:');
+        for (let i = 0; i < this.results.errorAnalysis.recommendations.length && i < 5; i++) {
+            console.log(`      ${i + 1}. ${this.results.errorAnalysis.recommendations[i]}`);
+        }
+        
+        console.log('');
+        console.log('   📋 Next Steps:');
+        console.log('      • Review w3c-schema-test-report.json for detailed error information');
+        console.log('      • Focus on the most frequent error categories first');
+        console.log('      • Use example files from the report to reproduce issues');
+        console.log('      • Re-run tests after fixes to measure improvement');
+        console.log('');
+    }
 }
 
 // Type definitions
@@ -845,12 +1146,20 @@ interface TestResults {
         failed: number;
         tests: any[];
         bySource: { [source: string]: { passed: number; failed: number; total: number } };
+        errorAnalysis?: {
+            errorsByType: Map<string, ErrorTypeInfo>;
+            errorsByCategory: Map<string, ErrorCategoryInfo>;
+        };
     };
     instanceFileParsing: {
         passed: number;
         failed: number;
         tests: any[];
         bySource: { [source: string]: { passed: number; failed: number; total: number } };
+        errorAnalysis?: {
+            errorsByType: Map<string, ErrorTypeInfo>;
+            errorsByCategory: Map<string, ErrorCategoryInfo>;
+        };
     };
     validationMode: { passed: number; failed: number; tests: any[] };
     performance: {
@@ -870,12 +1179,36 @@ interface TestResults {
             overallCorrect: number;
         };
     };
+    errorAnalysis: {
+        totalUniqueErrors: number;
+        mostCommonError: string;
+        mostCommonErrorCount: number;
+        errorCategories: string[];
+        recommendations: string[];
+    };
 }
 
 interface TestResult {
     success: boolean;
     error: string | null;
     duration: number;
+    file?: string;
+    normalizedError?: string;
+    errorCategory?: string;
+}
+
+interface ErrorTypeInfo {
+    count: number;
+    normalizedMessage: string;
+    originalMessages: string[];
+    exampleFiles: string[];
+    category: string;
+}
+
+interface ErrorCategoryInfo {
+    totalCount: number;
+    errorTypes: string[];
+    exampleFiles: string[];
 }
 
 interface SchemaTestCase {

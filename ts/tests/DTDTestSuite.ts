@@ -43,6 +43,13 @@ export class DTDTestSuite {
             performance: {
                 totalDuration: 0,
                 averagePerTest: 0
+            },
+            errorAnalysis: {
+                totalUniqueErrors: 0,
+                mostCommonError: '',
+                mostCommonErrorCount: 0,
+                errorCategories: [],
+                recommendations: []
             }
         };
     }
@@ -61,6 +68,11 @@ export class DTDTestSuite {
         // Print final results
         this.printResults();
         this.printCanonicalFormFailures();
+        
+        // Perform error analysis
+        this.performErrorAnalysis();
+        this.printErrorAnalysis();
+        
         this.saveResults();
     }
 
@@ -225,6 +237,10 @@ export class DTDTestSuite {
                 const parseResult = this.testParseFile(filePath, true); // Always use validation for valid XML
 
                 if (!parseResult.success) {
+                    // This is a valid file that failed to parse - collect the error for analysis
+                    if (parseResult.error) {
+                        this.results.validXML.tests.push(parseResult);
+                    }
                     failed++;
                     continue;
                 }
@@ -329,6 +345,13 @@ export class DTDTestSuite {
 
             const testPassed: boolean = (result.success === expectedToPass);
 
+            // Only collect errors from files that are supposed to be valid (validXML category)
+            // and from files that failed when they should have passed
+            if (resultCategory === 'validXML' && !result.success && result.error) {
+                // This is a valid file that failed to parse - collect the error for analysis
+                (this.results[resultCategory] as DTDTestCategoryResult).tests.push(result);
+            }
+
             if (testPassed) {
                 passed++;
                 (this.results[resultCategory] as DTDTestCategoryResult).passed++;
@@ -384,21 +407,32 @@ export class DTDTestSuite {
                 return {
                     success: false,
                     error: 'No root element found in parsed document',
-                    duration: Date.now() - startTime
+                    duration: Date.now() - startTime,
+                    file: basename(filePath),
+                    normalizedError: 'No root element found',
+                    errorCategory: 'Document Structure'
                 };
             }
 
             return {
                 success: true,
                 error: null,
-                duration: Date.now() - startTime
+                duration: Date.now() - startTime,
+                file: basename(filePath)
             };
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const normalizedError = this.normalizeErrorMessage(errorMessage);
+            const errorCategory = this.categorizeError(normalizedError);
+            
             return {
                 success: false,
-                error: error instanceof Error ? error.message : String(error),
-                duration: Date.now() - startTime
+                error: errorMessage,
+                duration: Date.now() - startTime,
+                file: basename(filePath),
+                normalizedError: normalizedError,
+                errorCategory: errorCategory
             };
         }
     }
@@ -533,6 +567,226 @@ export class DTDTestSuite {
         const reportPath: string = join(__dirname, '../../dtd-test-report.json');
         writeFileSync(reportPath, JSON.stringify(this.results, null, 2));
     }
+
+    private normalizeErrorMessage(errorMessage: string): string {
+        // Normalize error messages to group similar errors together
+        let normalized = errorMessage;
+
+        // Remove file-specific information
+        normalized = normalized.replace(/at line \d+/g, 'at line X');
+        normalized = normalized.replace(/column \d+/g, 'column X');
+        normalized = normalized.replace(/position \d+/g, 'position X');
+        normalized = normalized.replace(/line:\s*\d+/g, 'line: X');
+        
+        // Remove specific element/attribute names for grouping
+        normalized = normalized.replace(/"[^"]+"/g, '"ELEMENT_NAME"');
+        normalized = normalized.replace(/'[^']+'/g, "'ELEMENT_NAME'");
+        
+        // Remove specific file paths
+        normalized = normalized.replace(/\/[^\s]+\.xml/g, '/PATH/file.xml');
+        normalized = normalized.replace(/\/[^\s]+\.dtd/g, '/PATH/file.dtd');
+
+        // Normalize common patterns
+        normalized = normalized.replace(/\b\d+\b/g, 'N');
+        
+        return normalized.trim();
+    }
+
+    private categorizeError(normalizedError: string): string {
+        const error = normalizedError.toLowerCase();
+
+        // DTD-related errors
+        if (error.includes('dtd') || error.includes('doctype')) {
+            return 'DTD Processing';
+        }
+
+        // Element validation errors
+        if (error.includes('element') && (error.includes('not allowed') || error.includes('invalid') || error.includes('unexpected'))) {
+            return 'Element Validation';
+        }
+
+        // Attribute validation errors
+        if (error.includes('attribute') && (error.includes('not allowed') || error.includes('invalid') || error.includes('required'))) {
+            return 'Attribute Validation';
+        }
+
+        // Well-formedness errors
+        if (error.includes('not well-formed') || error.includes('malformed') || error.includes('syntax error')) {
+            return 'Well-formedness';
+        }
+
+        // Content model errors
+        if (error.includes('content model') || error.includes('content is not allowed')) {
+            return 'Content Model';
+        }
+
+        // Entity resolution errors
+        if (error.includes('entity') || error.includes('reference') || error.includes('resolve')) {
+            return 'Entity Resolution';
+        }
+
+        // Encoding errors
+        if (error.includes('encoding') || error.includes('charset') || error.includes('character')) {
+            return 'Encoding Issues';
+        }
+
+        // Document structure errors
+        if (error.includes('root element') || error.includes('document') || error.includes('structure')) {
+            return 'Document Structure';
+        }
+
+        return 'Other';
+    }
+
+    private performErrorAnalysis(): void {
+        const errorsByType = new Map<string, ErrorTypeInfo>();
+        const errorsByCategory = new Map<string, ErrorCategoryInfo>();
+
+        // Collect only test results from validXML category that have errors
+        // These are files that were supposed to be valid but failed to parse
+        const allTestsWithErrors = [
+            ...this.results.validXML.tests.filter(t => !t.success)
+        ];
+
+        // Process each error
+        for (const test of allTestsWithErrors) {
+            if (!test.normalizedError || !test.errorCategory) continue;
+
+            // Track by error type
+            if (errorsByType.has(test.normalizedError)) {
+                const errorInfo = errorsByType.get(test.normalizedError)!;
+                errorInfo.count++;
+                if (test.file && errorInfo.exampleFiles.length < 5) {
+                    errorInfo.exampleFiles.push(test.file);
+                }
+                if (test.error && errorInfo.originalMessages.length < 3) {
+                    errorInfo.originalMessages.push(test.error);
+                }
+            } else {
+                errorsByType.set(test.normalizedError, {
+                    count: 1,
+                    normalizedMessage: test.normalizedError,
+                    originalMessages: test.error ? [test.error] : [],
+                    exampleFiles: test.file ? [test.file] : [],
+                    category: test.errorCategory
+                });
+            }
+
+            // Track by category
+            if (errorsByCategory.has(test.errorCategory)) {
+                const categoryInfo = errorsByCategory.get(test.errorCategory)!;
+                categoryInfo.totalCount++;
+                if (test.file && !categoryInfo.exampleFiles.includes(test.file)) {
+                    categoryInfo.exampleFiles.push(test.file);
+                }
+                if (!categoryInfo.errorTypes.includes(test.normalizedError)) {
+                    categoryInfo.errorTypes.push(test.normalizedError);
+                }
+            } else {
+                errorsByCategory.set(test.errorCategory, {
+                    totalCount: 1,
+                    errorTypes: [test.normalizedError],
+                    exampleFiles: test.file ? [test.file] : []
+                });
+            }
+        }
+
+        // Find most common error
+        let mostCommonError = '';
+        let mostCommonCount = 0;
+        for (const [error, info] of errorsByType) {
+            if (info.count > mostCommonCount) {
+                mostCommonCount = info.count;
+                mostCommonError = error;
+            }
+        }
+
+        // Update results with error analysis
+        this.results.errorAnalysis = {
+            totalUniqueErrors: errorsByType.size,
+            mostCommonError: mostCommonError,
+            mostCommonErrorCount: mostCommonCount,
+            errorCategories: Array.from(errorsByCategory.keys()).sort((a, b) => 
+                errorsByCategory.get(b)!.totalCount - errorsByCategory.get(a)!.totalCount
+            ),
+            recommendations: this.generateRecommendations(errorsByCategory)
+        };
+
+        // Add error analysis to each category
+        this.results.validXML.errorAnalysis = { errorsByType, errorsByCategory, mostCommonErrors: [] };
+        this.results.invalidXML.errorAnalysis = { errorsByType, errorsByCategory, mostCommonErrors: [] };
+        this.results.notWellFormed.errorAnalysis = { errorsByType, errorsByCategory, mostCommonErrors: [] };
+    }
+
+    private generateRecommendations(errorsByCategory: Map<string, ErrorCategoryInfo>): string[] {
+        const recommendations: string[] = [];
+        
+        const sortedCategories = Array.from(errorsByCategory.entries())
+            .sort(([, a], [, b]) => b.totalCount - a.totalCount)
+            .slice(0, 5); // Top 5 categories
+
+        for (const [category, info] of sortedCategories) {
+            switch (category) {
+                case 'DTD Processing':
+                    recommendations.push(`Fix DTD parsing (${info.totalCount} errors): Review DTD loading, external entity resolution, and DOCTYPE handling`);
+                    break;
+                case 'Element Validation':
+                    recommendations.push(`Fix element validation (${info.totalCount} errors): Check element content model validation and allowed child elements`);
+                    break;
+                case 'Attribute Validation':
+                    recommendations.push(`Fix attribute validation (${info.totalCount} errors): Review attribute type validation and required attribute checking`);
+                    break;
+                case 'Well-formedness':
+                    recommendations.push(`Fix well-formedness checks (${info.totalCount} errors): Improve basic XML syntax validation`);
+                    break;
+                case 'Content Model':
+                    recommendations.push(`Fix content model validation (${info.totalCount} errors): Improve element sequence and choice validation`);
+                    break;
+                case 'Entity Resolution':
+                    recommendations.push(`Fix entity resolution (${info.totalCount} errors): Review entity reference handling and resolution`);
+                    break;
+                case 'Document Structure':
+                    recommendations.push(`Fix document structure validation (${info.totalCount} errors): Check root element and document parsing`);
+                    break;
+                default:
+                    recommendations.push(`Address ${category} issues (${info.totalCount} errors): Investigate and fix specific error patterns`);
+            }
+        }
+
+        return recommendations;
+    }
+
+    private printErrorAnalysis(): void {
+        console.log('');
+        console.log('🔍 Error Analysis Results');
+        console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`   • Total Unique Error Types: ${this.results.errorAnalysis.totalUniqueErrors}`);
+        
+        if (this.results.errorAnalysis.mostCommonError) {
+            console.log(`   • Most Common Error: "${this.results.errorAnalysis.mostCommonError}" (${this.results.errorAnalysis.mostCommonErrorCount} occurrences)`);
+        }
+        
+        console.log('');
+        console.log('   📊 Error Categories (by frequency):');
+        for (let i = 0; i < this.results.errorAnalysis.errorCategories.length && i < 7; i++) {
+            const category = this.results.errorAnalysis.errorCategories[i];
+            console.log(`      ${i + 1}. ${category}`);
+        }
+        
+        console.log('');
+        console.log('   💡 Top Recommendations:');
+        for (let i = 0; i < this.results.errorAnalysis.recommendations.length && i < 5; i++) {
+            console.log(`      ${i + 1}. ${this.results.errorAnalysis.recommendations[i]}`);
+        }
+        
+        console.log('');
+        console.log('   📋 Next Steps:');
+        console.log('      • Review dtd-test-report.json for detailed error information');
+        console.log('      • Focus on the most frequent error categories first');
+        console.log('      • Use example files from the report to reproduce issues');
+        console.log('      • Re-run tests after fixes to measure improvement');
+        console.log('');
+    }
 }
 
 // Type definitions
@@ -540,6 +794,11 @@ interface DTDTestCategoryResult {
     passed: number;
     failed: number;
     tests: DTDTestResult[];
+    errorAnalysis?: {
+        errorsByType: Map<string, ErrorTypeInfo>;
+        errorsByCategory: Map<string, ErrorCategoryInfo>;
+        mostCommonErrors: ErrorSummary[];
+    };
 }
 
 interface DTDTestResults {
@@ -550,6 +809,13 @@ interface DTDTestResults {
         totalDuration: number;
         averagePerTest: number;
     };
+    errorAnalysis: {
+        totalUniqueErrors: number;
+        mostCommonError: string;
+        mostCommonErrorCount: number;
+        errorCategories: string[];
+        recommendations: string[];
+    };
 }
 
 interface DTDTestResult {
@@ -557,6 +823,30 @@ interface DTDTestResult {
     error: string | null;
     duration: number;
     file?: string;
+    normalizedError?: string;
+    errorCategory?: string;
+}
+
+interface ErrorTypeInfo {
+    count: number;
+    normalizedMessage: string;
+    originalMessages: string[];
+    exampleFiles: string[];
+    category: string;
+}
+
+interface ErrorCategoryInfo {
+    totalCount: number;
+    errorTypes: string[];
+    exampleFiles: string[];
+}
+
+interface ErrorSummary {
+    error: string;
+    count: number;
+    category: string;
+    exampleFiles: string[];
+    recommendation: string;
 }
 
 // Main execution
