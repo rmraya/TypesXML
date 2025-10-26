@@ -759,6 +759,9 @@ export class DTDParser {
     }
 
     parseAttributesListDeclaration(declaration: string): AttListDecl {
+        // replace all entities in the declaration
+        declaration = this.resolveEntities(declaration);
+      
         let i: number = '<!ATTLIST'.length;
         let char: string = declaration.charAt(i);
         // skip spaces before list name
@@ -806,6 +809,9 @@ export class DTDParser {
     }
 
     parseElementDeclaration(declaration: string): ElementDecl {
+        // replace entities in the declaration
+        declaration = this.resolveEntities(declaration);
+
         let name: string = '';
         let i: number = '<!ELEMENT'.length;
         let char: string = declaration.charAt(i);

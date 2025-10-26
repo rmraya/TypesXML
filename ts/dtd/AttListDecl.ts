@@ -65,7 +65,7 @@ export class AttListDecl implements XMLNode {
                                 defaultValue = defaultValue.substring(1, defaultValue.length - 1);
                             }
                         }
-                    } else if (nextPart && nextPart.startsWith('"') && nextPart.endsWith('"')) {
+                    } else if (nextPart && ((nextPart.startsWith('"') && nextPart.endsWith('"')) || (nextPart.startsWith("'") && nextPart.endsWith("'")))) {
                         // Direct default value
                         defaultDecl = nextPart;
                         defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes

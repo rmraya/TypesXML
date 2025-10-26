@@ -374,12 +374,6 @@ export class XMLSchemaGrammar implements Grammar {
         return ValidationResult.success();
     }
 
-    // ========================================================================
-    // CONTENT VALIDATION METHODS REMOVED
-    // Content validation is now handled by CompositeGrammar
-    // XMLSchemaGrammar only provides infrastructure and schema structure validation
-    // ========================================================================
-
     resolveEntity(name: string): string | undefined {
         // Entity methods (for DTD compatibility)
         // XML Schema doesn't support general entities like DTD

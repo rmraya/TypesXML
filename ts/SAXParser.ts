@@ -67,6 +67,7 @@ export class SAXParser {
         this.contentHandler = contentHandler;
         this.contentHandler.setValidating(this.validating);
         this.contentHandler.setIncludeDefaultAttributes(this.includeDefaultAttributes);
+        this.contentHandler.setGrammarHandler(this.grammarHandler);
     }
 
     setValidating(validating: boolean): void {
@@ -392,15 +393,12 @@ export class SAXParser {
             // Look up entity in DTD using grammar interface
             const entityValue: string | undefined = this.grammarHandler.getGrammar().resolveEntity(name);
             if (entityValue !== undefined) {
-                // Entity found - handle its content
+                // Entity found - recursively expand any nested entities
                 if (entityValue.length > 0) {
-                    // Expand character references within the entity value
-                    const expandedValue: string = this.expandCharacterReferences(entityValue);
-                    // Classify and handle entity content based on what it contains
-                    this.handleEntityContent(expandedValue);
+                    const fullyExpandedValue = this.expandCustomEntities(entityValue);
+                    this.contentHandler!.characters(fullyExpandedValue);
                 } else {
-                    // Legitimate empty entity (entityValue === "")
-                    this.contentHandler!.characters('');
+                    // Empty entity - valid, just continue
                 }
             } else {
                 // Entity not found - handle as skipped entity
@@ -583,27 +581,29 @@ export class SAXParser {
 
     cleanCharacterRun(): void {
         if (this.characterRun !== '') {
-            // Expand entities in character data before processing
-            let expandedContent: string = this.expandEntities(this.characterRun);
+            // Note: Don't expand entities here since parseEntityReference already handles 
+            // entity expansion with full recursion. The characterRun contains regular 
+            // character data that doesn't need entity expansion.
+            let content: string = this.characterRun;
 
             if (this.rootParsed) {
                 if (this.elementStack === 0) {
                     // document ended
                     // Normalize line endings per XML 1.0 spec section 2.11
-                    const normalizedContent: string = XMLUtils.normalizeLines(expandedContent);
+                    const normalizedContent: string = XMLUtils.normalizeLines(content);
                     this.contentHandler!.ignorableWhitespace(normalizedContent);
                 } else {
                     // in an element - check xml:space
                     const preserveWhitespace: boolean = this.isXmlSpacePreserve();
-                    if (preserveWhitespace || !this.isWhitespaceOnly(expandedContent)) {
+                    if (preserveWhitespace || !this.isWhitespaceOnly(content)) {
                         // Preserve whitespace or contains non-whitespace - treat as significant
                         // Normalize line endings per XML 1.0 spec section 2.11
-                        const normalizedContent: string = XMLUtils.normalizeLines(expandedContent);
+                        const normalizedContent: string = XMLUtils.normalizeLines(content);
                         this.contentHandler!.characters(normalizedContent);
                     } else {
                         // Default mode and only whitespace - treat as ignorable
                         // Normalize line endings per XML 1.0 spec section 2.11
-                        const normalizedContent: string = XMLUtils.normalizeLines(expandedContent);
+                        const normalizedContent: string = XMLUtils.normalizeLines(content);
                         this.contentHandler!.ignorableWhitespace(normalizedContent);
                     }
                 }

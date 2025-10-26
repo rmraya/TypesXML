@@ -137,105 +137,38 @@ export class XMLCanonicalizer {
     }
 
     private escapeCharacterData(text: string): string {
-        // Avoid double-escaping by preserving existing valid entity references
         let result = '';
-        let i = 0;
-        
-        while (i < text.length) {
-            if (text.charAt(i) === '&') {
-                // Check if this starts a valid entity reference
-                const remainingText = text.substring(i);
-                const entityMatch = remainingText.match(/^&(amp|lt|gt|quot|apos);/);
-                
-                if (entityMatch) {
-                    // This is already a valid entity reference, preserve it
-                    result += entityMatch[0];
-                    i += entityMatch[0].length;
-                    continue;
-                }
-            }
-            
-            // Regular character escaping
+        for (let i = 0; i < text.length; i++) {
             const char = text.charAt(i);
             switch (char) {
-                case '&':
-                    result += '&amp;';
-                    break;
-                case '<':
-                    result += '&lt;';
-                    break;
-                case '>':
-                    result += '&gt;';
-                    break;
-                case '"':
-                    result += '&quot;';
-                    break;
-                case '\r':
-                    if (i + 1 < text.length && text.charAt(i + 1) === '\n') {
-                        // CRLF sequence
-                        result += '&#13;&#10;';
-                        i++; // Skip the \n
-                    } else {
-                        result += '&#13;';
-                    }
-                    break;
-                case '\n':
-                    result += '&#10;';
-                    break;
-                case '\t':
-                    result += '&#9;';
-                    break;
-                default:
-                    result += char;
-                    break;
+                case '&': result += '&amp;'; break;
+                case '<': result += '&lt;'; break;
+                case '>': result += '&gt;'; break;
+                case '"': result += '&quot;'; break;
+                case '\r': result += '&#13;'; break;
+                case '\n': result += '&#10;'; break;
+                case '\t': result += '&#9;'; break;
+                default: result += char; break;
             }
-            i++;
         }
-        
         return result;
     }
 
     private escapeAttributeValue(value: string): string {
         let result = '';
-        
         for (let i = 0; i < value.length; i++) {
             const char = value.charAt(i);
-            
-            // First priority: Check if this character has an original entity reference form from parsing
-            if (this.grammar && this.grammar.getOriginalEntityReference(char)) {
-                result += this.grammar.getOriginalEntityReference(char);
-                continue;
-            }
-            
-            // Second priority: Standard XML escaping for canonical form
             switch (char) {
-                case '&':
-                    result += '&amp;';
-                    break;
-                case '<':
-                    result += '&lt;';
-                    break;
-                case '>':
-                    result += '&gt;';
-                    break;
-                case '"':
-                    result += '&quot;';
-                    break;
-                case '\t':
-                    result += '&#9;';
-                    break;
-                case '\n':
-                    result += '&#10;';  // newline
-                    break;
-                case '\r':
-                    result += '&#13;';  // carriage return
-                    break;
-                default:
-                    result += char;
-                    break;
+                case '&': result += '&amp;'; break;
+                case '<': result += '&lt;'; break;
+                case '>': result += '&gt;'; break;
+                case '"': result += '&quot;'; break;
+                case '\t': result += '&#9;'; break;
+                case '\n': result += '&#10;'; break;
+                case '\r': result += '&#13;'; break;
+                default: result += char; break;
             }
         }
-        
         return result;
     }
 }

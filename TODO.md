@@ -4,6 +4,18 @@ This document tracks outstanding tasks, missing features, and improvements neede
 
 ## Core Parser Features
 
+### DTD Conditional Section Support
+
+- **Location**: `ts/dtd/DTDParser.ts`
+- **Description**: Conditional section parsing (`<![ ... ]]>`) is not currently supported in the DTD parser.
+- **Details**:
+  - Implement parsing and validation for INCLUDE/IGNORE conditional sections in DTDs
+  - Support parameter entity expansion within conditional sections
+  - Ensure correct grammar validation after expansion
+  - Example test case: `tests/xmltest/valid/not-sa/022.xml` fails due to lack of conditional section support
+- **Priority**: Medium
+- **Status**: Not yet implemented
+
 ### XML Schema Support
 
 #### Complex Type Extension and Derivation Implementation

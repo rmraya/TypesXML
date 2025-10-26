@@ -18,29 +18,19 @@ import { DTDElementNameParticle } from "./DTDElementNameParticle";
 import { DTDSequenceModel } from "./DTDSequenceModel";
 
 export class DTDContentModelParser {
-    private debug(msg: string) {
-        if (process.env.DTD_DEBUG) {
-            console.log('[DTDParser]', msg);
-        }
-    }
     // Parse a particle: group, mixed, or name
     private parseParticle(): DTDContentModel {
-        this.debug('parseParticle: ' + JSON.stringify(this.peek()));
         const token = this.peek();
         if (!token) throw new Error('Unexpected end of content model');
         if (token.type === '(') {
             this.next(); // always consume '('
             const nextToken = this.peek();
-            this.debug('After consuming (, next token: ' + JSON.stringify(nextToken));
             if (nextToken && nextToken.type === 'PCDATA') {
-                this.debug('Dispatching to parseMixed');
                 return this.parseMixed();
             } else {
-                this.debug('Dispatching to parseGroup');
                 return this.parseGroup();
             }
         } else if (token.type === 'NAME') {
-            this.debug('Dispatching to parseNameParticle');
             return this.parseNameParticle();
         } else {
             throw new Error('Expected (, or NAME in particle');
@@ -60,8 +50,6 @@ export class DTDContentModelParser {
     }
 
     private parseGroup(): DTDContentModel {
-        this.debug('parseGroup entry: ' + JSON.stringify(this.peek()));
-        this.debug('parseGroup: ' + JSON.stringify(this.peek()));
         // Assumes '(' already consumed
         let particles: DTDContentModel[] = [];
         let separator: string | null = null;
@@ -135,8 +123,6 @@ export class DTDContentModelParser {
     // Removed stray 'return model;' and misplaced closing brace
 
     private parseMixed(): DTDChoiceModel {
-        this.debug('parseMixed entry: ' + JSON.stringify(this.peek()));
-        this.debug('parseMixed: ' + JSON.stringify(this.peek()));
         this.expect('PCDATA');
         let choice = new DTDChoiceModel();
         choice.addChoice(new DTDElementNameParticle('#PCDATA'));
@@ -164,7 +150,6 @@ export class DTDContentModelParser {
     }
 
     private parseNameParticle(): DTDElementNameParticle {
-        this.debug('parseNameParticle: ' + JSON.stringify(this.peek()));
         let name = this.expect('NAME').value;
         if (!XMLUtils.isValidNCName(name)) {
             throw new Error('Invalid XML name in content model: ' + name);
@@ -189,14 +174,11 @@ export class DTDContentModelParser {
     private expect(type: string): DTDToken {
         if (!this.match(type)) throw new Error('Expected ' + type + ', got ' + (this.peek()?.type || 'EOF'));
         const token = this.tokens[this.pos++];
-        this.debug('expect(' + type + '): ' + JSON.stringify(token));
         return token;
     }
 
     private next(): DTDToken | undefined {
         const token = this.tokens[this.pos++];
-        this.debug('next(): ' + JSON.stringify(token));
         return token;
     }
 }
-// End of class

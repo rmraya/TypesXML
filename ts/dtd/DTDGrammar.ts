@@ -10,10 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLUtils } from "../XMLUtils";
-import { ContentModel } from './ContentModel';
 import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationContext, ValidationResult } from '../grammar/Grammar';
+import { XMLUtils } from "../XMLUtils";
 import { AttDecl } from './AttDecl';
+import { ContentModel } from './ContentModel';
 import { ElementDecl } from './ElementDecl';
 import { EntityDecl } from './EntityDecl';
 import { NotationDecl } from './NotationDecl';
@@ -332,7 +332,7 @@ export class DTDGrammar implements Grammar {
     // Deserialization for pre-compiled grammars
     static fromJSON(data: any): DTDGrammar {
         const grammar = new DTDGrammar();
-        
+
         // Load entities (skip predefined ones as they're already added in constructor)
         if (data.entities) {
             Object.entries(data.entities).forEach(([name, entityData]: [string, any]) => {

@@ -72,7 +72,7 @@ export class GrammarHandler {
 
     getLoadedGrammars(): Array<{ namespace: string, type: string, elementCount?: number, typeCount?: number }> {
         const grammars = this.compositeGrammar.getLoadedGrammarList();
-        
+
         // Add DTD grammar info if available
         if (this.dtdComposite) {
             grammars.push({
@@ -81,7 +81,7 @@ export class GrammarHandler {
                 elementCount: this.dtdComposite.getElementDeclMap().size
             });
         }
-        
+
         return grammars;
     }
 
@@ -96,7 +96,7 @@ export class GrammarHandler {
 
     setValidating(validating: boolean): void {
         this.validating = validating;
-        
+
         // When validating mode changes, we need to apply it to any existing XMLSchemaGrammar instances
         // that are already loaded in the CompositeGrammar
         const allGrammars = this.compositeGrammar.getGrammars();
@@ -114,7 +114,7 @@ export class GrammarHandler {
     processDoctype(name: string, publicId: string, systemId: string, internalSubset: string): void {
         // Create a composite DTD grammar to orchestrate internal and external DTD sources
         this.dtdComposite = new DTDComposite();
-        
+
         // Handle internal subset first to populate parameter entities
         if (internalSubset !== '') {
             const internalDTD = this.processInternalSubset(internalSubset);
@@ -130,7 +130,7 @@ export class GrammarHandler {
                 this.dtdComposite.addExternalDTD(externalDTD);
             }
         }
-        
+
         // DTDComposite is now the primary grammar - no need to add to CompositeGrammar
         // CompositeGrammar remains focused on XML Schema handling only
     }
@@ -192,7 +192,7 @@ export class GrammarHandler {
         try {
             const dtdGrammar = new DTDGrammar();
             const dtdParser: DTDParser = new DTDParser(dtdGrammar, this.currentFile ? dirname(this.currentFile) : '');
-            dtdParser.setValidating(this.validating);   
+            dtdParser.setValidating(this.validating);
 
             if (this.catalog) {
                 dtdParser.setCatalog(this.catalog);
@@ -210,12 +210,12 @@ export class GrammarHandler {
 
     private processExternalDTD(publicId: string, systemId: string, dtdComposite: DTDComposite): DTDGrammar | undefined {
         try {
-            
+
             // Create a grammar instance with shared parameter entities from internal DTD
             const dtdGrammar = dtdComposite.createSharedGrammar();
-            
+
             let location: string | undefined;
-            
+
             if (this.catalog) {
                 // Use catalog for resolution if available
                 const tempParser = new DTDParser(dtdGrammar, this.currentFile ? dirname(this.currentFile) : '');
@@ -231,7 +231,7 @@ export class GrammarHandler {
                     location = resolve(currentDir, systemId);
                 }
             }
-            
+
             if (location && existsSync(location)) {
                 try {
                     // Create DTDParser with DTD file's directory as base for entity resolution within DTD
@@ -241,7 +241,7 @@ export class GrammarHandler {
                     if (this.catalog) {
                         dtdParser.setCatalog(this.catalog);
                     }
-                    
+
                     dtdParser.extractAndImportEntities(location);
                     return dtdGrammar;
                 } catch (extractError) {
@@ -417,15 +417,15 @@ export class GrammarHandler {
         this.dtdComposite = undefined;
         this.currentFile = undefined;
     }
-    
+
     private checkAndValidateCurrentSchema(namespaceInfo: NamespaceInfo): void {
-        const shouldValidateSemantics = this.validating && this.currentFile && 
-                                      this.shouldPerformSemanticValidation();
-        
+        const shouldValidateSemantics = this.validating && this.currentFile &&
+            this.shouldPerformSemanticValidation();
+
         if (shouldValidateSemantics && this.currentFile) {
             const hasXSDNamespace = namespaceInfo.defaultNamespace === 'http://www.w3.org/2001/XMLSchema' ||
-                                   Array.from(namespaceInfo.prefixMappings.values()).includes('http://www.w3.org/2001/XMLSchema');
-            
+                Array.from(namespaceInfo.prefixMappings.values()).includes('http://www.w3.org/2001/XMLSchema');
+
             if (hasXSDNamespace) {
                 const schemaParser = XMLSchemaParser.getInstance();
                 const grammar = schemaParser.parseSchema(this.currentFile, undefined, true);
@@ -435,12 +435,12 @@ export class GrammarHandler {
             }
         }
     }
-    
+
     private shouldPerformSemanticValidation(): boolean {
         if (!this.currentFile) {
             return false;
         }
-        
+
         // Only validate root documents, not schemas loaded as dependencies
         const isRootDocument = this.foundNamespaces.length === 0;
         return isRootDocument;
