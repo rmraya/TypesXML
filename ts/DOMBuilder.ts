@@ -12,7 +12,6 @@
 
 import { CData } from "./CData";
 import { Catalog } from "./Catalog";
-import { Constants } from "./Constants";
 import { ContentHandler } from "./ContentHandler";
 import { ProcessingInstruction } from "./ProcessingInstruction";
 import { TextNode } from "./TextNode";
@@ -22,10 +21,9 @@ import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLDocument } from "./XMLDocument";
 import { XMLDocumentType } from "./XMLDocumentType";
 import { XMLElement } from "./XMLElement";
-import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
 import { DTDParser } from "./dtd/DTDParser";
-import { AttributeUse, Grammar, ValidationContext } from "./grammar/Grammar";
+import { Grammar } from "./grammar/Grammar";
 import { GrammarHandler } from "./grammar/GrammarHandler";
 
 export class DOMBuilder implements ContentHandler {
@@ -41,7 +39,6 @@ export class DOMBuilder implements ContentHandler {
     grammar: Grammar | undefined;
     validating: boolean = false;
     private includeDefaultAttributes: boolean = true;
-    private rootElementValidated: boolean = false;
     private declaredIds: Set<string> = new Set();
     private pendingIdrefs: string[] = [];
 
@@ -49,7 +46,6 @@ export class DOMBuilder implements ContentHandler {
         this.document = new XMLDocument();
         this.stack = new Array();
         this.inCdData = false;
-        this.rootElementValidated = false;
         this.declaredIds.clear();
         this.pendingIdrefs = [];
         // Create initial GrammarHandler for this ContentHandler
@@ -78,21 +74,6 @@ export class DOMBuilder implements ContentHandler {
         this.grammar = this.grammarHandler.getGrammar();
     }
 
-    private validateRootElement(elementName: string): void {
-        if (!this.rootElementValidated && this.validating && this.grammar) {
-            const context = new ValidationContext([], new Map(), '', undefined, true);
-            const result = this.grammar.validateElement(elementName, context);
-
-            if (!result.isValid) {
-                result.errors.forEach(error => {
-                    console.error(`Root element validation error: ${error.message}`);
-                });
-            }
-
-            this.rootElementValidated = true;
-        }
-    }
-
     private addDefaultAttributes(elementName: string, element: XMLElement): void {
         if (!this.grammar) {
             return;
@@ -117,29 +98,7 @@ export class DOMBuilder implements ContentHandler {
         });
     }
 
-    private validateRequiredAttributes(elementName: string, attributes: XMLAttribute[]): void {
-        if (!this.validating || !this.grammar) {
-            return;
-        }
-        const attDecls = this.grammar.getElementAttributes(elementName);
-        if (!attDecls || attDecls.size === 0) {
-            if (attributes.length > 0) {
-                const attNames = attributes.map(att => att.getName()).join(', ');
-                throw new Error(`Element '${elementName}' has no declared attributes but contains: [${attNames}]`);
-            }
-            return;
-        }
-
-        const providedAttNames = new Set(attributes.map(att => att.getName()));
-
-        attDecls.forEach((attInfo, attName) => {
-            if (attInfo.use === AttributeUse.REQUIRED && !providedAttNames.has(attName)) {
-                throw new Error(`Required attribute '${attName}' is missing from element '${elementName}'`);
-            }
-        });
-    }
-
-    private validateAttributeValues(elementName: string, attributes: XMLAttribute[]): void {
+    private trackIdAttributes(elementName: string, element: XMLElement): void {
         if (!this.validating || !this.grammar) {
             return;
         }
@@ -149,15 +108,13 @@ export class DOMBuilder implements ContentHandler {
             return;
         }
 
-        // TODO: Additional DTD datatype validation (NMTOKEN, ENTITY, NOTATION) is now in DTDComposite
-
-        for (const attribute of attributes) {
-            const attName = attribute.getName();
-            const attValue = attribute.getValue();
+        element.getAttributes().forEach(attr => {
+            const attName = attr.getName();
+            const attValue = attr.getValue();
             const attInfo = attDecls.get(attName);
 
-            if (attInfo) {
-                // ID uniqueness and IDREF collection for validation  
+            if (attInfo && attInfo.datatype) {
+                // ID uniqueness validation
                 if (attInfo.datatype === 'ID') {
                     if (this.declaredIds.has(attValue)) {
                         throw new Error(`Duplicate ID value '${attValue}' found in element '${elementName}'`);
@@ -165,16 +122,21 @@ export class DOMBuilder implements ContentHandler {
                     this.declaredIds.add(attValue);
                 }
 
+                // Collect IDREF values for later validation (only if not already declared)
                 if (attInfo.datatype === 'IDREF') {
-                    this.pendingIdrefs.push(attValue);
+                    if (!this.declaredIds.has(attValue)) {
+                        this.pendingIdrefs.push(attValue);
+                    }
                 } else if (attInfo.datatype === 'IDREFS') {
                     const idrefs = attValue.split(/\s+/);
-                    this.pendingIdrefs.push(...idrefs);
+                    idrefs.forEach(idref => {
+                        if (!this.declaredIds.has(idref)) {
+                            this.pendingIdrefs.push(idref);
+                        }
+                    });
                 }
-            } else {
-                throw new Error(`Undeclared attribute '${attName}' found in element '${elementName}'`);
             }
-        }
+        });
     }
 
     private validateIdReferences(): void {
@@ -186,46 +148,6 @@ export class DOMBuilder implements ContentHandler {
             if (!this.declaredIds.has(idref)) {
                 throw new Error(`IDREF '${idref}' does not reference any declared ID`);
             }
-        }
-    }
-
-    private validateElementContent(elementName: string, children: XMLNode[]): void {
-        if (!this.validating || !this.grammar) {
-            return;
-        }
-
-        // Extract child element names
-        const childElementNames = children
-            .filter(child => child.getNodeType() === Constants.ELEMENT_NODE)
-            .map(child => (child as XMLElement).getName());
-
-        // Extract text content
-        const textNodes = children
-            .filter(child => child.getNodeType() === Constants.TEXT_NODE)
-            .map(child => (child as TextNode).getValue());
-        const textContent = textNodes.join('');
-
-        // Create attributes map
-        const currentElement = this.stack[this.stack.length - 1];
-        const attributesArray = currentElement?.getAttributes() || [];
-        const attributesMap = new Map<string, string>();
-        attributesArray.forEach(attr => {
-            attributesMap.set(attr.getName(), attr.getValue());
-        });
-
-        // Create validation context
-        const context = new ValidationContext(
-            childElementNames,
-            attributesMap,
-            textContent,
-            this.stack.length > 1 ? this.stack[this.stack.length - 2].getName() : undefined
-        );
-
-        // Validate using Grammar interface
-        const result = this.grammar.validateElement(elementName, context);
-        if (!result.isValid) {
-            const errorMessages = result.errors.map(err => err.message).join('; ');
-            throw new Error(`Element '${elementName}' validation failed: ${errorMessages}`);
         }
     }
 
@@ -250,10 +172,6 @@ export class DOMBuilder implements ContentHandler {
     }
 
     startElement(name: string, atts: XMLAttribute[]): void {
-        if (this.stack.length === 0) {
-            this.validateRootElement(name);
-        }
-
         let element: XMLElement = new XMLElement(name);
         atts.forEach((att) => {
             element.setAttribute(att);
@@ -264,35 +182,8 @@ export class DOMBuilder implements ContentHandler {
             this.addDefaultAttributes(name, element);
         }
 
-        // Validate attributes when validating is enabled
-        if (this.validating) {
-            this.validateRequiredAttributes(name, element.getAttributes());
-        }
-
-        // Delegate attribute validation to grammar handler (includes well-formedness and DTD validation)
-        if (this.validating && this.grammarHandler && this.grammar) {
-            const attributesMap = new Map<string, string>();
-            element.getAttributes().forEach(attr => {
-                attributesMap.set(attr.getName(), attr.getValue());
-            });
-
-            const context = new ValidationContext(
-                [], // childrenNames - empty for attribute validation
-                attributesMap,
-                '', // textContent - empty for attribute validation  
-                this.stack.length > 1 ? this.stack[this.stack.length - 2].getName() : undefined,
-                true // attributeOnly flag
-            );
-
-            const validationResult = this.grammar.validateAttributes(name, attributesMap, context);
-
-            if (!validationResult.isValid) {
-                const errorMessage = validationResult.errors.length > 0 ? validationResult.errors[0].message : 'Attribute validation failed';
-                throw new Error(errorMessage);
-            }
-        }
-
-        this.validateAttributeValues(name, element.getAttributes());
+        // Track ID/IDREF attributes for validation
+        this.trackIdAttributes(name, element);
 
         if (this.stack.length === 0) {
             this.document?.setRoot(element);
@@ -303,13 +194,6 @@ export class DOMBuilder implements ContentHandler {
     }
 
     endElement(name: string): void {
-        const element = this.stack[this.stack.length - 1];
-
-        if (element && this.validating) {
-            const children = element.getChildren ? element.getChildren() : [];
-            this.validateElementContent(name, children);
-        }
-
         this.stack.pop();
     }
 
