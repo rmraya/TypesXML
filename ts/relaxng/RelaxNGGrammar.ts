@@ -125,25 +125,35 @@ export class RelaxNGGrammar implements Grammar {
         // Extract attribute patterns from the element
         const attributePatterns = this.extractAttributePatterns(elementPattern);
 
+        // If no attribute patterns and no attributes provided, validation passes
+        if (attributePatterns.length === 0 && attributes.size === 0) {
+            return ValidationResult.success();
+        }
+
         // Validate each provided attribute
         for (const [attrName, attrValue] of attributes) {
             const attrPattern = this.findAttributePattern(attributePatterns, attrName);
             if (!attrPattern) {
-                return ValidationResult.error(`Attribute '${attrName}' not allowed on element '${element}'`);
-            }
-
-            // Validate attribute value
-            const valueValidation = this.validateAttributeValue(attrPattern, attrValue);
-            if (!valueValidation.isValid) {
-                return valueValidation;
+                // Be more lenient - only fail if we're in strict mode
+                if (this.validating) {
+                    return ValidationResult.error(`Attribute '${attrName}' not allowed on element '${element}'`);
+                }
+            } else {
+                // Validate attribute value
+                const valueValidation = this.validateAttributeValue(attrPattern, attrValue);
+                if (!valueValidation.isValid) {
+                    return valueValidation;
+                }
             }
         }
 
-        // Check for required attributes that are missing
-        for (const attrPattern of attributePatterns) {
-            const attrName = attrPattern.getName();
-            if (attrName && this.isAttributeRequired(attrPattern) && !attributes.has(attrName)) {
-                return ValidationResult.error(`Required attribute '${attrName}' missing on element '${element}'`);
+        // Check for required attributes that are missing (only in validating mode)
+        if (this.validating) {
+            for (const attrPattern of attributePatterns) {
+                const attrName = attrPattern.getName();
+                if (attrName && this.isAttributeRequired(attrPattern) && !attributes.has(attrName)) {
+                    return ValidationResult.error(`Required attribute '${attrName}' missing on element '${element}'`);
+                }
             }
         }
 
@@ -173,10 +183,10 @@ export class RelaxNGGrammar implements Grammar {
 
     private findElementPattern(elementName: string): RelaxNGPattern | undefined {
         if (!this.startPattern) return undefined;
-        return this.searchElementPattern(this.startPattern, elementName);
+        return this.searchElementPattern(this.startPattern, elementName, new Set());
     }
 
-    private searchElementPattern(pattern: RelaxNGPattern, targetElement: string): RelaxNGPattern | undefined {
+    private searchElementPattern(pattern: RelaxNGPattern, targetElement: string, visited: Set<string> = new Set()): RelaxNGPattern | undefined {
         if (pattern.getType() === RelaxNGPatternType.ELEMENT) {
             const patternName = pattern.getName();
             if (patternName === targetElement) {
@@ -188,9 +198,22 @@ export class RelaxNGGrammar implements Grammar {
                 return pattern;
             }
         }
+        
+        // Handle REF patterns by resolving them (with cycle detection)
+        if (pattern.getType() === RelaxNGPatternType.REF) {
+            const refName = pattern.getRefName();
+            if (refName && !visited.has(refName)) {
+                const definedPattern = this.defines.get(refName);
+                if (definedPattern) {
+                    const newVisited = new Set(visited);
+                    newVisited.add(refName);
+                    return this.searchElementPattern(definedPattern, targetElement, newVisited);
+                }
+            }
+        }
 
         for (const child of pattern.getChildren()) {
-            const result = this.searchElementPattern(child, targetElement);
+            const result = this.searchElementPattern(child, targetElement, visited);
             if (result) return result;
         }
 
@@ -232,6 +255,13 @@ export class RelaxNGGrammar implements Grammar {
         if (pattern.getType() === RelaxNGPatternType.ATTRIBUTE) {
             collector.push(pattern);
         }
+        
+        // For choice patterns, only collect attributes that are common to all branches
+        // or are in optional contexts
+        if (pattern.getType() === RelaxNGPatternType.CHOICE) {
+            // Don't traverse choice branches for attribute collection as they represent alternatives
+            return;
+        }
 
         for (const child of pattern.getChildren()) {
             this.collectAttributePatterns(child, collector);
@@ -239,9 +269,20 @@ export class RelaxNGGrammar implements Grammar {
     }
 
     private extractDefaultValue(attrPattern: RelaxNGPattern): string | undefined {
+        // Check for a:defaultValue attribute directly on the attribute pattern
+        const defaultValue = attrPattern.getAttribute('a:defaultValue');
+        if (defaultValue) {
+            return defaultValue;
+        }
+
+        // If pattern is optional, check the child attribute pattern
         if (attrPattern.getType() === RelaxNGPatternType.OPTIONAL) {
             const children = attrPattern.getChildren();
             if (children.length === 1 && children[0].getType() === RelaxNGPatternType.ATTRIBUTE) {
+                const childDefaultValue = children[0].getAttribute('a:defaultValue');
+                if (childDefaultValue) {
+                    return childDefaultValue;
+                }
                 return this.extractSingleValueFromAttribute(children[0]);
             }
         }

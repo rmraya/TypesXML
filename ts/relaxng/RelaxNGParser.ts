@@ -192,6 +192,7 @@ export class RelaxNGParser {
     private validateGrammarElement(element: XMLElement): void {
         const children = element.getChildren();
         let hasStart = false;
+        let hasIncludesOrExternal = false;
         
         for (const child of children) {
             const childName = this.getLocalName(child);
@@ -200,12 +201,14 @@ export class RelaxNGParser {
                     throw new Error('Grammar cannot have multiple start elements');
                 }
                 hasStart = true;
+            } else if (childName === 'include' || childName === 'externalRef') {
+                hasIncludesOrExternal = true;
             }
         }
         
-        // According to RelaxNG specification, a grammar element must have exactly one start element
-        if (!hasStart) {
-            throw new Error('Grammar element must contain a start element');
+        // Grammar must have start element OR includes/external references
+        if (!hasStart && !hasIncludesOrExternal) {
+            throw new Error('Grammar element must contain a start element or include/externalRef elements');
         }
     }
 
@@ -614,6 +617,15 @@ export class RelaxNGParser {
             pattern.setHref(hrefAttr.getValue());
         }
 
+        // Copy all attributes from XML element to pattern, including annotation attributes like a:defaultValue
+        const attributes = element.getAttributes();
+        for (const attr of attributes) {
+            const attrName = attr.getName();
+            const attrValue = attr.getValue();
+            // Store all attributes, especially annotation attributes from a: namespace
+            pattern.setAttribute(attrName, attrValue);
+        }
+
         // Handle ns attribute for nsName patterns
         if (patternType === RelaxNGPatternType.NS_NAME && nsAttr) {
             pattern.setNs(nsAttr.getValue());
@@ -722,12 +734,14 @@ export class RelaxNGParser {
         if (pattern.getType() === RelaxNGPatternType.REF) {
             const refName = pattern.getRefName();
             if (refName) {
-                if (path.has(refName)) {
-                    throw new Error(`Circular reference detected: ${Array.from(path).join(' -> ')} -> ${refName}`);
+                // Self-references are allowed in RelaxNG for recursive content models
+                // Only check for problematic infinite loops
+                if (path.has(refName) && path.size > 20) {
+                    throw new Error(`Potential infinite recursion detected: ${Array.from(path).join(' -> ')} -> ${refName}`);
                 }
                 
                 const referencedPattern = defines.get(refName);
-                if (referencedPattern) {
+                if (referencedPattern && !path.has(refName)) {
                     const newPath = new Set(path);
                     newPath.add(refName);
                     this.checkRecursion(referencedPattern, refName, newPath, defines);
