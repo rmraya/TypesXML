@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsc && cp ts/grammar/*.json dist/grammar/",
     "testDtd": "npm run build && node dist/tests/DTDTestSuite.js",
-    "testSchema": "npm run build && node dist/tests/XMLSchemaTestSuite.js"
+    "testSchema": "npm run build && node dist/tests/XMLSchemaTestSuite.js",
+    "testRelaxNG": "npm run build && node dist/tests/RelaxNGTestRunner.js"
   },
   "author": {
     "name": "Rodolfo M. Raya",

@@ -755,6 +755,23 @@ export class SAXParser {
             throw new Error(`Invalid XML characters found in processing instruction for XML ${this.xmlVersion}`);
         }
 
+        if (target === 'xml-model') {
+            const hrefMatch = data.match(/href\s*=\s*["']([^"']+)["']/);
+            const schematypensMatch = data.match(/schematypens\s*=\s*["']([^"']+)["']/);
+            
+            if (hrefMatch && schematypensMatch) {
+                const href = hrefMatch[1];
+                const schematypens = schematypensMatch[1];
+                
+                if (schematypens === 'http://relaxng.org/ns/structure/1.0') {
+                    if (this.grammarHandler) {
+                        // Pass the current file for relative path resolution
+                        this.grammarHandler.handleRelaxNGDetection(href, schematypens, this.currentFile);
+                    }
+                }
+            }
+        }
+
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
         this.contentHandler!.processingInstruction(target, data);

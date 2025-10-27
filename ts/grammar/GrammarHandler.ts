@@ -10,26 +10,24 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { dirname, isAbsolute, resolve } from 'path';
 import { existsSync } from 'fs';
+import { dirname, isAbsolute, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { Catalog } from '../Catalog';
 import { DTDGrammar } from '../dtd/DTDGrammar';
-import { DTDComposite } from './DTDComposite';
 import { DTDParser } from '../dtd/DTDParser';
+import { RelaxNGParser } from '../relaxng/RelaxNGParser';
 import { XMLSchemaParser } from '../schema/XMLSchemaParser';
 import { CompositeGrammar } from './CompositeGrammar';
+import { DTDComposite } from './DTDComposite';
 import { Grammar } from './Grammar';
-
-interface SchemaToLoad {
-    namespace: string;
-    location: string;
-}
+import { RelaxNGComposite } from './RelaxNGComposite';
 
 export class GrammarHandler {
 
     private compositeGrammar: CompositeGrammar;
     private dtdComposite: DTDComposite | undefined; // Primary DTD grammar
+    private relaxNGComposite: RelaxNGComposite | undefined;
     private catalog?: Catalog;
     private currentFile?: string;
     private silent: boolean = false;
@@ -62,11 +60,12 @@ export class GrammarHandler {
     }
 
     getGrammar(): Grammar {
-        // Return DTD grammar if available (DTD takes precedence over schemas)
+        if (this.relaxNGComposite) {
+            return this.relaxNGComposite;
+        }
         if (this.dtdComposite) {
             return this.dtdComposite;
         }
-        // Otherwise return composite grammar for XML Schema handling
         return this.compositeGrammar;
     }
 
@@ -482,6 +481,85 @@ export class GrammarHandler {
         // Only validate root documents, not schemas loaded as dependencies
         const isRootDocument = this.foundNamespaces.length === 0;
         return isRootDocument;
+    }
+
+    handleRelaxNGDetection(href: string, schematypens: string, currentFile?: string): void {
+        if (schematypens !== 'http://relaxng.org/ns/structure/1.0') {
+            throw new Error(`Unsupported schema type: ${schematypens}`);
+        }
+
+        try {
+            if (!this.relaxNGComposite) {
+                this.relaxNGComposite = RelaxNGComposite.getInstance();
+                this.relaxNGComposite.setValidating(this.validating);
+            }
+
+            let resolvedLocation: string | undefined;
+
+            // Step 1: Try to resolve href relative to the current XML file first
+            if (href) {
+                if (isAbsolute(href)) {
+                    // Absolute path - use as is
+                    resolvedLocation = href;
+                } else if (currentFile || this.currentFile) {
+                    // Relative path - resolve relative to XML file location
+                    const xmlFileDir = currentFile ? dirname(currentFile) : dirname(this.currentFile!);
+                    const relativePath = resolve(xmlFileDir, href);
+                    if (existsSync(relativePath)) {
+                        resolvedLocation = relativePath;
+                    }
+                }
+                // If no current file context available, skip relative resolution
+            }
+
+            // Step 2: If relative resolution failed, try catalog resolution
+            if (!resolvedLocation && this.catalog && href) {
+                // Try URI resolution first (most common for RelaxNG)
+                resolvedLocation = this.catalog.matchURI(href);
+
+                // If URI resolution fails, try system ID resolution
+                if (!resolvedLocation) {
+                    resolvedLocation = this.catalog.matchSystem(href);
+                }
+            }
+
+            if (resolvedLocation && existsSync(resolvedLocation)) {
+                try {
+                    const relaxNGParser = new RelaxNGParser();
+                    relaxNGParser.setValidating(this.validating);
+
+                    if (this.catalog) {
+                        relaxNGParser.setCatalog(this.catalog);
+                    }
+
+                    const grammar = relaxNGParser.parseGrammar(resolvedLocation);
+                    this.relaxNGComposite.addGrammar(grammar);
+                } catch (parseError) {
+                    // In composite mode, parsing failures are expected for non-RelaxNG schemas
+                    const errorMessage = (parseError as Error).message;
+                    if (errorMessage.includes('Not a RelaxNG schema')) {
+                        if (!this.silent) {
+                            console.log(`Schema at ${resolvedLocation} is not a RelaxNG schema, skipping`);
+                        }
+                        return; // Gracefully skip non-RelaxNG schemas
+                    }
+                    // Re-throw other parsing errors
+                    throw parseError;
+                }
+            } else {
+                if (!this.silent) {
+                    console.warn(`RelaxNG schema file not found: ${resolvedLocation || href}`);
+                }
+            }
+        } catch (error) {
+            if (this.validating) {
+                throw new Error(`RelaxNG parsing error: ${(error as Error).message}`);
+            } else {
+                if (!this.silent) {
+                    console.warn('RelaxNG parsing warning:', (error as Error).message);
+                }
+            }
+        }
     }
 }
 
