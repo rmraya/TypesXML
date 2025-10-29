@@ -1,15 +1,7 @@
 # TypesXML
-
-XML library written in TypeScript with multi-schema validation framework
-
-## Documentation
-
-- **[Complete API Documentation](./API_DOCUMENTATION.md)** - Comprehensive guide with examples and API reference
-- **[Quick Reference Guide](./QUICK_REFERENCE.md)** - Cheat sheet for common operations and usage patterns
-- **[Developer & AI Reference](./AI_AGENT_GUIDELINES.md)** - Comprehensive technical reference with performance guidance and best practices
-- **[Conformance Tests](./CONFORMANCE_TESTS.md)** - W3C test suite integration for DTD and XML Schema validation testing
-- **[Troubleshooting Guide](./TROUBLESHOOTING.md)** - Common issues, solutions, and debugging techniques
-- **[Type Definitions](./API_TYPES.d.ts)** - TypeScript type definitions for better IDE support
+<p>
+    <img src="./typesXML.png" alt="TypesXML logo" width="90" style="float:left; margin-right: 16px;"/> TypesXML is an open-source TypeScript XML library providing a standards-compliant XML 1.0/1.1 parser with both streaming (SAX) and in-memory (DOM) APIs, DTD and XML Schema validation, OASIS catalog–based resolution and entity handling, namespace-aware processing, broad encoding support, and utilities for writing and testing XML. It emphasizes correctness, extensibility, efficient handling of large documents, and clear error reporting for robust XML processing.<br/>&nbsp;<br/>
+</p>
 
 ## Licensing
 
@@ -21,7 +13,7 @@ TypesXML implements XML 1.0/1.1 parsing with an extensible Grammar framework sup
 
 ### Grammar Framework
 
-The Grammar interface provides schema validation support for:
+The Grammar interface provides validation support for:
 
 - **DTD Validation**: Document Type Definition support with validation
 - **XML Schema**: Implementation with 76% W3C test suite success rate, including complex types, sequences, choices, and namespace-aware validation
@@ -70,16 +62,6 @@ The `DOMBuilder` class implements the `ContentHandler` interface and builds a DO
 - **OASIS Catalog Support**: XML Catalog resolution for DTD and XML Schema references
 - **Entity Resolution**: Support for XML entities and catalog-based resolution
 - **Namespace Support**: XML namespace handling with QualifiedName system
-
-### Grammar-Based Validation Framework
-
-- **Extensible Grammar Interface**: Abstraction supporting multiple schema types
-- **DTD Grammar**: Document Type Definition implementation
-- **XML Schema Support**: Implementation with complex type validation, inheritance, and namespace-aware processing
-- **Namespace-Aware Processing**: QualifiedName system for namespace-aware validation
-- **Validation Context**: Error reporting
-- **Validation Modes**: Configurable strictness levels for different use cases
-- **Performance**: Validation algorithms with element consumption tracking
 
 ### DTD Support
 
