@@ -109,7 +109,6 @@ export class XMLSchemaTestSuite {
         console.log(`🔇 Suppressed ${suppressedOutput.length} verbose parser messages for cleaner output`);
         console.log('');
         this.printResults();
-        this.printErrorAnalysis();
         this.saveResults();
     }
 
@@ -1105,37 +1104,6 @@ export class XMLSchemaTestSuite {
         }
 
         return recommendations;
-    }
-
-    private printErrorAnalysis(): void {
-        console.log('🔍 Schema Validation Error Analysis');
-        console.log('   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`   • Total Unique Error Types: ${this.results.errorAnalysis.totalUniqueErrors}`);
-        
-        if (this.results.errorAnalysis.mostCommonError) {
-            console.log(`   • Most Common Error: "${this.results.errorAnalysis.mostCommonError}" (${this.results.errorAnalysis.mostCommonErrorCount} occurrences)`);
-        }
-        
-        console.log('');
-        console.log('   📊 Error Categories (by frequency):');
-        for (let i = 0; i < this.results.errorAnalysis.errorCategories.length && i < 7; i++) {
-            const category = this.results.errorAnalysis.errorCategories[i];
-            console.log(`      ${i + 1}. ${category}`);
-        }
-        
-        console.log('');
-        console.log('   💡 Top Recommendations:');
-        for (let i = 0; i < this.results.errorAnalysis.recommendations.length && i < 5; i++) {
-            console.log(`      ${i + 1}. ${this.results.errorAnalysis.recommendations[i]}`);
-        }
-        
-        console.log('');
-        console.log('   📋 Next Steps:');
-        console.log('      • Review w3c-schema-test-report.json for detailed error information');
-        console.log('      • Focus on the most frequent error categories first');
-        console.log('      • Use example files from the report to reproduce issues');
-        console.log('      • Re-run tests after fixes to measure improvement');
-        console.log('');
     }
 }
 
