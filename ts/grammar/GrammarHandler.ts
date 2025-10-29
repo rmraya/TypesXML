@@ -10,36 +10,32 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { dirname, isAbsolute, resolve } from 'path';
 import { existsSync } from 'fs';
+import { dirname, isAbsolute, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { Catalog } from '../Catalog';
 import { DTDGrammar } from '../dtd/DTDGrammar';
-import { DTDComposite } from './DTDComposite';
 import { DTDParser } from '../dtd/DTDParser';
 import { XMLSchemaParser } from '../schema/XMLSchemaParser';
 import { CompositeGrammar } from './CompositeGrammar';
+import { DTDComposite } from './DTDComposite';
 import { Grammar } from './Grammar';
-
-interface SchemaToLoad {
-    namespace: string;
-    location: string;
-}
 
 export class GrammarHandler {
 
     private compositeGrammar: CompositeGrammar;
-    private dtdComposite: DTDComposite | undefined; // Primary DTD grammar
+    private dtdComposite: DTDComposite | undefined;
     private catalog?: Catalog;
     private currentFile?: string;
     private silent: boolean = false;
     private foundNamespaces: string[] = [];
-    private validating: boolean = false; // Track validating mode
+    private validating: boolean = false;
+    private includeDefaultAttributes: boolean = true;
+    private relaxNGDeepSearch: boolean = false;
 
-    constructor(defaultNamespace?: string) {
+    constructor() {
         this.compositeGrammar = CompositeGrammar.getInstance();
 
-        // Set up cross-schema resolver for XMLSchemaParser
         const schemaParser = XMLSchemaParser.getInstance();
         schemaParser.setCrossSchemaResolver((qualifiedName: string) => {
             return this.compositeGrammar.resolveCrossSchemaGroup(qualifiedName);
@@ -47,6 +43,28 @@ export class GrammarHandler {
         schemaParser.setCrossSchemaAttributeGroupResolver((qualifiedName: string) => {
             return this.compositeGrammar.resolveAttributeGroup(qualifiedName);
         });
+    }
+
+    initialize(): void {
+        CompositeGrammar.resetInstance();
+        DTDComposite.resetInstance();
+
+        this.compositeGrammar = CompositeGrammar.getInstance();
+        this.compositeGrammar.setIncludeDefaultAttributes(this.includeDefaultAttributes);
+        this.dtdComposite = undefined;
+        this.foundNamespaces = [];
+    }
+
+    setIncludeDefaultAttributes(include: boolean): void {
+        this.includeDefaultAttributes = include;
+
+        if (this.dtdComposite && typeof (this.dtdComposite as any).setIncludeDefaultAttributes === 'function') {
+            (this.dtdComposite as any).setIncludeDefaultAttributes(include);
+        }
+
+        if (typeof (this.compositeGrammar as any).setIncludeDefaultAttributes === 'function') {
+            (this.compositeGrammar as any).setIncludeDefaultAttributes(include);
+        }
     }
 
     setCatalog(catalog: Catalog): void {
@@ -62,21 +80,17 @@ export class GrammarHandler {
     }
 
     getGrammar(): Grammar {
-        // Return DTD grammar if available (DTD takes precedence over schemas)
         if (this.dtdComposite) {
             return this.dtdComposite;
         }
-        // Otherwise return composite grammar for XML Schema handling
         return this.compositeGrammar;
     }
 
     getLoadedGrammars(): Array<{ namespace: string, type: string, elementCount?: number, typeCount?: number }> {
         const grammars = this.compositeGrammar.getLoadedGrammarList();
-
-        // Add DTD grammar info if available
         if (this.dtdComposite) {
             grammars.push({
-                namespace: '', // DTD has no namespace
+                namespace: '',
                 type: 'dtd',
                 elementCount: this.dtdComposite.getElementDeclMap().size
             });
@@ -96,9 +110,6 @@ export class GrammarHandler {
 
     setValidating(validating: boolean): void {
         this.validating = validating;
-
-        // When validating mode changes, we need to apply it to any existing XMLSchemaGrammar instances
-        // that are already loaded in the CompositeGrammar
         const allGrammars = this.compositeGrammar.getGrammars();
         for (const [namespace, grammar] of allGrammars) {
             if (grammar.getGrammarType().toString() === 'xmlschema') {
@@ -114,11 +125,11 @@ export class GrammarHandler {
     startDTDProcessing(name: string, publicId: string, systemId: string): void {
         // Get singleton DTD composite when DOCTYPE is detected
         this.dtdComposite = DTDComposite.getInstance();
+        this.dtdComposite.setIncludeDefaultAttributes(this.includeDefaultAttributes);
         this.dtdComposite.reset(); // Reset state for new document
     }
 
     processDoctype(name: string, publicId: string, systemId: string, internalSubset: string): void {
-        // DTDComposite should already be created by startDTDProcessing
         if (!this.dtdComposite) {
             this.dtdComposite = DTDComposite.getInstance();
         }
@@ -138,9 +149,6 @@ export class GrammarHandler {
                 this.dtdComposite.addExternalDTD(externalDTD);
             }
         }
-
-        // DTDComposite is now the primary grammar - no need to add to CompositeGrammar
-        // CompositeGrammar remains focused on XML Schema handling only
     }
 
     processNamespaces(attributesMap: Map<string, string>): void {

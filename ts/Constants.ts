@@ -30,4 +30,10 @@ export class Constants {
     static readonly ELEMENT_DECL_NODE: number = 12;
     static readonly INTERNAL_SUBSET_NODE: number = 13;
     static readonly NOTATION_DECL_NODE: number = 14;
+
+    // namespace constants
+    static readonly XMLNS_NS: string = 'http://www.w3.org/2000/xmlns/';
+    static readonly XML_NS: string = 'http://www.w3.org/XML/1998/namespace';
+    static readonly XSD_NS: string = 'http://www.w3.org/2001/XMLSchema-datatypes';
+
 }

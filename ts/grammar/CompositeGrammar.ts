@@ -27,6 +27,7 @@ export class CompositeGrammar implements Grammar {
     private prefixToNamespace: Map<string, string> = new Map<string, string>();
     private defaultNamespace: string = '';
     private xsiTypeMap: Map<string, string> = new Map();
+    private includeDefaultAttributes: boolean = true;
 
     private constructor() {
         this.loadPrecompiledGrammars();
@@ -106,6 +107,10 @@ export class CompositeGrammar implements Grammar {
         const key: string = namespaceURI || '';
 
         this.grammars.set(key, grammar);
+
+        if (typeof (grammar as any).setIncludeDefaultAttributes === 'function') {
+            (grammar as any).setIncludeDefaultAttributes(this.includeDefaultAttributes);
+        }
 
         // Set as primary grammar if it's the default namespace or first grammar added
         if (!this.primaryGrammar || (namespaceURI === this.defaultNamespace)) {
@@ -234,6 +239,10 @@ export class CompositeGrammar implements Grammar {
     }
 
     getDefaultAttributes(elementName: string): Map<string, string> {
+        if (!this.includeDefaultAttributes) {
+            return new Map();
+        }
+
         const colonIndex: number = elementName.indexOf(':');
         const prefix: string = colonIndex !== -1 ? elementName.substring(0, colonIndex) : '';
         const namespaceURI: string = prefix ? this.resolvePrefix(prefix) : '';
@@ -250,6 +259,16 @@ export class CompositeGrammar implements Grammar {
         }
 
         return grammar.getDefaultAttributes?.(elementName) || new Map();
+    }
+
+    setIncludeDefaultAttributes(include: boolean): void {
+        this.includeDefaultAttributes = include;
+
+        this.grammars.forEach((grammar: Grammar) => {
+            if (typeof (grammar as any).setIncludeDefaultAttributes === 'function') {
+                (grammar as any).setIncludeDefaultAttributes(include);
+            }
+        });
     }
 
     validateElement(elementName: string, context: ValidationContext): ValidationResult {
@@ -615,9 +634,6 @@ export class CompositeGrammar implements Grammar {
         return undefined;
     }
 
-    /**
-     * Resolve attribute group definition across all grammars
-     */
     resolveAttributeGroup(attributeGroupName: string): AttributeGroup | undefined {
         // First try to resolve in all XMLSchema grammars
         for (const [namespace, grammar] of this.grammars) {
