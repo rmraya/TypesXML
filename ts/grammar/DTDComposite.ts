@@ -24,6 +24,7 @@ export class DTDComposite implements Grammar {
     private internalDTD: DTDGrammar | undefined;
     private externalDTDs: DTDGrammar[] = [];
     private sharedParameterEntities: Map<string, EntityDecl> = new Map();
+    private includeDefaultAttributes: boolean = true;
     
     private constructor() {
         // Initialize with predefined entities like DTDGrammar does
@@ -59,6 +60,10 @@ export class DTDComposite implements Grammar {
 
     setValidating(validating: boolean): void {
         this.validating = validating;
+    }
+
+    setIncludeDefaultAttributes(include: boolean): void {
+        this.includeDefaultAttributes = include;
     }
 
     addInternalDTD(dtdGrammar: DTDGrammar): void {
@@ -301,6 +306,10 @@ export class DTDComposite implements Grammar {
     }
 
     getDefaultAttributes(element: string): Map<string, string> {
+        if (!this.includeDefaultAttributes) {
+            return new Map();
+        }
+
         // Combine default attributes from all DTDs, with internal taking precedence
         const combinedDefaults = new Map<string, string>();
 

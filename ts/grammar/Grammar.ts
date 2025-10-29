@@ -17,7 +17,8 @@ export class AttributeInfo {
         public datatype: string,
         public use: AttributeUse,
         public defaultValue?: string,
-        public fixedValue?: string
+        public fixedValue?: string,
+        public namespace?: string | null
     ) { }
 }
 

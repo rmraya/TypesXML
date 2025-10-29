@@ -5,11 +5,9 @@ dist/
 .vscode/
 .scannerwork/
 ts/test.ts
-ts/testDecl.ts
 notes/
 catalog/
 tests/xmlschema2006-11-06
 tests/xmltest
 w3c-schema-test-report.json
 dtd-test-report.json
-test-output/

@@ -19,7 +19,7 @@ import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
-import { Grammar } from "./grammar/Grammar";
+import { AttributeInfo, Grammar } from "./grammar/Grammar";
 import { GrammarHandler } from "./grammar/GrammarHandler";
 
 export class SAXParser {
@@ -46,6 +46,7 @@ export class SAXParser {
     private includeDefaultAttributes: boolean = true;
     private childrenNames: Array<string[]> = [];
     namespaceMap: Map<string, string>;
+    private namespaceStack: Array<Map<string, string>>;
     ignoreGrammars: boolean = false;
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
@@ -61,6 +62,8 @@ export class SAXParser {
         this.silent = false;
         this.grammarHandler = new GrammarHandler();
         this.namespaceMap = new Map<string, string>();
+        this.namespaceStack = [];
+        this.resetNamespaceContext();
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -114,6 +117,8 @@ export class SAXParser {
         if (!this.contentHandler) {
             throw new Error('ContentHandler not set');
         }
+
+        this.resetNamespaceContext();
 
         // Resolve URI/URL to local file path
         const resolvedPath: string = this.resolveURIToPath(path);
@@ -435,14 +440,45 @@ export class SAXParser {
         this.childrenNames.push([]);
 
         let rest: string = '';
-        while (!this.lookingAt('>') && !this.lookingAt('/>')) {
-            rest += this.buffer.charAt(this.pointer++);
+        let quoteChar: string | undefined;
+        while (true) {
+            if (this.pointer >= this.buffer.length) {
+                if (this.reader?.dataAvailable()) {
+                    this.buffer += this.reader.read();
+                } else {
+                    break;
+                }
+            }
+
+            const currentChar = this.buffer.charAt(this.pointer);
+
+            if (!quoteChar) {
+                if (currentChar === '"' || currentChar === '\'') {
+                    quoteChar = currentChar;
+                    rest += currentChar;
+                    this.pointer++;
+                } else if (this.lookingAt('/>') || this.lookingAt('>')) {
+                    break;
+                } else {
+                    rest += currentChar;
+                    this.pointer++;
+                }
+            } else {
+                rest += currentChar;
+                this.pointer++;
+                if (currentChar === quoteChar) {
+                    quoteChar = undefined;
+                }
+            }
+
             if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
                 this.buffer += this.reader?.read();
             }
         }
         rest = rest.trim();
         let attributesMap: Map<string, string> = this.parseAttributes(rest);
+
+        this.pushNamespaceContext(attributesMap);
 
         // Apply DTD-aware attribute value normalization and add default attributes
         attributesMap = this.normalizeAndDefaultAttributes(name, attributesMap);
@@ -504,6 +540,7 @@ export class SAXParser {
             this.elementNameStack.pop(); // Remove from stack for self-closing tags
             this.xmlSpaceStack.pop(); // Remove xml:space state for self-closing tags
             this.childrenNames.pop(); // no children for self-closing tags
+            this.popNamespaceContext();
             this.pointer += 2; // skip '/>'
         } else {
             this.pointer++; // skip '>'
@@ -570,6 +607,7 @@ export class SAXParser {
         if (this.childrenNames.length > 0) {
             this.childrenNames.pop();
         }
+        this.popNamespaceContext();
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
@@ -756,20 +794,7 @@ export class SAXParser {
         }
 
         if (target === 'xml-model') {
-            const hrefMatch = data.match(/href\s*=\s*["']([^"']+)["']/);
-            const schematypensMatch = data.match(/schematypens\s*=\s*["']([^"']+)["']/);
-            
-            if (hrefMatch && schematypensMatch) {
-                const href = hrefMatch[1];
-                const schematypens = schematypensMatch[1];
-                
-                if (schematypens === 'http://relaxng.org/ns/structure/1.0') {
-                    if (this.grammarHandler) {
-                        // Pass the current file for relative path resolution
-                        this.grammarHandler.handleRelaxNGDetection(href, schematypens, this.currentFile);
-                    }
-                }
-            }
+            // implement support for extracting default attributes from RelaxNG schemas
         }
 
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
@@ -1150,28 +1175,29 @@ export class SAXParser {
         }
     }
     normalizeAndDefaultAttributes(elementName: string, attributesMap: Map<string, string>): Map<string, string> {
-        // Get attribute declarations using Grammar interface
-        const attributeInfos: Map<string, any> = this.grammarHandler.getGrammar().getElementAttributes(elementName);
+        const attributeInfos: Map<string, AttributeInfo> = this.grammarHandler.getGrammar().getElementAttributes(elementName);
 
         if (attributeInfos.size === 0) {
-            return attributesMap; // No attribute info, return as-is
+            return attributesMap;
         }
 
-        // Create result map starting with parsed attributes
         const result: Map<string, string> = new Map<string, string>(attributesMap);
 
-        // Process each declared attribute
-        attributeInfos.forEach((attributeInfo) => {
-            const currentValue: string | undefined = result.get(attributeInfo.name);
+        attributeInfos.forEach((attributeInfo: AttributeInfo) => {
+            const matchingKey = this.findAttributeKeyForInfo(result, attributeInfo);
 
-            if (currentValue !== undefined) {
-                // Attribute exists - apply type-specific normalization
-                const normalizedValue: string = this.normalizeAttributeByType(currentValue, attributeInfo.datatype);
-                result.set(attributeInfo.name, normalizedValue);
-            } else if (attributeInfo.defaultValue) {
-                // Attribute not present but has default value - add it
-                const defaultValue: string = this.normalizeAttributeByType(attributeInfo.defaultValue, attributeInfo.datatype);
-                result.set(attributeInfo.name, defaultValue);
+            if (matchingKey !== undefined) {
+                const currentValue = result.get(matchingKey);
+                if (currentValue !== undefined) {
+                    const normalizedValue: string = this.normalizeAttributeByType(currentValue, attributeInfo.datatype);
+                    result.set(matchingKey, normalizedValue);
+                }
+            } else if (this.includeDefaultAttributes && attributeInfo.defaultValue !== undefined) {
+                const targetName = this.buildAttributeNameForInfo(attributeInfo);
+                if (!result.has(targetName)) {
+                    const defaultValue: string = this.normalizeAttributeByType(attributeInfo.defaultValue, attributeInfo.datatype);
+                    result.set(targetName, defaultValue);
+                }
             }
         });
 
@@ -1189,6 +1215,127 @@ export class SAXParser {
                 .replace(/[\t\n\r]/g, ' ');                        // Then individual tab, LF, CR
             return normalizedValue.replace(/\s+/g, ' ').trim();    // Collapse and trim
         }
+    }
+
+    private resetNamespaceContext(): void {
+        this.namespaceStack = [this.createBaseNamespaceContext()];
+        this.namespaceMap = new Map<string, string>(this.namespaceStack[0]);
+    }
+
+    private createBaseNamespaceContext(): Map<string, string> {
+        const base = new Map<string, string>();
+        base.set('xml', 'http://www.w3.org/XML/1998/namespace');
+        base.set('xmlns', 'http://www.w3.org/2000/xmlns/');
+        return base;
+    }
+
+    private pushNamespaceContext(attributes: Map<string, string>): void {
+        if (this.namespaceStack.length === 0) {
+            this.resetNamespaceContext();
+        }
+
+        const parentContext = this.namespaceStack[this.namespaceStack.length - 1];
+        const newContext = new Map<string, string>(parentContext);
+
+        attributes.forEach((value, key) => {
+            if (key === 'xmlns') {
+                newContext.set('', value);
+            } else if (key.startsWith('xmlns:')) {
+                const prefix = key.substring(6);
+                newContext.set(prefix, value);
+            }
+        });
+
+        this.namespaceStack.push(newContext);
+        this.namespaceMap = new Map<string, string>(newContext);
+    }
+
+    private popNamespaceContext(): void {
+        if (this.namespaceStack.length > 1) {
+            this.namespaceStack.pop();
+        }
+
+        const currentContext = this.namespaceStack[this.namespaceStack.length - 1] ?? this.createBaseNamespaceContext();
+        this.namespaceMap = new Map<string, string>(currentContext);
+    }
+
+    private findAttributeKeyForInfo(attributes: Map<string, string>, attributeInfo: AttributeInfo): string | undefined {
+        if (attributes.has(attributeInfo.name)) {
+            return attributeInfo.name;
+        }
+
+        const localName = this.extractLocalName(attributeInfo.name);
+
+        if (!attributeInfo.namespace) {
+            if (attributes.has(localName)) {
+                return localName;
+            }
+            return undefined;
+        }
+
+        for (const key of attributes.keys()) {
+            const resolved = this.resolveAttributeNamespace(key);
+            if (resolved.namespace === attributeInfo.namespace && resolved.localName === localName) {
+                return key;
+            }
+        }
+
+        return undefined;
+    }
+
+    private resolveAttributeNamespace(attributeName: string): { localName: string; namespace: string | null } {
+        const colonIndex = attributeName.indexOf(':');
+        if (colonIndex === -1) {
+            return { localName: attributeName, namespace: null };
+        }
+
+        const prefix = attributeName.substring(0, colonIndex);
+        const localName = attributeName.substring(colonIndex + 1);
+
+        if (prefix === 'xml') {
+            return { localName, namespace: 'http://www.w3.org/XML/1998/namespace' };
+        }
+        if (prefix === 'xmlns') {
+            return { localName, namespace: 'http://www.w3.org/2000/xmlns/' };
+        }
+
+        const namespace = this.namespaceMap.get(prefix) ?? null;
+        return { localName, namespace };
+    }
+
+    private extractLocalName(name: string): string {
+        const colonIndex = name.indexOf(':');
+        if (colonIndex === -1) {
+            return name;
+        }
+        return name.substring(colonIndex + 1);
+    }
+
+    private findPrefixForNamespaceInContext(namespace: string): string | undefined {
+        for (const [prefix, uri] of this.namespaceMap.entries()) {
+            if (uri === namespace) {
+                return prefix;
+            }
+        }
+        return undefined;
+    }
+
+    private buildAttributeNameForInfo(attributeInfo: AttributeInfo): string {
+        if (attributeInfo.name.includes(':')) {
+            return attributeInfo.name;
+        }
+
+        const localName = this.extractLocalName(attributeInfo.name);
+
+        if (!attributeInfo.namespace) {
+            return localName;
+        }
+
+        const prefix = this.findPrefixForNamespaceInContext(attributeInfo.namespace);
+        if (prefix && prefix.length > 0) {
+            return `${prefix}:${localName}`;
+        }
+        return localName;
     }
 
     startCDATA() {
