@@ -269,7 +269,7 @@ export class GrammarHandler {
                 } catch (extractError) {
                     if (this.validating) {
                         // In validating mode, external DTD extraction failures can be fatal
-                        throw new Error(`External DTD extraction failed for '${systemId}': ${(extractError as Error).message}`);
+                        throw new Error('External DTD extraction failed for ' + systemId + ' (' + location + '): ' + (extractError as Error).message);
                     } else {
                         // In non-validating mode, log warning and continue
                         if (!this.silent) {

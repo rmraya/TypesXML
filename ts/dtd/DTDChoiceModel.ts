@@ -53,7 +53,7 @@ export class DTDChoiceModel implements DTDContentModel {
             // Only check name if choice is DTDElementNameParticle
             if (choice instanceof DTDElementNameParticle) {
                 const name = choice.getName();
-                if (name !== '#PCDATA' && !XMLUtils.isValidNCName(name)) {
+                if (name !== '#PCDATA' && !XMLUtils.isValidXMLName(name)) {
                     return false;
                 }
             }

@@ -10,8 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { DTDContentModel } from './DTDContentModel';
 import { XMLUtils } from '../XMLUtils';
+import { DTDContentModel } from './DTDContentModel';
 
 export class DTDElementNameParticle implements DTDContentModel {
 
@@ -45,7 +45,7 @@ export class DTDElementNameParticle implements DTDContentModel {
             return true;
         }
         // Name must be non-empty and valid NCName
-        return !!this.name && XMLUtils.isValidNCName(this.name);
+        return !!this.name && XMLUtils.isValidXMLName(this.name);
     }
 
     toBNF(): string {

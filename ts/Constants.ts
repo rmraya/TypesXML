@@ -35,5 +35,5 @@ export class Constants {
     static readonly XMLNS_NS: string = 'http://www.w3.org/2000/xmlns/';
     static readonly XML_NS: string = 'http://www.w3.org/XML/1998/namespace';
     static readonly XSD_NS: string = 'http://www.w3.org/2001/XMLSchema-datatypes';
-
+    static readonly RELAXNG_NS_URI: string = 'http://relaxng.org/ns/structure/1.0';
 }

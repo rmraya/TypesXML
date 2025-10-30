@@ -18,10 +18,21 @@ import { DTDElementNameParticle } from "./DTDElementNameParticle";
 import { DTDSequenceModel } from "./DTDSequenceModel";
 
 export class DTDContentModelParser {
-    // Parse a particle: group, mixed, or name
+
+    private tokens: DTDToken[];
+    private pos: number = 0;
+
+    constructor(input: string) {
+        const tokenizer = new DTDContentModelTokenizer(input);
+        this.tokens = tokenizer.tokenize();
+    }
+
     private parseParticle(): DTDContentModel {
-        const token = this.peek();
-        if (!token) throw new Error('Unexpected end of content model');
+        // Parse a particle: group, mixed, or name
+        const token: DTDToken | undefined = this.peek();
+        if (!token) {
+            throw new Error('Unexpected end of content model');
+        }
         if (token.type === '(') {
             this.next(); // always consume '('
             const nextToken = this.peek();
@@ -36,16 +47,11 @@ export class DTDContentModelParser {
             throw new Error('Expected (, or NAME in particle');
         }
     }
-    private tokens: DTDToken[];
-    private pos: number = 0;
-
-    constructor(input: string) {
-        const tokenizer = new DTDContentModelTokenizer(input);
-        this.tokens = tokenizer.tokenize();
-    }
 
     parse(): DTDContentModel {
-        if (this.tokens.length === 0) throw new Error('Empty content model');
+        if (this.tokens.length === 0) {
+            throw new Error('Empty content model');
+        }
         return this.parseParticle();
     }
 
@@ -53,11 +59,13 @@ export class DTDContentModelParser {
         // Assumes '(' already consumed
         let particles: DTDContentModel[] = [];
         let separator: string | null = null;
-        let expectParticle = true;
-        let lastWasSeparator = false;
+        let expectParticle: boolean = true;
+        let lastWasSeparator: boolean = false;
         while (true) {
-            const token = this.peek();
-            if (!token) throw new Error('Unexpected end of content model');
+            const token: DTDToken | undefined = this.peek();
+            if (!token) {
+                throw new Error('Unexpected end of content model');
+            }
             if (token.type === ')') {
                 // Allow single particle followed by ')'
                 this.next(); // consume ')'
@@ -69,7 +77,9 @@ export class DTDContentModelParser {
                     return this.parseMixed();
                 }
                 let particle = this.parseParticle();
-                if (!particle) throw new Error('Expected particle in group');
+                if (!particle) {
+                    throw new Error('Expected particle in group');
+                }
                 particles.push(particle);
                 expectParticle = false;
                 lastWasSeparator = false;
@@ -90,29 +100,26 @@ export class DTDContentModelParser {
                 }
             }
         }
-        if (particles.length === 0) throw new Error('Empty group not allowed');
+        if (particles.length === 0) {
+            throw new Error('Empty group not allowed');
+        }
         if (lastWasSeparator) {
             throw new Error('Trailing separator in group');
         }
         if (!separator && particles.length > 1) {
             throw new Error('Missing separator in group');
         }
-        let cardinality = '';
-        const nextToken = this.peek();
-        if (nextToken && nextToken.type === 'cardinality') {
-            cardinality = nextToken.value;
-            this.next();
-        }
+        let cardinality: string = this.parseCardinality();
         if (separator === '|') {
-            const model = new DTDChoiceModel(particles);
+            const model: DTDChoiceModel = new DTDChoiceModel(particles);
             model.cardinality = cardinality;
             return model;
         } else if (separator === ',') {
-            const model = new DTDSequenceModel(particles);
+            const model: DTDSequenceModel = new DTDSequenceModel(particles);
             model.cardinality = cardinality;
             return model;
         } else if (particles.length === 1) {
-            if ('cardinality' in particles[0]) {
+            if (cardinality && 'cardinality' in particles[0]) {
                 (particles[0] as any).cardinality = cardinality;
             }
             return particles[0];
@@ -120,11 +127,10 @@ export class DTDContentModelParser {
             throw new Error('Invalid group structure');
         }
     }
-    // Removed stray 'return model;' and misplaced closing brace
 
     private parseMixed(): DTDChoiceModel {
         this.expect('PCDATA');
-        let choice = new DTDChoiceModel();
+        let choice: DTDChoiceModel = new DTDChoiceModel();
         choice.addChoice(new DTDElementNameParticle('#PCDATA'));
         while (this.match('|')) {
             this.expect('|');
@@ -140,7 +146,7 @@ export class DTDContentModelParser {
             }
         }
         this.expect(')');
-        let cardinality = this.parseCardinality();
+        let cardinality: string = this.parseCardinality();
         // Accept (#PCDATA) and (#PCDATA|name|...)* as valid
         if (cardinality && cardinality !== '*') {
             throw new Error('Mixed content must end with )* or be (#PCDATA)');
@@ -150,11 +156,11 @@ export class DTDContentModelParser {
     }
 
     private parseNameParticle(): DTDElementNameParticle {
-        let name = this.expect('NAME').value;
-        if (!XMLUtils.isValidNCName(name)) {
+        let name: string = this.expect('NAME').value;
+        if (!XMLUtils.isValidXMLName(name)) {
             throw new Error('Invalid XML name in content model: ' + name);
         }
-        let cardinality = this.parseCardinality();
+        let cardinality: string = this.parseCardinality();
         return new DTDElementNameParticle(name, cardinality);
     }
 

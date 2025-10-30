@@ -15,11 +15,12 @@ import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "os";
 import { fileURLToPath } from "url";
 import { Catalog } from "./Catalog";
+import { Constants } from "./Constants";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
-import { AttributeInfo, Grammar } from "./grammar/Grammar";
+import { AttributeInfo, AttributeUse, Grammar } from "./grammar/Grammar";
 import { GrammarHandler } from "./grammar/GrammarHandler";
 
 export class SAXParser {
@@ -794,13 +795,35 @@ export class SAXParser {
         }
 
         if (target === 'xml-model') {
-            // implement support for extracting default attributes from RelaxNG schemas
+            // Extract default attributes from RelaxNG schemas
+            let atts: Map<string, string> = this.parseAttributes(data);
+            let href: string = '';
+            let schemaType: string = '';
+            for (let [key, value] of atts.entries()) {
+                if (key === 'href') {
+                    href = value;
+                }
+                if (key === 'schematypens') {
+                    schemaType = value;
+                }
+            }
+            if (href !== '' && Constants.RELAXNG_NS_URI === schemaType) {
+                try {
+                    this.parseRelaxNG(href);
+                } catch (e: Error | any) {
+                    // do nothing
+                }
+            }
         }
 
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
         this.contentHandler!.processingInstruction(target, data);
         this.inProcessingInstruction = false;
+    }
+
+    parseRelaxNG(href: string) {
+        // TODO Silently ignored, not implemented yet
     }
 
     parseDoctype() {
@@ -1192,7 +1215,9 @@ export class SAXParser {
                     const normalizedValue: string = this.normalizeAttributeByType(currentValue, attributeInfo.datatype);
                     result.set(matchingKey, normalizedValue);
                 }
-            } else if (this.includeDefaultAttributes && attributeInfo.defaultValue !== undefined) {
+            } else if (this.includeDefaultAttributes && attributeInfo.defaultValue !== undefined
+                && attributeInfo.use !== AttributeUse.IMPLIED
+                && attributeInfo.use !== AttributeUse.REQUIRED) {
                 const targetName = this.buildAttributeNameForInfo(attributeInfo);
                 if (!result.has(targetName)) {
                     const defaultValue: string = this.normalizeAttributeByType(attributeInfo.defaultValue, attributeInfo.datatype);

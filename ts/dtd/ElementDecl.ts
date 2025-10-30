@@ -12,6 +12,7 @@
 
 import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
+import { DTDContentModel } from "./DTDContentModel";
 import { DTDContentModelParser } from "./DTDContentModelParser";
 
 export class ElementDecl implements XMLNode {
@@ -31,10 +32,12 @@ export class ElementDecl implements XMLNode {
             return;
         }
         // Build and validate the content model using the complete parser
-        const parser = new DTDContentModelParser(this.contentSpec);
-        const model = parser.parse();
+        let simplified: string = this.contentSpec.replace('\n', ' ');
+        simplified = simplified.replace(/\s+/g, '').trim();
+        const parser: DTDContentModelParser = new DTDContentModelParser(simplified);
+        const model: DTDContentModel = parser.parse();
         if (!model.validate()) {
-            throw new Error(`Invalid content specification: ${this.contentSpec}`);
+            throw new Error('Invalid content specification: ' + simplified);
         }
     }
 
@@ -45,7 +48,7 @@ export class ElementDecl implements XMLNode {
     getContentSpec(): string {
         return this.contentSpec;
     }
-    
+
     getNodeType(): number {
         return Constants.ELEMENT_DECL_NODE;
     }
@@ -56,8 +59,8 @@ export class ElementDecl implements XMLNode {
 
     equals(node: XMLNode): boolean {
         if (node instanceof ElementDecl) {
-            return this.name === node.name && 
-                   this.contentSpec === node.contentSpec;
+            return this.name === node.name &&
+                this.contentSpec === node.contentSpec;
         }
         return false;
     }

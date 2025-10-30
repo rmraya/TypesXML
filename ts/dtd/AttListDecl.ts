@@ -37,95 +37,53 @@ export class AttListDecl implements XMLNode {
     }
 
     parseAttributes(text: string) {
-        let parts: string[] = this.split(text);
-        let index: number = 0;
-        while (index < parts.length) {
-            let name: string = parts[index++];
+        const parts: string[] = this.split(text);
+        const state = { index: 0 };
 
-            // Validate attribute name
+        while (state.index < parts.length) {
+            const name: string = parts[state.index++];
+            if (!name) {
+                continue;
+            }
+
             if (!XMLUtils.isValidXMLName(name)) {
                 throw new Error(`Invalid attribute name in ATTLIST declaration: "${name}"`);
             }
 
-            let attType: string = parts[index++];
+            if (state.index >= parts.length) {
+                throw new Error(`Missing attribute type for attribute "${name}"`);
+            }
+
+            let attType: string = this.readAttributeType(parts, state);
             let defaultDecl: string = '';
             let defaultValue: string = '';
 
-            if (AttListDecl.attTypes.includes(attType)) {
-                // Standard attribute type
-                if (index < parts.length) {
-                    let nextPart = parts[index++];
-                    if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
-                        defaultDecl = nextPart;
-                    } else if (nextPart === '#FIXED') {
-                        defaultDecl = nextPart;
-                        if (index < parts.length) {
-                            defaultValue = parts[index++];
-                            if (defaultValue.startsWith('"') && defaultValue.endsWith('"')) {
-                                defaultValue = defaultValue.substring(1, defaultValue.length - 1);
-                            }
-                        }
-                    } else if (nextPart && ((nextPart.startsWith('"') && nextPart.endsWith('"')) || (nextPart.startsWith("'") && nextPart.endsWith("'")))) {
-                        // Direct default value
-                        defaultDecl = nextPart;
-                        defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes
-                    } else {
-                        // Invalid: unquoted default value
-                        throw new Error(`Invalid attribute declaration: default value "${nextPart}" must be quoted`);
-                    }
-                }
-            } else {
-                if (attType === 'NOTATION') {
-                    // Parse the notations in the enumeration that follows
-                    if (index < parts.length) {
-                        let notations = parts[index++]; // This should be like "(notation1|notation2|notation3)"
-                        attType = 'NOTATION ' + notations; // Store the full notation enumeration as the type
-                        if (index < parts.length) {
-                            let nextPart = parts[index++];
-                            if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
-                                defaultDecl = nextPart;
-                            } else if (nextPart === '#FIXED') {
-                                defaultDecl = nextPart;
-                                if (index < parts.length) {
-                                    defaultValue = parts[index++];
-                                    if (defaultValue.startsWith('"') && defaultValue.endsWith('"')) {
-                                        defaultValue = defaultValue.substring(1, defaultValue.length - 1);
-                                    }
-                                }
-                            } else if (nextPart && nextPart.startsWith('"') && nextPart.endsWith('"')) {
-                                // Direct default value
-                                defaultDecl = nextPart;
-                                defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes
-                            } else {
-                                defaultDecl = nextPart || '';
-                            }
-                        }
-                    }
-                } else {
-                    // Handle other enumeration types (values in parentheses)
-                    if (index < parts.length) {
-                        let nextPart = parts[index++];
-                        if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
-                            defaultDecl = nextPart;
-                        } else if (nextPart === '#FIXED') {
-                            defaultDecl = nextPart;
-                            if (index < parts.length) {
-                                defaultValue = parts[index++];
-                                if (defaultValue.startsWith('"') && defaultValue.endsWith('"')) {
-                                    defaultValue = defaultValue.substring(1, defaultValue.length - 1);
-                                }
-                            }
-                        } else if (nextPart && nextPart.startsWith('"') && nextPart.endsWith('"')) {
-                            // Direct default value
-                            defaultDecl = nextPart;
-                            defaultValue = nextPart.substring(1, nextPart.length - 1); // Remove quotes
+            if (state.index < parts.length) {
+                const nextPart = parts[state.index];
+                if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
+                    defaultDecl = nextPart;
+                    state.index++;
+                } else if (nextPart === '#FIXED') {
+                    defaultDecl = nextPart;
+                    state.index++;
+                    if (state.index < parts.length) {
+                        const valueToken = parts[state.index++];
+                        if (this.isQuotedValue(valueToken)) {
+                            defaultValue = this.trimQuotes(valueToken);
                         } else {
-                            defaultDecl = nextPart || '';
+                            defaultValue = valueToken;
                         }
                     }
+                } else if (nextPart && this.isQuotedValue(nextPart)) {
+                    defaultDecl = nextPart;
+                    defaultValue = this.trimQuotes(nextPart);
+                    state.index++;
+                } else if (nextPart) {
+                    throw new Error(`Invalid attribute declaration: default value "${nextPart}" must be quoted`);
                 }
             }
-            let att: AttDecl = new AttDecl(name, attType, defaultDecl, defaultValue);
+
+            const att: AttDecl = new AttDecl(name, attType, defaultDecl, defaultValue);
             this.attributes.set(name, att);
         }
     }
@@ -134,19 +92,19 @@ export class AttListDecl implements XMLNode {
         let result: string[] = [];
         let word: string = '';
         let inQuotes: boolean = false;
+        let quoteChar: string = '';
 
         for (let i: number = 0; i < text.length; i++) {
             let c: string = text.charAt(i);
 
-            if (c === '"' && !inQuotes) {
-                // Start of quoted string
+            if ((c === '"' || c === "'") && !inQuotes) {
                 inQuotes = true;
+                quoteChar = c;
                 word += c;
-            } else if (c === '"' && inQuotes) {
-                // End of quoted string
+            } else if (inQuotes && c === quoteChar) {
                 inQuotes = false;
+                quoteChar = '';
                 word += c;
-                // Complete the quoted word
                 if (word.length > 0) {
                     result.push(word);
                     word = '';
@@ -167,6 +125,69 @@ export class AttListDecl implements XMLNode {
             result.push(word);
         }
         return result;
+    }
+
+    private readAttributeType(parts: string[], state: { index: number }): string {
+        let token: string = parts[state.index++];
+
+        if (token === 'NOTATION') {
+            if (state.index >= parts.length) {
+                throw new Error('Expected NOTATION enumeration in ATTLIST declaration');
+            }
+            let enumeration: string = parts[state.index++];
+            enumeration = this.readParenthesized(enumeration, parts, state);
+            return 'NOTATION ' + enumeration;
+        }
+
+        if (token.includes('(')) {
+            return this.readParenthesized(token, parts, state);
+        }
+
+        return token;
+    }
+
+    private readParenthesized(initial: string, parts: string[], state: { index: number }): string {
+        let result = initial;
+        let balance: number = this.countParenthesis(initial);
+
+        while (balance > 0) {
+            if (state.index >= parts.length) {
+                throw new Error('Unterminated parenthesized list in ATTLIST declaration');
+            }
+            const next: string = parts[state.index++];
+            result += ' ' + next;
+            balance += this.countParenthesis(next);
+        }
+
+        return this.normalizeEnumeration(result);
+    }
+
+    private countParenthesis(value: string): number {
+        let balance: number = 0;
+        for (const char of value) {
+            if (char === '(') {
+                balance++;
+            } else if (char === ')') {
+                balance--;
+            }
+        }
+        return balance;
+    }
+
+    private normalizeEnumeration(value: string): string {
+        let normalized = value.replace(/\s+/g, ' ');
+        normalized = normalized.replace(/\s*\|\s*/g, '|');
+        normalized = normalized.replace(/\(\s*/g, '(');
+        normalized = normalized.replace(/\s*\)/g, ')');
+        return normalized.trim();
+    }
+
+    private isQuotedValue(value: string): boolean {
+        return (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
+    }
+
+    private trimQuotes(value: string): string {
+        return this.isQuotedValue(value) ? value.substring(1, value.length - 1) : value;
     }
 
     getNodeType(): number {

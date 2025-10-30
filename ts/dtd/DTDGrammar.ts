@@ -19,6 +19,7 @@ import { EntityDecl } from './EntityDecl';
 import { NotationDecl } from './NotationDecl';
 
 export class DTDGrammar implements Grammar {
+
     private models: Map<string, ContentModel>;
     private entitiesMap: Map<string, EntityDecl>;
     private attributesMap: Map<string, Map<string, AttDecl>>;

@@ -10,11 +10,12 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils';
 import { DTDContentModel } from './DTDContentModel';
 import { DTDElementNameParticle } from './DTDElementNameParticle';
-import { XMLUtils } from '../XMLUtils';
 
 export class DTDSequenceModel implements DTDContentModel {
+
     public cardinality: string = '';
     private children: DTDContentModel[] = [];
 
@@ -49,8 +50,8 @@ export class DTDSequenceModel implements DTDContentModel {
                 return false;
             }
             // Only check name if child is DTDElementNameParticle
-                if (child instanceof DTDElementNameParticle) {
-                if (!XMLUtils.isValidNCName(child.getName())) {
+            if (child instanceof DTDElementNameParticle) {
+                if (!XMLUtils.isValidXMLName(child.getName())) {
                     return false;
                 }
             }
