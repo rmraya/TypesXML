@@ -17,7 +17,7 @@ export class EntityDecl implements XMLNode {
 
     private name: string;
     private parameterEntity: boolean;
-    private value: string; 
+    private value: string;
     private systemId: string;
     private publicId: string;
     private ndata: string;
@@ -64,6 +64,14 @@ export class EntityDecl implements XMLNode {
         return this.publicId;
     }
 
+    getNotationName(): string {
+        return this.ndata;
+    }
+
+    isExternal(): boolean {
+        return this.systemId !== '' || this.publicId !== '';
+    }
+
     getNodeType(): number {
         return Constants.ENTITY_DECL_NODE;
     }
@@ -82,12 +90,12 @@ export class EntityDecl implements XMLNode {
 
     equals(node: XMLNode): boolean {
         if (node instanceof EntityDecl) {
-            return this.name === node.name && 
-                   this.parameterEntity === node.parameterEntity &&
-                   this.value === node.value &&
-                   this.systemId === node.systemId &&
-                   this.publicId === node.publicId &&
-                   this.ndata === node.ndata;
+            return this.name === node.name &&
+                this.parameterEntity === node.parameterEntity &&
+                this.value === node.value &&
+                this.systemId === node.systemId &&
+                this.publicId === node.publicId &&
+                this.ndata === node.ndata;
         }
         return false;
     }

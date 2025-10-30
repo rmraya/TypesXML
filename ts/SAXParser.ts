@@ -421,8 +421,8 @@ export class SAXParser {
             let char: string = String.fromCodePoint(code);
             this.contentHandler!.characters(char);
         } else {
-            // Look up entity in DTD using grammar interface
-            const entityValue: string | undefined = grammar.resolveEntity(name);
+            // Look up entity in grammar, loading external content if necessary
+            const entityValue: string | undefined = this.grammarHandler.resolveEntityValue(name);
             if (entityValue !== undefined) {
                 if (entityValue.length > 0) {
                     if (entityValue.length === 1) {
@@ -1410,7 +1410,7 @@ export class SAXParser {
                 && attributeInfo.use !== AttributeUse.REQUIRED) {
                 const targetName: string = this.buildAttributeNameForInfo(attributeInfo);
                 if (!result.has(targetName)) {
-                    const defaultValue: string = this.normalizeAttributeByType(attributeInfo.defaultValue, attributeInfo.datatype);
+                    const defaultValue: string = this.processDefaultAttributeValue(attributeInfo);
                     result.set(targetName, defaultValue);
                     metadata.set(targetName, {
                         specified: false
@@ -1433,6 +1433,24 @@ export class SAXParser {
                 .replace(/[\t\n\r]/g, ' ');                        // Then individual tab, LF, CR
             return normalizedValue.replace(/\s+/g, ' ').trim();    // Collapse and trim
         }
+    }
+
+    private processDefaultAttributeValue(attributeInfo: AttributeInfo): string {
+        const rawDefault: string = attributeInfo.defaultValue ?? '';
+
+        let normalizedLiteral: string = rawDefault;
+        if (rawDefault.indexOf('\r') !== -1 || rawDefault.indexOf('\n') !== -1) {
+            normalizedLiteral = this.normalizeLiteralAttributeLineBreaks(rawDefault, rawDefault);
+        }
+
+        if (rawDefault.includes('&')) {
+            this.validateAttributeValueWellFormedness(rawDefault);
+        }
+
+        let expandedValue: string = this.expandEntities(normalizedLiteral);
+        this.validateAttributeCharacterSet(expandedValue);
+
+        return this.normalizeAttributeByType(expandedValue, attributeInfo.datatype);
     }
 
     private shouldPreserveLexicalWhitespace(lexicalValue: string): boolean {
@@ -1772,7 +1790,7 @@ export class SAXParser {
                 }
 
                 // Look up custom entity using Grammar interface
-                const entityValue: string | undefined = this.grammarHandler.getGrammar().resolveEntity(entityName);
+                const entityValue: string | undefined = this.grammarHandler.resolveEntityValue(entityName);
                 if (entityValue !== undefined) {
                     if (entityValue !== '') {
                         // Mark this entity as visited for recursion detection

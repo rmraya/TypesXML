@@ -18,14 +18,14 @@ import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResul
 
 
 export class DTDComposite implements Grammar {
-    
+
     private static instance: DTDComposite | undefined;
     private validating: boolean = false;
     private internalDTD: DTDGrammar | undefined;
     private externalDTDs: DTDGrammar[] = [];
     private sharedParameterEntities: Map<string, EntityDecl> = new Map();
     private includeDefaultAttributes: boolean = true;
-    
+
     private constructor() {
         // Initialize with predefined entities like DTDGrammar does
         this.addPredefinedEntities();
@@ -285,6 +285,24 @@ export class DTDComposite implements Grammar {
         return false;
     }
 
+    getEntityDeclaration(entityName: string): EntityDecl | undefined {
+        if (this.internalDTD) {
+            const entity = this.internalDTD.getEntity(entityName);
+            if (entity) {
+                return entity;
+            }
+        }
+
+        for (const externalDTD of this.externalDTDs) {
+            const entity = externalDTD.getEntity(entityName);
+            if (entity) {
+                return entity;
+            }
+        }
+
+        return undefined;
+    }
+
     private notationExists(notationName: string): boolean {
         // Check internal DTD first
         if (this.internalDTD) {
@@ -382,7 +400,7 @@ export class DTDComposite implements Grammar {
 
         return undefined;
     }
-    
+
     consumeEntityReference(expandedText: string): string | undefined {
         if (this.internalDTD) {
             const ref = this.internalDTD.consumeEntityReference(expandedText);

@@ -32,7 +32,7 @@ export class ElementDecl implements XMLNode {
             return;
         }
         // Build and validate the content model using the complete parser
-        let simplified: string = this.contentSpec.replace('\n', ' ');
+        let simplified: string = this.contentSpec.replace(/\r?\n/g, ' ');
         simplified = simplified.replace(/\s+/g, '').trim();
         const parser: DTDContentModelParser = new DTDContentModelParser(simplified);
         const model: DTDContentModel = parser.parse();

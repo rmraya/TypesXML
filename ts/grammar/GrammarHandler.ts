@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 import { Catalog } from '../Catalog';
 import { DTDGrammar } from '../dtd/DTDGrammar';
 import { DTDParser } from '../dtd/DTDParser';
+import { EntityDecl } from '../dtd/EntityDecl';
 import { XMLSchemaParser } from '../schema/XMLSchemaParser';
 import { CompositeGrammar } from './CompositeGrammar';
 import { DTDComposite } from './DTDComposite';
@@ -86,6 +87,14 @@ export class GrammarHandler {
         return this.compositeGrammar;
     }
 
+    resolveEntityValue(entityName: string): string | undefined {
+        const grammar: Grammar = this.getGrammar();
+        if (grammar instanceof DTDComposite) {
+            return this.resolveEntityValueFromDTD(grammar, entityName);
+        }
+        return grammar.resolveEntity(entityName);
+    }
+
     getLoadedGrammars(): Array<{ namespace: string, type: string, elementCount?: number, typeCount?: number }> {
         const grammars = this.compositeGrammar.getLoadedGrammarList();
         if (this.dtdComposite) {
@@ -97,6 +106,34 @@ export class GrammarHandler {
         }
 
         return grammars;
+    }
+
+    private resolveEntityValueFromDTD(dtdComposite: DTDComposite, entityName: string): string | undefined {
+        const entityDecl: EntityDecl | undefined = dtdComposite.getEntityDeclaration(entityName);
+        if (!entityDecl) {
+            return undefined;
+        }
+
+        if (entityDecl.getNotationName() !== '') {
+            throw new Error(`Unparsed entity '${entityName}' cannot be referenced in parsed content`);
+        }
+
+        if (entityDecl.isExternal() && !entityDecl.isExternalContentLoaded()) {
+            const content: string = this.loadExternalEntityContent(entityDecl);
+            entityDecl.setValue(content);
+        }
+
+        return entityDecl.getValue();
+    }
+
+    private loadExternalEntityContent(entityDecl: EntityDecl): string {
+        const baseDir: string = this.currentFile ? dirname(this.currentFile) : process.cwd();
+        const parser: DTDParser = new DTDParser(undefined, baseDir);
+        parser.setValidating(this.validating);
+        if (this.catalog) {
+            parser.setCatalog(this.catalog);
+        }
+        return parser.loadExternalEntity(entityDecl.getPublicId(), entityDecl.getSystemId(), true);
     }
 
     hasGrammar(namespaceURI: string | undefined): boolean {

@@ -360,14 +360,22 @@ export class DTDParser {
 
     resolveEntities(fragment: string): string {
         while (XMLUtils.hasParameterEntity(fragment)) {
-            let start = fragment.indexOf('%');
-            let end = fragment.indexOf(';');
-            let entityName = fragment.substring(start + '%'.length, end);
+            let start: number = fragment.indexOf('%');
+            if (start === -1) {
+                break;
+            }
+            let end: number = fragment.indexOf(';', start);
+            if (end === -1) {
+                throw new Error('Malformed parameter entity reference while resolving "' + fragment + '"');
+            }
+            let entityName: string = fragment.substring(start + '%'.length, end).trim();
             let entity: EntityDecl | undefined = this.grammar.getParameterEntity(entityName);
             if (entity === undefined) {
-                throw new Error('Unknown entity: ' + entityName + ' in resolveEntities');
+                let context: string = fragment.substring(start, Math.min(fragment.length, start + 80));
+                throw new Error('Unknown entity: ' + entityName + ' in resolveEntities while processing "' + context + '"');
             }
-            fragment = fragment.replace('%' + entityName + ';', entity.getValue());
+            let replacement: string = entity.getValue();
+            fragment = fragment.substring(0, start) + replacement + fragment.substring(end + ';'.length);
         }
         return fragment;
     }

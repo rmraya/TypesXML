@@ -71,7 +71,8 @@ export class ContentModel {
     }
 
     parseSpec(modelString: string): ContentModel {
-        let contentString: string = modelString.replaceAll("\\s+", "");
+        // Normalize whitespace so multi-line mixed content declarations parse correctly
+        let contentString: string = modelString.replace(/\s+/g, "");
         try {
             this.validateParentheses(contentString);
         } catch (e: unknown) {
