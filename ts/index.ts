@@ -66,11 +66,13 @@ export { GrammarPrecompiler } from "./grammar/GrammarPrecompiler";
 // XML Schema Classes
 export { XMLSchemaGrammar } from "./schema/XMLSchemaGrammar";
 export { XMLSchemaParser } from "./schema/XMLSchemaParser";
+export { SchemaParsingHandler } from "./schema/SchemaParsingHandler";
 export { SchemaType } from "./schema/SchemaType";
 export { SimpleType } from "./schema/SimpleType";
 export { ComplexType } from "./schema/ComplexType";
 export { SchemaElementDecl } from "./schema/Element";
 export { SchemaAttributeDecl } from "./schema/Attribute";
+export { BuiltinTypes } from "./schema/BuiltinTypes";
 export { ContentModel as SchemaContentModel } from "./schema/ContentModel";
 export { ElementModel } from "./schema/ElementModel";
 export { SequenceModel } from "./schema/SequenceModel";
@@ -85,3 +87,7 @@ export { AnyParticle } from "./schema/AnyParticle";
 export { AttributeGroup } from "./schema/AttributeGroup";
 export { GroupModel } from "./schema/GroupModel";
 export { Model } from "./schema/Model";
+
+// Test Utilities
+export { DTDTestSuite } from "./tests/DTDTestSuite";
+export { XMLSchemaTestSuite } from "./tests/XMLSchemaTestSuite";
