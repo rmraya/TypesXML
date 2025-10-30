@@ -1,4 +1,6 @@
 # TypesXML
+
+<!-- markdownlint-disable MD033 -->
 <div style="display:flex; vertical-align: top;">
     <img src="./typesXML.png" alt="TypesXML logo" style="width:90px; height:90px;float:left; margin-right: 16px;"/> TypesXML is an open-source TypeScript XML library providing a standards-compliant XML 1.0/1.1 parser with both streaming (SAX) and in-memory (DOM) APIs, DTD and XML Schema validation, OASIS catalog–based resolution and entity handling, namespace-aware processing, broad encoding support, and utilities for writing and testing XML. It emphasizes correctness, extensibility, efficient handling of large documents, and clear error reporting for robust XML processing.
 </div>
