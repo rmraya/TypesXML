@@ -75,11 +75,16 @@ export class XMLCanonicalizer {
         const attributes: XMLAttribute[] = this.getSortedAttributes(element);
         for (const attr of attributes) {
             const lexicalValue: string | undefined = attr.getLexicalValue();
-            if (lexicalValue !== undefined && (!attr.isSpecified() || lexicalValue.includes('&#'))) {
-                result += ' ' + attr.getName() + '="' + lexicalValue + '"';
-            } else {
-                result += ' ' + attr.getName() + '="' + this.escapeAttributeValue(attr.getValue()) + '"';
+            if (lexicalValue !== undefined) {
+                const preserveLexical: boolean = attr.isSpecified()
+                    ? this.shouldPreserveAttributeLexicalValue(lexicalValue)
+                    : this.shouldPreserveDefaultAttributeLexicalValue(lexicalValue);
+                if (preserveLexical) {
+                    result += ' ' + attr.getName() + '="' + lexicalValue + '"';
+                    continue;
+                }
             }
+            result += ' ' + attr.getName() + '="' + this.escapeAttributeValue(attr.getValue()) + '"';
         }
         
         result += '>';
@@ -147,19 +152,14 @@ export class XMLCanonicalizer {
         let result = '';
         for (let i = 0; i < text.length; i++) {
             const char = text.charAt(i);
-            if (this.grammar) {
-                const originalRef = this.grammar.consumeEntityReference(char);
-                if (originalRef && this.shouldRestoreReference(originalRef)) {
-                    result += originalRef;
-                    continue;
-                }
-            }
-
             switch (char) {
                 case '&': result += '&amp;'; break;
                 case '<': result += '&lt;'; break;
                 case '>': result += '&gt;'; break;
+                case '\t': result += '&#9;'; break;
+                case '\n': result += '&#10;'; break;
                 case '\r': result += '&#13;'; break;
+                case '"': result += '&quot;'; break;
                 default: result += char; break;
             }
         }
@@ -184,13 +184,12 @@ export class XMLCanonicalizer {
         return result;
     }
 
-    private shouldRestoreReference(reference: string): boolean {
-        if (reference.startsWith('&#')) {
-            return false;
-        }
-        if (reference === '&apos;') {
-            return false;
-        }
-        return true;
+    private shouldPreserveAttributeLexicalValue(lexicalValue: string): boolean {
+        return lexicalValue.includes('&#');
+    }
+
+    private shouldPreserveDefaultAttributeLexicalValue(lexicalValue: string): boolean {
+        // Preserve lexical form for default attributes when they rely on entity or parameter references.
+        return lexicalValue.includes('&#') || lexicalValue.includes('&') || lexicalValue.includes('%');
     }
 }

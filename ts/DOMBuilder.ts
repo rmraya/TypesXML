@@ -132,7 +132,7 @@ export class DOMBuilder implements ContentHandler {
                 const attList: AttListDecl = new AttListDecl(elementName, attributesText.trim());
                 attList.getAttributes().forEach((attDecl: AttDecl, name: string) => {
                     const defaultValue: string = attDecl.getDefaultValue();
-                    if (defaultValue) {
+                    if (defaultValue && !lexicalMapForElement?.has(name)) {
                         lexicalMapForElement?.set(name, defaultValue);
                     }
                 });

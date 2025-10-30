@@ -505,6 +505,7 @@ export class DTDParser {
                     }
                     value += char;
                 }
+                value = this.normalizeEntityLiteral(value);
                 return new EntityDecl(name, parameterEntity, value, '', '', '');
             }
         } else {
@@ -654,9 +655,17 @@ export class DTDParser {
                     }
                     value += char;
                 }
+                value = this.normalizeEntityLiteral(value);
                 return new EntityDecl(name, parameterEntity, value, '', '', '');
             }
         }
+    }
+
+    private normalizeEntityLiteral(value: string): string {
+        // XML 1.0 section 2.11: normalize CRLF and CR to LF within entity values.
+        let normalized: string = value.replace(/\r\n/g, '\n');
+        normalized = normalized.replace(/\r/g, '\n');
+        return normalized;
     }
 
     parseNotationDeclaration(declaration: string): NotationDecl {

@@ -60,6 +60,7 @@ export class SAXParser {
     private namespaceStack: Array<Map<string, string>>;
     ignoreGrammars: boolean = false;
     private lastParsedAttributeLexical: Map<string, string> = new Map<string, string>();
+    private characterRunPreservedCR: Set<number>;
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
 
@@ -75,6 +76,7 @@ export class SAXParser {
         this.grammarHandler = new GrammarHandler();
         this.namespaceMap = new Map<string, string>();
         this.namespaceStack = [];
+        this.characterRunPreservedCR = new Set<number>();
         this.resetNamespaceContext();
     }
 
@@ -232,6 +234,11 @@ export class SAXParser {
                 continue;
             }
             if (this.lookingAt('<')) {
+                if (this.rootParsed && this.elementStack === 0) {
+                    // After the document element closes, only comments, processing instructions,
+                    // and whitespace are permitted. Any additional element markup is ill-formed.
+                    throw new Error('Malformed XML document: additional element found after the root element');
+                }
                 this.startElement();
                 continue;
             }
@@ -421,9 +428,10 @@ export class SAXParser {
                     if (entityValue.length === 1) {
                         grammar.addEntityReferenceUsage('&' + name + ';', entityValue);
                     }
-                    // Fully expand the entity replacement text (custom and character references)
-                    const expandedValue: string = this.expandEntities(entityValue);
-                    this.handleEntityContent(expandedValue);
+                    // Expand custom entities first, then numeric character references while preserving predefined entities
+                    const expandedCustom: string = this.expandCustomEntities(entityValue);
+                    const expandedCharacters: string = this.expandCharacterReferences(expandedCustom);
+                    this.handleEntityContent(expandedCharacters);
                 }
             } else {
                 // Entity not found - handle as skipped entity
@@ -642,17 +650,22 @@ export class SAXParser {
     }
 
     cleanCharacterRun(): void {
+        if (this.characterRun === '') {
+            this.characterRunPreservedCR.clear();
+            return;
+        }
+
         if (this.characterRun !== '') {
             // Note: Don't expand entities here since parseEntityReference already handles 
             // entity expansion with full recursion. The characterRun contains regular 
             // character data that doesn't need entity expansion.
             let content: string = this.characterRun;
+            const normalizedContent: string = this.normalizeCharacterRun(content);
 
             if (this.rootParsed) {
                 if (this.elementStack === 0) {
                     // document ended
                     // Normalize line endings per XML 1.0 spec section 2.11
-                    const normalizedContent: string = XMLUtils.normalizeLines(content);
                     this.contentHandler!.ignorableWhitespace(normalizedContent);
                 } else {
                     // in an element - check xml:space
@@ -660,21 +673,77 @@ export class SAXParser {
                     if (preserveWhitespace || !this.isWhitespaceOnly(content)) {
                         // Preserve whitespace or contains non-whitespace - treat as significant
                         // Normalize line endings per XML 1.0 spec section 2.11
-                        const normalizedContent: string = XMLUtils.normalizeLines(content);
                         this.contentHandler!.characters(normalizedContent);
                     } else {
                         // Default mode and only whitespace - treat as ignorable
                         // Normalize line endings per XML 1.0 spec section 2.11
-                        const normalizedContent: string = XMLUtils.normalizeLines(content);
                         this.contentHandler!.ignorableWhitespace(normalizedContent);
                     }
                 }
             } else {
                 // in prolog
-                this.contentHandler!.ignorableWhitespace(this.characterRun);
+                this.contentHandler!.ignorableWhitespace(normalizedContent);
             }
             this.characterRun = '';
+            this.characterRunPreservedCR.clear();
         }
+    }
+
+    private normalizeCharacterRun(content: string): string {
+        if (this.characterRunPreservedCR.size === 0) {
+            return XMLUtils.normalizeLines(content);
+        }
+
+        let result = '';
+        for (let i = 0; i < content.length; i++) {
+            const char = content.charAt(i);
+            if (char === '\r' && !this.characterRunPreservedCR.has(i)) {
+                if (i + 1 < content.length && content.charAt(i + 1) === '\n' && !this.characterRunPreservedCR.has(i + 1)) {
+                    result += '\n';
+                    i++;
+                } else {
+                    result += '\n';
+                }
+            } else {
+                result += char;
+            }
+        }
+        return result;
+    }
+
+    private appendToCharacterRun(text: string, options?: { decodePredefined?: boolean }): void {
+        if (!text) {
+            return;
+        }
+
+        const decodePredefined: boolean = options?.decodePredefined !== undefined ? options.decodePredefined : true;
+        const processed: string = decodePredefined ? this.decodePredefinedEntities(text) : text;
+
+        if (!processed) {
+            return;
+        }
+
+        const startIndex = this.characterRun.length;
+        this.characterRun += processed;
+
+        for (let i = 0; i < processed.length; i++) {
+            if (processed.charAt(i) === '\r') {
+                this.characterRunPreservedCR.add(startIndex + i);
+            }
+        }
+    }
+
+    private decodePredefinedEntities(text: string): string {
+        if (text.indexOf('&') === -1) {
+            return text;
+        }
+
+        return text
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&apos;/g, "'");
     }
 
     private isXmlSpacePreserve(): boolean {
@@ -1151,7 +1220,9 @@ export class SAXParser {
                 valueStart++;
             }
             // Skip opening quote
+            let quoteChar: string | undefined;
             if (valueStart < pair.length && (pair[valueStart] === '"' || pair[valueStart] === "'")) {
+                quoteChar = pair[valueStart];
                 valueStart++;
             }
             // Find end (skip closing quote)
@@ -1168,8 +1239,18 @@ export class SAXParser {
                 // Check for unescaped ampersands (not part of valid entity references)
                 this.validateAttributeValueWellFormedness(value);
             }
+
+            value = this.normalizeLiteralAttributeLineBreaks(value, lexicalValue);
+
+            if (quoteChar === undefined && quotedValue.length > 0) {
+                quoteChar = quotedValue.charAt(0);
+            }
+            if (quoteChar !== undefined) {
+                this.validateAttributeLexicalCharacters(value, quoteChar);
+            }
             // Expand entity references in attribute values
             value = this.expandEntities(value);
+            this.validateAttributeCharacterSet(value);
 
             // Well-formedness check: detect duplicate attributes
             if (map.has(name)) {
@@ -1181,6 +1262,27 @@ export class SAXParser {
         });
         this.lastParsedAttributeLexical = lexicalMap;
         return map;
+    }
+
+    private normalizeLiteralAttributeLineBreaks(value: string, lexicalValue: string): string {
+        if (lexicalValue.indexOf('\r') === -1 && lexicalValue.indexOf('\n') === -1) {
+            return value;
+        }
+
+        // Only normalize line breaks that appeared literally in the attribute source.
+        // Entity references (e.g. &#13;) are preserved so they can expand to individual spaces later.
+        let normalized: string = value;
+
+        if (lexicalValue.indexOf('\r\n') !== -1) {
+            normalized = normalized.replace(/\r\n/g, '\n');
+        }
+
+        if (lexicalValue.indexOf('\r') !== -1 && lexicalValue.indexOf('\r\n') === -1) {
+            normalized = normalized.replace(/\r/g, '\n');
+        }
+
+        // Literal lone LF characters become a single LF (already \n)
+        return normalized;
     }
 
     private validateAttributeValueWellFormedness(value: string): void {
@@ -1226,6 +1328,49 @@ export class SAXParser {
             }
         }
     }
+
+    private validateAttributeLexicalCharacters(value: string, quoteChar: string): void {
+        let index = 0;
+        while (index < value.length) {
+            const codePoint: number = value.codePointAt(index)!;
+            const char: string = String.fromCodePoint(codePoint);
+
+            if (char === '<') {
+                throw new Error(`Well-formedness error: raw '<' is not allowed inside attribute values`);
+            }
+
+            if (char === quoteChar) {
+                throw new Error(`Well-formedness error: attribute value contains unescaped ${quoteChar}`);
+            }
+
+            const isValid: boolean = this.xmlVersion === '1.0'
+                ? XMLUtils.isValidXml10Char(codePoint)
+                : XMLUtils.isValidXml11Char(codePoint);
+            if (!isValid) {
+                const codeHex: string = codePoint.toString(16).toUpperCase().padStart(4, '0');
+                throw new Error(`Invalid character in attribute value: U+${codeHex} is not allowed in XML ${this.xmlVersion}`);
+            }
+
+            index += (codePoint > 0xFFFF) ? 2 : 1;
+        }
+    }
+
+    private validateAttributeCharacterSet(value: string): void {
+        let index = 0;
+        while (index < value.length) {
+            const codePoint: number = value.codePointAt(index)!;
+            const isValid: boolean = this.xmlVersion === '1.0'
+                ? XMLUtils.isValidXml10Char(codePoint)
+                : XMLUtils.isValidXml11Char(codePoint);
+            if (!isValid) {
+                const codeHex: string = codePoint.toString(16).toUpperCase().padStart(4, '0');
+                throw new Error(`Invalid character in attribute value after entity expansion: U+${codeHex} is not allowed in XML ${this.xmlVersion}`);
+            }
+
+            index += (codePoint > 0xFFFF) ? 2 : 1;
+        }
+    }
+
     normalizeAndDefaultAttributes(elementName: string, attributesMap: Map<string, string>): AttributeNormalizationResult {
         const attributeInfos: Map<string, AttributeInfo> = this.grammarHandler.getGrammar().getElementAttributes(elementName);
 
@@ -1280,7 +1425,7 @@ export class SAXParser {
 
     normalizeAttributeByType(value: string, type: string): string {
         if (type === 'CDATA') {
-            // For CDATA attributes, replace tabs, carriage returns, and line feeds with spaces while preserving other whitespace.
+            // For CDATA attributes, replace control whitespace characters with spaces per XML 1.0 normalization rules.
             return value.replace(/[\t\r\n]/g, ' ');
         } else {
             // For non-CDATA attributes: normalize all whitespace and collapse
@@ -1569,6 +1714,36 @@ export class SAXParser {
         let i: number = 0;
 
         while (i < text.length) {
+            if (text.startsWith('<![CDATA[', i)) {
+                const end = text.indexOf(']]>', i);
+                if (end === -1) {
+                    throw new Error('Malformed entity content: Unterminated CDATA section inside entity value');
+                }
+                result += text.substring(i, end + 3);
+                i = end + 3;
+                continue;
+            }
+
+            if (text.startsWith('<!--', i)) {
+                const end = text.indexOf('-->', i);
+                if (end === -1) {
+                    throw new Error('Malformed entity content: Unterminated comment inside entity value');
+                }
+                result += text.substring(i, end + 3);
+                i = end + 3;
+                continue;
+            }
+
+            if (text.startsWith('<?', i)) {
+                const end = text.indexOf('?>', i);
+                if (end === -1) {
+                    throw new Error('Malformed entity content: Unterminated processing instruction inside entity value');
+                }
+                result += text.substring(i, end + 2);
+                i = end + 2;
+                continue;
+            }
+
             if (text.charAt(i) === '&') {
                 // Find the end of the entity reference
                 let endPos: number = text.indexOf(';', i);
@@ -1652,7 +1827,7 @@ export class SAXParser {
 
         const flushText = () => {
             if (textBuffer.length > 0) {
-                this.characterRun += textBuffer;
+                this.appendToCharacterRun(textBuffer, { decodePredefined: true });
                 textBuffer = '';
             }
         };
@@ -1667,7 +1842,7 @@ export class SAXParser {
                 }
                 const cdataContent = entityValue.substring(index + 9, endCdata);
                 this.contentHandler!.startCDATA();
-                this.characterRun += cdataContent;
+                this.appendToCharacterRun(cdataContent, { decodePredefined: false });
                 this.cleanCharacterRun();
                 this.contentHandler!.endCDATA();
                 index = endCdata + 3;
