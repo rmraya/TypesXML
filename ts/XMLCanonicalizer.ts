@@ -17,16 +17,18 @@ import { XMLAttribute } from "./XMLAttribute";
 import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
 import { CData } from "./CData";
-import { DTDGrammar } from "./dtd/DTDGrammar";
+import { Grammar } from "./grammar/Grammar";
 
 export class XMLCanonicalizer {
 
-    private grammar: DTDGrammar | undefined;
+    private grammar: Grammar | undefined;
 
-    public static canonicalize(document: XMLDocument, grammar?: DTDGrammar): string {
+    public static canonicalize(document: XMLDocument, grammar?: Grammar): string {
         const canonicalizer = new XMLCanonicalizer();
         if (grammar) {
             canonicalizer.grammar = grammar;
+        } else if (document.getGrammar) {
+            canonicalizer.grammar = document.getGrammar();
         }
         return canonicalizer.canonicalizeDocument(document);
     }
@@ -70,9 +72,14 @@ export class XMLCanonicalizer {
         result += '<' + element.getName();
         
         // Attributes in lexicographical order
-        const attributes = this.getSortedAttributes(element);
+        const attributes: XMLAttribute[] = this.getSortedAttributes(element);
         for (const attr of attributes) {
-            result += ' ' + attr.getName() + '="' + this.escapeAttributeValue(attr.getValue()) + '"';
+            const lexicalValue: string | undefined = attr.getLexicalValue();
+            if (lexicalValue !== undefined && (!attr.isSpecified() || lexicalValue.includes('&#'))) {
+                result += ' ' + attr.getName() + '="' + lexicalValue + '"';
+            } else {
+                result += ' ' + attr.getName() + '="' + this.escapeAttributeValue(attr.getValue()) + '"';
+            }
         }
         
         result += '>';
@@ -140,14 +147,19 @@ export class XMLCanonicalizer {
         let result = '';
         for (let i = 0; i < text.length; i++) {
             const char = text.charAt(i);
+            if (this.grammar) {
+                const originalRef = this.grammar.consumeEntityReference(char);
+                if (originalRef && this.shouldRestoreReference(originalRef)) {
+                    result += originalRef;
+                    continue;
+                }
+            }
+
             switch (char) {
                 case '&': result += '&amp;'; break;
                 case '<': result += '&lt;'; break;
                 case '>': result += '&gt;'; break;
-                case '"': result += '&quot;'; break;
                 case '\r': result += '&#13;'; break;
-                case '\n': result += '&#10;'; break;
-                case '\t': result += '&#9;'; break;
                 default: result += char; break;
             }
         }
@@ -170,5 +182,15 @@ export class XMLCanonicalizer {
             }
         }
         return result;
+    }
+
+    private shouldRestoreReference(reference: string): boolean {
+        if (reference.startsWith('&#')) {
+            return false;
+        }
+        if (reference === '&apos;') {
+            return false;
+        }
+        return true;
     }
 }

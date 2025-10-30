@@ -18,10 +18,14 @@ export class XMLAttribute implements XMLNode {
     
     private name: string;
     private value: string;
+    private specified: boolean;
+    private lexicalValue?: string;
 
-    constructor(name: string, value: string) {
+    constructor(name: string, value: string, specified: boolean = true, lexicalValue?: string) {
         this.name = name;
         this.value = value;
+        this.specified = specified;
+        this.lexicalValue = lexicalValue;
     }
 
     getName(): string {
@@ -34,6 +38,22 @@ export class XMLAttribute implements XMLNode {
 
     setValue(value: string): void {
         this.value = value;
+    }
+
+    isSpecified(): boolean {
+        return this.specified;
+    }
+
+    setSpecified(specified: boolean): void {
+        this.specified = specified;
+    }
+
+    getLexicalValue(): string | undefined {
+        return this.lexicalValue;
+    }
+
+    setLexicalValue(value: string | undefined): void {
+        this.lexicalValue = value;
     }
 
     getNamespace(): string {

@@ -25,7 +25,7 @@ export class DTDGrammar implements Grammar {
     private attributesMap: Map<string, Map<string, AttDecl>>;
     private elementDeclMap: Map<string, ElementDecl>;
     private notationsMap: Map<string, NotationDecl>;
-    private usedEntityReferences: Map<string, string>;
+    private usedEntityReferences: Map<string, string[]>;
 
     constructor() {
         this.models = new Map();
@@ -33,7 +33,7 @@ export class DTDGrammar implements Grammar {
         this.attributesMap = new Map();
         this.entitiesMap = new Map();
         this.notationsMap = new Map();
-        this.usedEntityReferences = new Map();
+    this.usedEntityReferences = new Map();
         this.addPredefinedEntities();
     }
 
@@ -172,15 +172,40 @@ export class DTDGrammar implements Grammar {
     }
 
     addEntityReferenceUsage(originalReference: string, expandedText: string) {
-        this.usedEntityReferences.set(expandedText, originalReference);
+        if (!this.usedEntityReferences.has(expandedText)) {
+            this.usedEntityReferences.set(expandedText, []);
+        }
+        this.usedEntityReferences.get(expandedText)!.push(originalReference);
     }
 
     getOriginalEntityReference(expandedText: string): string | undefined {
-        return this.usedEntityReferences.get(expandedText);
+        const references = this.usedEntityReferences.get(expandedText);
+        if (!references || references.length === 0) {
+            return undefined;
+        }
+        return references[0];
+    }
+
+    consumeEntityReference(expandedText: string): string | undefined {
+        const references = this.usedEntityReferences.get(expandedText);
+        if (!references || references.length === 0) {
+            return undefined;
+        }
+        const reference = references.shift();
+        if (references.length === 0) {
+            this.usedEntityReferences.delete(expandedText);
+        }
+        return reference;
     }
 
     getUsedEntityReferences(): Map<string, string> {
-        return this.usedEntityReferences;
+        const result = new Map<string, string>();
+        this.usedEntityReferences.forEach((value, key) => {
+            if (value.length > 0) {
+                result.set(key, value[0]);
+            }
+        });
+        return result;
     }
 
     clearEntityReferenceTracking() {

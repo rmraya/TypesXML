@@ -408,6 +408,14 @@ export class XMLSchemaGrammar implements Grammar {
         return this.entityReferences.get(expandedText);
     }
 
+    consumeEntityReference(expandedText: string): string | undefined {
+        const reference = this.entityReferences.get(expandedText);
+        if (reference !== undefined) {
+            this.entityReferences.delete(expandedText);
+        }
+        return reference;
+    }
+
     clearEntityReferenceTracking(): void {
         this.entityReferences.clear();
     }

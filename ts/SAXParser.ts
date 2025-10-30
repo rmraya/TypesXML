@@ -23,6 +23,16 @@ import { XMLUtils } from "./XMLUtils";
 import { AttributeInfo, AttributeUse, Grammar } from "./grammar/Grammar";
 import { GrammarHandler } from "./grammar/GrammarHandler";
 
+interface AttributeMetadata {
+    specified: boolean;
+    lexical?: string;
+}
+
+interface AttributeNormalizationResult {
+    attributes: Map<string, string>;
+    metadata: Map<string, AttributeMetadata>;
+}
+
 export class SAXParser {
 
     contentHandler: ContentHandler | undefined;
@@ -49,6 +59,7 @@ export class SAXParser {
     namespaceMap: Map<string, string>;
     private namespaceStack: Array<Map<string, string>>;
     ignoreGrammars: boolean = false;
+    private lastParsedAttributeLexical: Map<string, string> = new Map<string, string>();
 
     static readonly MIN_BUFFER_SIZE: number = 2048;
 
@@ -363,16 +374,23 @@ export class SAXParser {
             }
         }
 
+        const grammar = this.grammarHandler.getGrammar();
+
         if (name === 'lt') {
             this.contentHandler!.characters('<');
+            grammar.addEntityReferenceUsage('&lt;', '<');
         } else if (name === 'gt') {
             this.contentHandler!.characters('>');
+            grammar.addEntityReferenceUsage('&gt;', '>');
         } else if (name === 'amp') {
             this.contentHandler!.characters('&');
+            grammar.addEntityReferenceUsage('&amp;', '&');
         } else if (name === 'apos') {
             this.contentHandler!.characters('\'');
+            grammar.addEntityReferenceUsage('&apos;', '\'');
         } else if (name === 'quot') {
             this.contentHandler!.characters('"');
+            grammar.addEntityReferenceUsage('&quot;', '"');
         } else if (name.startsWith('#x')) {
             let code: number = parseInt(name.substring(2), 16);
             // Well-formedness check: validate character code
@@ -397,14 +415,15 @@ export class SAXParser {
             this.contentHandler!.characters(char);
         } else {
             // Look up entity in DTD using grammar interface
-            const entityValue: string | undefined = this.grammarHandler.getGrammar().resolveEntity(name);
+            const entityValue: string | undefined = grammar.resolveEntity(name);
             if (entityValue !== undefined) {
-                // Entity found - recursively expand any nested entities
                 if (entityValue.length > 0) {
-                    const fullyExpandedValue = this.expandCustomEntities(entityValue);
-                    this.contentHandler!.characters(fullyExpandedValue);
-                } else {
-                    // Empty entity - valid, just continue
+                    if (entityValue.length === 1) {
+                        grammar.addEntityReferenceUsage('&' + name + ';', entityValue);
+                    }
+                    // Fully expand the entity replacement text (custom and character references)
+                    const expandedValue: string = this.expandEntities(entityValue);
+                    this.handleEntityContent(expandedValue);
                 }
             } else {
                 // Entity not found - handle as skipped entity
@@ -482,7 +501,9 @@ export class SAXParser {
         this.pushNamespaceContext(attributesMap);
 
         // Apply DTD-aware attribute value normalization and add default attributes
-        attributesMap = this.normalizeAndDefaultAttributes(name, attributesMap);
+        const normalizationResult: AttributeNormalizationResult = this.normalizeAndDefaultAttributes(name, attributesMap);
+        attributesMap = normalizationResult.attributes;
+        const attributeMetadata: Map<string, AttributeMetadata> = normalizationResult.metadata;
 
         // Delegate namespace processing to grammar handler
         if (!this.ignoreGrammars) {
@@ -504,7 +525,13 @@ export class SAXParser {
 
         let attributes: Array<XMLAttribute> = [];
         attributesMap.forEach((value: string, key: string) => {
-            let attribute: XMLAttribute = new XMLAttribute(key, value);
+            const metadata: AttributeMetadata | undefined = attributeMetadata.get(key);
+            const attribute: XMLAttribute = new XMLAttribute(
+                key,
+                value,
+                metadata ? metadata.specified : true,
+                metadata ? metadata.lexical : undefined
+            );
             attributes.push(attribute);
         });
 
@@ -549,9 +576,7 @@ export class SAXParser {
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
 
-        if (this.elementStack === 0) {
-            this.checkRemainingText();
-        }
+        // allow additional Misc ([comment | PI | S]) after the document element per XML 1.0 sec. 2.8
     }
 
     endElement() {
@@ -613,9 +638,7 @@ export class SAXParser {
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
 
-        if (this.elementStack === 0) {
-            this.checkRemainingText();
-        }
+        // allow additional Misc ([comment | PI | S]) after the document element per XML 1.0 sec. 2.8
     }
 
     cleanCharacterRun(): void {
@@ -1064,6 +1087,7 @@ export class SAXParser {
     }
 
     parseAttributes(text: string): Map<string, string> {
+        const lexicalMap: Map<string, string> = new Map<string, string>();
         let map: Map<string, string> = new Map<string, string>();
         let pairs: string[] = [];
         let separator: string = '';
@@ -1139,6 +1163,7 @@ export class SAXParser {
             }
 
             let value: string = pair.substring(valueStart, valueEnd);
+            const lexicalValue: string = value;
             if (value.includes('&')) {
                 // Check for unescaped ampersands (not part of valid entity references)
                 this.validateAttributeValueWellFormedness(value);
@@ -1152,7 +1177,9 @@ export class SAXParser {
             }
 
             map.set(name, value);
+            lexicalMap.set(name, lexicalValue);
         });
+        this.lastParsedAttributeLexical = lexicalMap;
         return map;
     }
 
@@ -1184,12 +1211,14 @@ export class SAXParser {
                             throw new Error(`Well-formedness error: malformed hexadecimal character reference`);
                         }
                     } else {
-                        // Decimal character reference  
+                        // Decimal character reference
                         const decPart = entityName.substring(1);
                         if (decPart.length === 0 || !/^[0-9]+$/.test(decPart)) {
                             throw new Error(`Well-formedness error: malformed decimal character reference`);
                         }
                     }
+                } else if (!XMLUtils.isValidXMLName(entityName)) {
+                    throw new Error(`Well-formedness error: malformed entity reference: &${entityName};`);
                 }
                 i = semicolonPos + 1;
             } else {
@@ -1197,49 +1226,89 @@ export class SAXParser {
             }
         }
     }
-    normalizeAndDefaultAttributes(elementName: string, attributesMap: Map<string, string>): Map<string, string> {
+    normalizeAndDefaultAttributes(elementName: string, attributesMap: Map<string, string>): AttributeNormalizationResult {
         const attributeInfos: Map<string, AttributeInfo> = this.grammarHandler.getGrammar().getElementAttributes(elementName);
 
-        if (attributeInfos.size === 0) {
-            return attributesMap;
-        }
-
+        const metadata: Map<string, AttributeMetadata> = new Map<string, AttributeMetadata>();
         const result: Map<string, string> = new Map<string, string>(attributesMap);
 
+        attributesMap.forEach((_value: string, key: string) => {
+            metadata.set(key, { specified: true });
+        });
+
+        if (attributeInfos.size === 0) {
+            this.lastParsedAttributeLexical = new Map<string, string>();
+            return { attributes: result, metadata };
+        }
+
+        const lexicalSource: Map<string, string> = this.lastParsedAttributeLexical;
         attributeInfos.forEach((attributeInfo: AttributeInfo) => {
-            const matchingKey = this.findAttributeKeyForInfo(result, attributeInfo);
+            const matchingKey: string | undefined = this.findAttributeKeyForInfo(result, attributeInfo);
 
             if (matchingKey !== undefined) {
-                const currentValue = result.get(matchingKey);
+                const currentValue: string | undefined = result.get(matchingKey);
                 if (currentValue !== undefined) {
                     const normalizedValue: string = this.normalizeAttributeByType(currentValue, attributeInfo.datatype);
                     result.set(matchingKey, normalizedValue);
+                    if (!metadata.has(matchingKey)) {
+                        metadata.set(matchingKey, { specified: true });
+                    }
+                    const metadataEntry: AttributeMetadata | undefined = metadata.get(matchingKey);
+                    const lexicalValue: string | undefined = lexicalSource.get(matchingKey);
+                    if (metadataEntry && lexicalValue && attributeInfo.datatype === 'CDATA' && this.shouldPreserveLexicalWhitespace(lexicalValue)) {
+                        metadataEntry.lexical = lexicalValue;
+                        metadata.set(matchingKey, metadataEntry);
+                    }
                 }
             } else if (this.includeDefaultAttributes && attributeInfo.defaultValue !== undefined
                 && attributeInfo.use !== AttributeUse.IMPLIED
                 && attributeInfo.use !== AttributeUse.REQUIRED) {
-                const targetName = this.buildAttributeNameForInfo(attributeInfo);
+                const targetName: string = this.buildAttributeNameForInfo(attributeInfo);
                 if (!result.has(targetName)) {
                     const defaultValue: string = this.normalizeAttributeByType(attributeInfo.defaultValue, attributeInfo.datatype);
                     result.set(targetName, defaultValue);
+                    metadata.set(targetName, {
+                        specified: false
+                    });
                 }
             }
         });
 
-        return result;
+        this.lastParsedAttributeLexical = new Map<string, string>();
+        return { attributes: result, metadata };
     }
 
     normalizeAttributeByType(value: string, type: string): string {
         if (type === 'CDATA') {
-            // For CDATA attributes: only normalize line endings to spaces, preserve tabs
-            return value.replace(/\r\n/g, ' ')    // CRLF first (to avoid double replacement)
-                .replace(/[\n\r]/g, ' ');         // Then individual LF, CR (but NOT tabs)
+            // For CDATA attributes, replace tabs, carriage returns, and line feeds with spaces while preserving other whitespace.
+            return value.replace(/[\t\r\n]/g, ' ');
         } else {
             // For non-CDATA attributes: normalize all whitespace and collapse
             const normalizedValue = value.replace(/\r\n/g, ' ')    // CRLF first
                 .replace(/[\t\n\r]/g, ' ');                        // Then individual tab, LF, CR
             return normalizedValue.replace(/\s+/g, ' ').trim();    // Collapse and trim
         }
+    }
+
+    private shouldPreserveLexicalWhitespace(lexicalValue: string): boolean {
+        const pattern: RegExp = /&#(x?[0-9A-Fa-f]+);/g;
+        let match: RegExpExecArray | null;
+        let foundReference: boolean = false;
+
+        while ((match = pattern.exec(lexicalValue)) !== null) {
+            const rawValue: string = match[1];
+            const isHex: boolean = rawValue.startsWith('x') || rawValue.startsWith('X');
+            const codePoint: number = isHex ? parseInt(rawValue.substring(1), 16) : parseInt(rawValue, 10);
+
+            if (codePoint === 9 || codePoint === 10 || codePoint === 13) {
+                foundReference = true;
+                continue;
+            }
+            // Encountered a reference that isn't whitespace we care about, so don't preserve lexical form
+            return false;
+        }
+
+        return foundReference;
     }
 
     private resetNamespaceContext(): void {
@@ -1574,61 +1643,299 @@ export class SAXParser {
     }
 
     private handleEntityContent(entityValue: string): void {
-        // Analyze entity content to determine how to handle it
-        // This is a simplified approach - in a full parser, we'd need more sophisticated content analysis
+        if (!entityValue) {
+            return;
+        }
 
-        if (entityValue.includes('<') && entityValue.includes('>')) {
-            // Entity contains markup - this requires more complex handling
-            // For now, we'll treat different types of markup content
+        let index = 0;
+        let textBuffer = '';
 
-            if (entityValue.trim().startsWith('<!--') && entityValue.trim().endsWith('-->')) {
-                // Comment content
-                const commentContent: string = entityValue.trim().slice(4, -3);
-                this.contentHandler!.comment(commentContent);
-            } else if (entityValue.trim().startsWith('<?') && entityValue.trim().endsWith('?>')) {
-                // Processing instruction content
-                const piContent: string = entityValue.trim().slice(2, -2).trim();
-                const spaceIndex: number = piContent.indexOf(' ');
-                if (spaceIndex > 0) {
-                    const target: string = piContent.substring(0, spaceIndex);
-                    const data: string = piContent.substring(spaceIndex + 1);
-                    this.contentHandler!.processingInstruction(target, data);
-                } else {
-                    this.contentHandler!.processingInstruction(piContent, '');
-                }
-            } else if (entityValue.trim().startsWith('<![CDATA[') && entityValue.trim().endsWith(']]>')) {
-                // CDATA content
-                const cdataContent: string = entityValue.trim().slice(9, -3);
-                this.contentHandler!.startCDATA();
-                this.contentHandler!.characters(cdataContent);
-                this.contentHandler!.endCDATA();
-            } else if (entityValue.trim().startsWith('<') && entityValue.trim().endsWith('>')) {
-                // Element content - simplified handling
-                // Extract element name (this is very basic parsing)
-                const elementMatch: RegExpMatchArray | null = entityValue.trim().match(/^<(\w+)(?:\s[^>]*)?(?:\/>|>.*<\/\1>)$/s);
-                if (elementMatch) {
-                    const elementName: string = elementMatch[1];
-                    this.contentHandler!.startElement(elementName, []);
-                    if (!entityValue.trim().endsWith('/>')) {
-                        // Extract content between tags (very simplified)
-                        const contentMatch: RegExpMatchArray | null = entityValue.trim().match(/^<\w+(?:\s[^>]*)?>(.+)<\/\w+>$/s);
-                        if (contentMatch) {
-                            const content: string = contentMatch[1];
-                            this.contentHandler!.characters(content);
-                        }
-                    }
-                    this.contentHandler!.endElement(elementName);
-                } else {
-                    // Malformed markup - treat as character data
-                    this.contentHandler!.characters(entityValue);
-                }
-            } else {
-                // Mixed content or other markup - treat as character data for safety
-                this.contentHandler!.characters(entityValue);
+        const flushText = () => {
+            if (textBuffer.length > 0) {
+                this.characterRun += textBuffer;
+                textBuffer = '';
             }
+        };
+
+        while (index < entityValue.length) {
+            if (entityValue.startsWith('<![CDATA[', index)) {
+                flushText();
+                this.cleanCharacterRun();
+                const endCdata = entityValue.indexOf(']]>', index);
+                if (endCdata === -1) {
+                    throw new Error('Malformed entity content: Unterminated CDATA section');
+                }
+                const cdataContent = entityValue.substring(index + 9, endCdata);
+                this.contentHandler!.startCDATA();
+                this.characterRun += cdataContent;
+                this.cleanCharacterRun();
+                this.contentHandler!.endCDATA();
+                index = endCdata + 3;
+            } else if (entityValue.startsWith('<!--', index)) {
+                flushText();
+                this.cleanCharacterRun();
+                const endComment = entityValue.indexOf('-->', index);
+                if (endComment === -1) {
+                    throw new Error('Malformed entity content: Unterminated comment');
+                }
+                const commentContent = entityValue.substring(index + 4, endComment);
+                this.contentHandler!.comment(commentContent);
+                index = endComment + 3;
+            } else if (entityValue.startsWith('<?', index)) {
+                flushText();
+                this.cleanCharacterRun();
+                const endPi = entityValue.indexOf('?>', index);
+                if (endPi === -1) {
+                    throw new Error('Malformed entity content: Unterminated processing instruction');
+                }
+                const piContent = entityValue.substring(index + 2, endPi).trim();
+                const spaceIndex = piContent.indexOf(' ');
+                let target: string;
+                let data: string;
+                if (spaceIndex === -1) {
+                    target = piContent;
+                    data = '';
+                } else {
+                    target = piContent.substring(0, spaceIndex);
+                    data = piContent.substring(spaceIndex + 1);
+                }
+                this.contentHandler!.processingInstruction(target, data);
+                index = endPi + 2;
+            } else if (entityValue.startsWith('</', index)) {
+                flushText();
+                this.cleanCharacterRun();
+                const consumed = this.parseEntityEndTag(entityValue, index);
+                index += consumed;
+            } else if (entityValue.charAt(index) === '<') {
+                flushText();
+                this.cleanCharacterRun();
+                const consumed = this.parseEntityStartTag(entityValue, index);
+                index += consumed;
+            } else {
+                textBuffer += entityValue.charAt(index);
+                index++;
+            }
+        }
+
+        flushText();
+    }
+
+    private parseEntityStartTag(source: string, offset: number): number {
+        let position = offset + 1; // Skip '<'
+        const length = source.length;
+
+        const nameStart = position;
+        while (position < length) {
+            const ch = source.charAt(position);
+            if (XMLUtils.isXmlSpace(ch) || ch === '/' || ch === '>') {
+                break;
+            }
+            position++;
+        }
+
+        if (position === nameStart) {
+            throw new Error('Malformed entity content: Missing element name');
+        }
+
+        const name = source.substring(nameStart, position);
+        if (!XMLUtils.isValidXMLName(name)) {
+            throw new Error(`Invalid element name in entity content: "${name}"`);
+        }
+
+        let rest = '';
+        let quoteChar: string | undefined;
+        let selfClosing = false;
+
+        while (position < length) {
+            const ch = source.charAt(position);
+            if (!quoteChar) {
+                if (ch === '"' || ch === '\'') {
+                    quoteChar = ch;
+                    rest += ch;
+                    position++;
+                    continue;
+                }
+                if (ch === '/') {
+                    if (position + 1 < length && source.charAt(position + 1) === '>') {
+                        selfClosing = true;
+                        position += 2;
+                        break;
+                    }
+                    rest += ch;
+                    position++;
+                    continue;
+                }
+                if (ch === '>') {
+                    position++;
+                    break;
+                }
+                rest += ch;
+                position++;
+            } else {
+                rest += ch;
+                position++;
+                if (ch === quoteChar) {
+                    quoteChar = undefined;
+                }
+            }
+        }
+
+        if (quoteChar) {
+            throw new Error('Malformed entity content: Unterminated attribute value');
+        }
+
+        if (position > length) {
+            throw new Error('Malformed entity content: Unterminated start tag');
+        }
+
+        const attributesMap: Map<string, string> = this.parseAttributes(rest.trim());
+        this.emitStartTag(name, attributesMap, selfClosing);
+        return position - offset;
+    }
+
+    private parseEntityEndTag(source: string, offset: number): number {
+        let position = offset + 2; // Skip '</'
+        const length = source.length;
+
+        const nameStart = position;
+        while (position < length && !XMLUtils.isXmlSpace(source.charAt(position)) && source.charAt(position) !== '>') {
+            position++;
+        }
+
+        if (position === nameStart) {
+            throw new Error('Malformed entity content: Missing end tag name');
+        }
+
+        const name = source.substring(nameStart, position);
+        if (!XMLUtils.isValidXMLName(name)) {
+            throw new Error(`Invalid end tag name in entity content: "${name}"`);
+        }
+
+        while (position < length && XMLUtils.isXmlSpace(source.charAt(position))) {
+            position++;
+        }
+
+        if (position >= length || source.charAt(position) !== '>') {
+            throw new Error(`Malformed entity content: Unterminated end tag </${name}>`);
+        }
+
+        position++; // Skip '>'
+        this.emitEndTag(name);
+        return position - offset;
+    }
+
+    private emitStartTag(name: string, attributesMap: Map<string, string>, selfClosing: boolean): void {
+        if (this.childrenNames.length > 0) {
+            this.childrenNames[this.childrenNames.length - 1].push(name);
+        }
+        this.childrenNames.push([]);
+
+        this.pushNamespaceContext(attributesMap);
+        const normalizationResult: AttributeNormalizationResult = this.normalizeAndDefaultAttributes(name, attributesMap);
+        attributesMap = normalizationResult.attributes;
+        const attributeMetadata: Map<string, AttributeMetadata> = normalizationResult.metadata;
+
+        if (!this.ignoreGrammars) {
+            this.grammarHandler.processNamespaces(attributesMap);
+        }
+
+        const xmlSpaceValue = attributesMap.get('xml:space');
+        if (xmlSpaceValue === 'preserve') {
+            this.xmlSpaceStack.push('preserve');
+        } else if (xmlSpaceValue === 'default') {
+            this.xmlSpaceStack.push('default');
         } else {
-            // Pure character content
-            this.contentHandler!.characters(entityValue);
+            const currentSpace = this.xmlSpaceStack.length > 0 ?
+                this.xmlSpaceStack[this.xmlSpaceStack.length - 1] : 'default';
+            this.xmlSpaceStack.push(currentSpace);
+        }
+
+        const attributes: Array<XMLAttribute> = [];
+        attributesMap.forEach((value: string, key: string) => {
+            const metadata: AttributeMetadata | undefined = attributeMetadata.get(key);
+            attributes.push(new XMLAttribute(
+                key,
+                value,
+                metadata ? metadata.specified : true,
+                metadata ? metadata.lexical : undefined
+            ));
+        });
+
+        if (this.validating) {
+            const attributeMap: Map<string, string> = new Map<string, string>();
+            attributes.forEach(attr => {
+                attributeMap.set(attr.getName(), attr.getValue());
+            });
+
+            const attrValidationResult = this.grammarHandler.getGrammar().validateAttributes(name, attributeMap, {
+                attributes: attributeMap,
+                childrenNames: [],
+                textContent: '',
+                attributeOnly: true
+            });
+
+            if (!attrValidationResult.isValid) {
+                const errorMessages: string = attrValidationResult.errors.map(e => e.message).join('; ');
+                throw new Error(`Attribute validation failed for element '${name}': ${errorMessages}`);
+            }
+        }
+
+        this.contentHandler!.startElement(name, attributes);
+        this.elementStack++;
+        this.elementNameStack.push(name);
+        if (!this.rootParsed) {
+            this.rootParsed = true;
+        }
+
+        if (selfClosing) {
+            this.cleanCharacterRun();
+            this.contentHandler!.endElement(name);
+            this.elementStack--;
+            this.elementNameStack.pop();
+            this.xmlSpaceStack.pop();
+            this.childrenNames.pop();
+            this.popNamespaceContext();
+            if (this.elementStack === 0) {
+                this.checkRemainingText();
+            }
+        }
+    }
+
+    private emitEndTag(name: string): void {
+        if (this.elementNameStack.length === 0) {
+            throw new Error(`Mismatched element tags: found closing tag "${name}" but no elements are open`);
+        }
+
+        const expectedName = this.elementNameStack.pop();
+        if (name !== expectedName) {
+            throw new Error(`Mismatched element tags: expected closing tag for "${expectedName}" but found "${name}"`);
+        }
+
+        if (this.validating) {
+            const actualChildrenNames: string[] = this.childrenNames.length > 0 ? this.childrenNames[this.childrenNames.length - 1] : [];
+            const elementValidationResult = this.grammarHandler.getGrammar().validateElement(name, {
+                attributes: new Map(),
+                childrenNames: actualChildrenNames,
+                textContent: this.characterRun,
+                attributeOnly: false
+            });
+
+            if (!elementValidationResult.isValid) {
+                const errorMessages: string = elementValidationResult.errors.map(e => e.message).join('; ');
+                throw new Error(`Element validation failed for element '${name}': ${errorMessages}`);
+            }
+        }
+
+        this.contentHandler!.endElement(name);
+        this.elementStack--;
+        this.xmlSpaceStack.pop();
+        if (this.childrenNames.length > 0) {
+            this.childrenNames.pop();
+        }
+        this.popNamespaceContext();
+
+        if (this.elementStack === 0) {
+            this.checkRemainingText();
         }
     }
 

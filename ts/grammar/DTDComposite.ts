@@ -382,6 +382,24 @@ export class DTDComposite implements Grammar {
 
         return undefined;
     }
+    
+    consumeEntityReference(expandedText: string): string | undefined {
+        if (this.internalDTD) {
+            const ref = this.internalDTD.consumeEntityReference(expandedText);
+            if (ref) {
+                return ref;
+            }
+        }
+        if (this.externalDTDs.length > 0) {
+            for (const externalDTD of this.externalDTDs) {
+                const ref = externalDTD.consumeEntityReference(expandedText);
+                if (ref) {
+                    return ref;
+                }
+            }
+        }
+        return undefined;
+    }
 
     clearEntityReferenceTracking(): void {
         if (this.internalDTD) {

@@ -41,6 +41,10 @@ export class NoOpGrammar implements Grammar {
         return undefined;
     }
 
+    consumeEntityReference(expandedText: string): string | undefined {
+        return undefined;
+    }
+
     clearEntityReferenceTracking(): void {
     }
 

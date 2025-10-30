@@ -1006,6 +1006,27 @@ export class CompositeGrammar implements Grammar {
         return undefined;
     }
 
+    consumeEntityReference(expandedText: string): string | undefined {
+        if (this.primaryGrammar) {
+            const result: string | undefined = this.primaryGrammar.consumeEntityReference(expandedText);
+            if (result !== undefined) {
+                return result;
+            }
+        }
+
+        const grammarValues: Grammar[] = Array.from(this.grammars.values());
+        for (const grammar of grammarValues) {
+            if (grammar !== this.primaryGrammar) {
+                const result: string | undefined = grammar.consumeEntityReference(expandedText);
+                if (result !== undefined) {
+                    return result;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
     clearEntityReferenceTracking(): void {
         // Clear from all grammars
         this.grammars.forEach((grammar: Grammar) => {

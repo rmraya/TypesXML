@@ -22,6 +22,8 @@ import { XMLDocument } from "./XMLDocument";
 import { XMLDocumentType } from "./XMLDocumentType";
 import { XMLElement } from "./XMLElement";
 import { XMLUtils } from "./XMLUtils";
+import { AttDecl } from "./dtd/AttDecl";
+import { AttListDecl } from "./dtd/AttListDecl";
 import { DTDParser } from "./dtd/DTDParser";
 import { Grammar } from "./grammar/Grammar";
 import { GrammarHandler } from "./grammar/GrammarHandler";
@@ -41,6 +43,7 @@ export class DOMBuilder implements ContentHandler {
     private includeDefaultAttributes: boolean = true;
     private declaredIds: Set<string> = new Set();
     private pendingIdrefs: string[] = [];
+    private defaultAttributeLexicalCache: Map<string, Map<string, string>> = new Map();
 
     initialize(): void {
         this.document = new XMLDocument();
@@ -48,6 +51,7 @@ export class DOMBuilder implements ContentHandler {
         this.inCdData = false;
         this.declaredIds.clear();
         this.pendingIdrefs = [];
+        this.defaultAttributeLexicalCache.clear();
         // Create initial GrammarHandler for this ContentHandler
         this.grammarHandler = new GrammarHandler();
     }
@@ -87,15 +91,65 @@ export class DOMBuilder implements ContentHandler {
         const existingAttNames = new Set<string>();
         const attributes = element.getAttributes();
         if (attributes) {
-            attributes.forEach(att => existingAttNames.add(att.getName()));
+            attributes.forEach((att: XMLAttribute) => existingAttNames.add(att.getName()));
         }
 
-        defaultAttrs.forEach((defaultValue, attName) => {
-            if (!existingAttNames.has(attName)) {
-                const defaultAttr = new XMLAttribute(attName, defaultValue);
-                element.setAttribute(defaultAttr);
+        defaultAttrs.forEach((defaultValue: string, attName: string) => {
+            if (existingAttNames.has(attName)) {
+                const existingAttr: XMLAttribute | undefined = element.getAttribute(attName);
+                if (existingAttr && !existingAttr.isSpecified() && existingAttr.getLexicalValue() === undefined) {
+                    const lexicalValueExisting: string = this.getDefaultAttributeLexical(elementName, attName) ?? defaultValue;
+                    existingAttr.setLexicalValue(lexicalValueExisting);
+                }
+                return;
             }
+            const lexicalValue: string = this.getDefaultAttributeLexical(elementName, attName) ?? defaultValue;
+            const defaultAttr: XMLAttribute = new XMLAttribute(attName, defaultValue, false, lexicalValue);
+            element.setAttribute(defaultAttr);
         });
+    }
+
+    private getDefaultAttributeLexical(elementName: string, attributeName: string): string | undefined {
+        // Check cache first
+        const cachedForElement: Map<string, string> | undefined = this.defaultAttributeLexicalCache.get(elementName);
+        if (cachedForElement && cachedForElement.has(attributeName)) {
+            return cachedForElement.get(attributeName);
+        }
+
+        const docType: XMLDocumentType | undefined = this.document?.getDocumentType();
+        const internalSubset: string | undefined = docType?.getInternalSubset();
+        if (!internalSubset) {
+            return undefined;
+        }
+
+            const attlistPattern: RegExp = new RegExp(String.raw`<!ATTLIST\s+${this.escapeRegExp(elementName)}\b([\s\S]*?)>`, 'g');
+        let lexicalMapForElement: Map<string, string> | undefined = cachedForElement ?? new Map<string, string>();
+        let match: RegExpExecArray | null;
+
+        while ((match = attlistPattern.exec(internalSubset)) !== null) {
+            const attributesText: string = match[1];
+            try {
+                const attList: AttListDecl = new AttListDecl(elementName, attributesText.trim());
+                attList.getAttributes().forEach((attDecl: AttDecl, name: string) => {
+                    const defaultValue: string = attDecl.getDefaultValue();
+                    if (defaultValue) {
+                        lexicalMapForElement?.set(name, defaultValue);
+                    }
+                });
+            } catch (error) {
+                // Ignore parsing issues for malformed attlist fragments in internal subset
+            }
+        }
+
+        if (!this.defaultAttributeLexicalCache.has(elementName) && lexicalMapForElement.size > 0) {
+            this.defaultAttributeLexicalCache.set(elementName, lexicalMapForElement);
+        }
+
+        return lexicalMapForElement.get(attributeName);
+    }
+
+    private escapeRegExp(value: string): string {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     private trackIdAttributes(elementName: string, element: XMLElement): void {
@@ -164,6 +218,9 @@ export class DOMBuilder implements ContentHandler {
 
     endDocument(): void {
         this.validateIdReferences();
+        if (this.document && this.grammarHandler) {
+            this.document.setGrammar(this.grammarHandler.getGrammar());
+        }
     }
 
     xmlDeclaration(version: string, encoding: string, standalone: string): void {
@@ -173,8 +230,14 @@ export class DOMBuilder implements ContentHandler {
 
     startElement(name: string, atts: XMLAttribute[]): void {
         let element: XMLElement = new XMLElement(name);
-        atts.forEach((att) => {
+        atts.forEach((att: XMLAttribute) => {
             element.setAttribute(att);
+            if (!att.isSpecified() && att.getLexicalValue() === undefined) {
+                const lexicalDefault: string | undefined = this.getDefaultAttributeLexical(name, att.getName());
+                if (lexicalDefault !== undefined) {
+                    att.setLexicalValue(lexicalDefault);
+                }
+            }
         });
 
         // Add default attributes when includeDefaultAttributes flag is set

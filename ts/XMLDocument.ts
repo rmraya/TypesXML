@@ -19,11 +19,13 @@ import { XMLDocumentType } from "./XMLDocumentType";
 import { XMLElement } from "./XMLElement";
 import { XMLNode } from "./XMLNode";
 import { XMLUtils } from "./XMLUtils";
+import { Grammar } from "./grammar/Grammar";
 
 export class XMLDocument implements XMLNode {
 
     private content: Array<XMLNode>;
     documentType: XMLDocumentType | undefined;
+    private grammar: Grammar | undefined;
 
     constructor() {
         this.content = new Array();
@@ -80,6 +82,14 @@ export class XMLDocument implements XMLNode {
 
     getNodeType(): number {
         return Constants.DOCUMENT_NODE;
+    }
+
+    setGrammar(grammar: Grammar | undefined): void {
+        this.grammar = grammar;
+    }
+
+    getGrammar(): Grammar | undefined {
+        return this.grammar;
     }
 
     toString(): string {
