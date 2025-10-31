@@ -34,6 +34,9 @@ export class Constants {
     // namespace constants
     static readonly XMLNS_NS: string = 'http://www.w3.org/2000/xmlns/';
     static readonly XML_NS: string = 'http://www.w3.org/XML/1998/namespace';
+    static readonly XML_SCHEMA_NS: string = 'http://www.w3.org/2001/XMLSchema';
+    static readonly XML_SCHEMA_NS_SECURE: string = 'https://www.w3.org/2001/XMLSchema';
+    static readonly XML_SCHEMA_INSTANCE_NS: string = 'http://www.w3.org/2001/XMLSchema-instance';
     static readonly XSD_NS: string = 'http://www.w3.org/2001/XMLSchema-datatypes';
     static readonly RELAXNG_NS_URI: string = 'http://relaxng.org/ns/structure/1.0';
 }

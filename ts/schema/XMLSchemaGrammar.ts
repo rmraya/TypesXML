@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "../Constants";
 import { NotationDecl } from "../dtd/NotationDecl";
 import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResult } from "../grammar/Grammar";
 import { XMLUtils } from "../XMLUtils";
@@ -997,7 +998,7 @@ export class XMLSchemaGrammar implements Grammar {
                 namespaceForType = this.targetNamespace || undefined;
             }
 
-            if (namespaceForType === 'http://www.w3.org/2001/XMLSchema') {
+            if (namespaceForType === Constants.XML_SCHEMA_NS || namespaceForType === Constants.XML_SCHEMA_NS_SECURE) {
                 continue;
             }
 

@@ -14,6 +14,7 @@ import { existsSync } from 'fs';
 import { dirname, isAbsolute, relative, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { Catalog } from '../Catalog';
+import { Constants } from '../Constants';
 import { DTDGrammar } from '../dtd/DTDGrammar';
 import { DTDParser } from '../dtd/DTDParser';
 import { EntityDecl } from '../dtd/EntityDecl';
@@ -419,7 +420,7 @@ export class GrammarHandler {
         hintLocation?: string
     ): void {
         // Skip XMLSchema-instance namespace - it's handled by pre-compiled grammar
-        if (namespace === 'http://www.w3.org/2001/XMLSchema-instance') {
+        if (namespace === Constants.XML_SCHEMA_INSTANCE_NS) {
             this.trace(`Skipping schema load for reserved namespace '${namespace}'`);
             return;
         }
@@ -616,8 +617,8 @@ export class GrammarHandler {
             this.shouldPerformSemanticValidation();
 
         if (shouldValidateSemantics && this.currentFile) {
-            const hasXSDNamespace = namespaceInfo.defaultNamespace === 'http://www.w3.org/2001/XMLSchema' ||
-                Array.from(namespaceInfo.prefixMappings.values()).includes('http://www.w3.org/2001/XMLSchema');
+            const hasXSDNamespace = namespaceInfo.defaultNamespace === Constants.XML_SCHEMA_NS ||
+                Array.from(namespaceInfo.prefixMappings.values()).some(ns => ns === Constants.XML_SCHEMA_NS || ns === Constants.XML_SCHEMA_NS_SECURE);
 
             if (hasXSDNamespace) {
                 const schemaParser = XMLSchemaParser.getInstance();

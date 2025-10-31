@@ -12,6 +12,7 @@
 
 import { XMLSchemaParser } from "../schema/XMLSchemaParser";
 import { Catalog } from "../Catalog";
+import { Constants } from "../Constants";
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -32,7 +33,7 @@ export class GrammarPrecompiler {
             const xmlSchemaPath = resolve(__dirname, '../../catalog/xml/xml.xsd');
             console.log('   Source: ' + xmlSchemaPath);
             
-            const xmlGrammar = this.schemaParser.parseSchema(xmlSchemaPath, 'http://www.w3.org/XML/1998/namespace');
+            const xmlGrammar = this.schemaParser.parseSchema(xmlSchemaPath, Constants.XML_NS);
             
             if (xmlGrammar) {
                 const serialized = xmlGrammar.toJSON();
@@ -60,7 +61,7 @@ export class GrammarPrecompiler {
             const xmlSchemaPath = resolve(__dirname, '../../catalog/xml/XMLSchema.xsd');
             console.log('   Source: ' + xmlSchemaPath);
             
-            const schemaGrammar = this.schemaParser.parseSchema(xmlSchemaPath, 'http://www.w3.org/2001/XMLSchema');
+            const schemaGrammar = this.schemaParser.parseSchema(xmlSchemaPath, Constants.XML_SCHEMA_NS);
             
             if (schemaGrammar) {
                 const serialized = schemaGrammar.toJSON();

@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { Catalog } from "../Catalog";
+import { Constants } from "../Constants";
 import { ContentHandler } from "../ContentHandler";
 import { GrammarHandler } from "../grammar/GrammarHandler";
 import { XMLAttribute } from "../XMLAttribute";
@@ -653,7 +654,7 @@ export class SchemaParsingHandler implements ContentHandler {
                 attrType.setTypeName(typeQName);
             } else {
                 // Default to xs:string when no type is specified
-                const stringType = '{http://www.w3.org/2001/XMLSchema}string';
+                const stringType = `{${Constants.XML_SCHEMA_NS}}string`;
                 attrType = new SimpleType(stringType);
                 attrType.setTypeName(stringType);
             }

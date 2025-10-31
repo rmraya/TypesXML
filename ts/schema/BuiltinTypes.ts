@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { Constants } from "../Constants";
 import { ValidationResult } from "../grammar/Grammar";
 import { XMLUtils } from "../XMLUtils";
 import { SimpleType } from "./SimpleType";
@@ -23,7 +24,7 @@ export class BuiltinTypes {
             return;
         }
 
-        const xsNamespace = "http://www.w3.org/2001/XMLSchema";
+    const xsNamespace = Constants.XML_SCHEMA_NS;
 
         // Base types
         this.createType("anyType", xsNamespace, () => ValidationResult.success());
@@ -92,7 +93,7 @@ export class BuiltinTypes {
         const colonIndex = name.indexOf(':');
         const localName = colonIndex !== -1 ? name.substring(colonIndex + 1) : name;
         // For built-in types, assume XML Schema namespace
-        const key = `{http://www.w3.org/2001/XMLSchema}${localName}`;
+    const key = `{${Constants.XML_SCHEMA_NS}}${localName}`;
         return this.types.get(key);
     }
 

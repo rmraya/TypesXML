@@ -12,6 +12,7 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
+import { Constants } from '../Constants';
 import { XMLUtils } from '../XMLUtils';
 import { AttributeGroup } from '../schema/AttributeGroup';
 import { BuiltinTypes } from '../schema/BuiltinTypes';
@@ -93,7 +94,7 @@ export class CompositeGrammar implements Grammar {
                 const data: any = JSON.parse(readFileSync(grammarPath, 'utf8'));
                 const grammar: XMLSchemaGrammar = XMLSchemaGrammar.fromJSON(data);
 
-                this.grammars.set('http://www.w3.org/2001/XMLSchema', grammar);
+                this.grammars.set(Constants.XML_SCHEMA_NS, grammar);
             }
         } catch (error) {
             // Silently continue - this is an optimization, not required
@@ -107,7 +108,7 @@ export class CompositeGrammar implements Grammar {
                 const data: any = JSON.parse(readFileSync(grammarPath, 'utf8'));
                 const grammar: XMLSchemaGrammar = XMLSchemaGrammar.fromJSON(data);
 
-                this.grammars.set('http://www.w3.org/2001/XMLSchema-instance', grammar);
+                this.grammars.set(Constants.XML_SCHEMA_INSTANCE_NS, grammar);
 
             }
         } catch (error) {
@@ -137,14 +138,15 @@ export class CompositeGrammar implements Grammar {
             const resolvedNamespace: string = namespace;
 
             if (prefix === '') {
-                const isSchemaDefault: boolean = resolvedNamespace === 'http://www.w3.org/2001/XMLSchema';
+                const isSchemaDefault: boolean = resolvedNamespace === Constants.XML_SCHEMA_NS || resolvedNamespace === Constants.XML_SCHEMA_NS_SECURE;
                 if (isSchemaDefault) {
                     // Avoid persisting the XML Schema default namespace as the
                     // active default for instance documents.
-                    if (this.prefixToNamespace.get('') === 'http://www.w3.org/2001/XMLSchema') {
+                    const defaultPrefixNs = this.prefixToNamespace.get('');
+                    if (defaultPrefixNs === Constants.XML_SCHEMA_NS || defaultPrefixNs === Constants.XML_SCHEMA_NS_SECURE) {
                         this.prefixToNamespace.delete('');
                     }
-                    if (this.defaultNamespace === 'http://www.w3.org/2001/XMLSchema') {
+                    if (this.defaultNamespace === Constants.XML_SCHEMA_NS || this.defaultNamespace === Constants.XML_SCHEMA_NS_SECURE) {
                         this.defaultNamespace = '';
                     }
                     return;
@@ -640,7 +642,7 @@ export class CompositeGrammar implements Grammar {
         if (!elementDecl) {
             const targetNamespace: string | undefined = grammar.getTargetNamespace?.();
 
-            if (targetNamespace === 'http://www.w3.org/2001/XMLSchema') {
+            if (targetNamespace === Constants.XML_SCHEMA_NS || targetNamespace === Constants.XML_SCHEMA_NS_SECURE) {
                 // Allow schema documents to pass through structural validation.
                 // Semantic validation is handled separately by XMLSchemaParser.
                 return ValidationResult.success();
@@ -1042,7 +1044,7 @@ export class CompositeGrammar implements Grammar {
         const name: string | undefined = simpleType.getName();
         if (name) {
             const localName: string = name.includes(':') ? name.substring(name.indexOf(':') + 1) : name;
-            if (namespace === 'http://www.w3.org/2001/XMLSchema' || name.startsWith('xsd:') || name.startsWith('xs:')) {
+            if (namespace === Constants.XML_SCHEMA_NS || namespace === Constants.XML_SCHEMA_NS_SECURE || name.startsWith('xsd:') || name.startsWith('xs:')) {
                 return localName;
             }
         }
