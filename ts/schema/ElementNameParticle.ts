@@ -115,6 +115,13 @@ export class ElementNameParticle implements ValidationParticle {
         const elementColonIndex = elementName.indexOf(':');
         const elementLocalName = elementColonIndex !== -1 ? elementName.substring(elementColonIndex + 1) : elementName;
 
+        if (this.namespaceResolver && this.prefix !== '') {
+            const expectedNamespace = this.namespaceResolver(this.prefix) || '';
+            if (elementNamespaceURI && expectedNamespace === elementNamespaceURI && this.localName === elementLocalName) {
+                return true;
+            }
+        }
+
         // If this particle expects a qualified name, compare local names
         if (this.localName === elementLocalName) {
             return true;

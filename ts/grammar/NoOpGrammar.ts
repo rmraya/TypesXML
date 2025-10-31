@@ -10,38 +10,47 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils';
 import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResult } from './Grammar';
 
 export class NoOpGrammar implements Grammar {
 
     validateElement(element: string, content: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(element, content);
         return ValidationResult.success();
     }
 
     validateAttributes(element: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(element, attributes, context);
         return ValidationResult.success();
     }
 
     getElementAttributes(element: string): Map<string, AttributeInfo> {
+        XMLUtils.ignoreUnused(element);
         return new Map();
     }
 
     getDefaultAttributes(element: string): Map<string, string> {
+        XMLUtils.ignoreUnused(element);
         return new Map();
     }
 
     resolveEntity(name: string): string | undefined {
+        XMLUtils.ignoreUnused(name);
         return undefined;
     }
 
     addEntityReferenceUsage(originalReference: string, expandedText: string): void {
+        XMLUtils.ignoreUnused(originalReference, expandedText);
     }
 
     getOriginalEntityReference(expandedText: string): string | undefined {
+        XMLUtils.ignoreUnused(expandedText);
         return undefined;
     }
 
     consumeEntityReference(expandedText: string): string | undefined {
+        XMLUtils.ignoreUnused(expandedText);
         return undefined;
     }
 

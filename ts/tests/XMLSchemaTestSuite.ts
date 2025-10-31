@@ -142,7 +142,7 @@ export class XMLSchemaTestSuite {
 
     private countFiles(extension: string): number {
         let count = 0;
-        this.countFilesRecursive(this.xstsPath, extension, (file) => {
+        this.countFilesRecursive(this.xstsPath, extension, () => {
             count++;
         });
         return count;
@@ -676,45 +676,6 @@ export class XMLSchemaTestSuite {
         for (const [source, data] of sortedSources) {
             const percentage = ((data.count / Object.values(testSources).reduce((sum, s) => sum + s.count, 0)) * 100).toFixed(1);
             console.log(`      • ${source}: ${data.count} tests (${percentage}%) - ${data.valid} valid, ${data.invalid} invalid expected`);
-        }
-        console.log('');
-    }
-
-    private categorizeTestFiles(files: string[]): { [source: string]: { count: number, files: string[] } } {
-        const categories: { [source: string]: { count: number, files: string[] } } = {};
-
-        for (const file of files) {
-            let source = 'Unknown';
-
-            if (file.includes('/boeingData/') || file.includes('/boeingMeta/')) {
-                source = 'Boeing';
-            } else if (file.includes('/msData/') || file.includes('/msMeta/')) {
-                source = 'Microsoft';
-            } else if (file.includes('/nistData/') || file.includes('/nistMeta/')) {
-                source = 'NIST';
-            } else if (file.includes('/sunData/') || file.includes('/sunMeta/')) {
-                source = 'Sun';
-            }
-
-            if (!categories[source]) {
-                categories[source] = { count: 0, files: [] };
-            }
-            categories[source].count++;
-            categories[source].files.push(file);
-        }
-
-        return categories;
-    }
-
-    private displayTestSourceSummary(fileType: string, testSources: { [source: string]: { count: number, files: string[] } }): void {
-        console.log(`   📊 ${fileType} by Test Source:`);
-
-        const sortedSources = Object.entries(testSources)
-            .sort(([, a], [, b]) => b.count - a.count);
-
-        for (const [source, data] of sortedSources) {
-            const percentage = ((data.count / Object.values(testSources).reduce((sum, s) => sum + s.count, 0)) * 100).toFixed(1);
-            console.log(`      • ${source}: ${data.count} files (${percentage}%)`);
         }
         console.log('');
     }

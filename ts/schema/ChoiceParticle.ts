@@ -18,8 +18,6 @@ export class ChoiceParticle implements ValidationParticle {
     private minOccurs: number = 1;
     private maxOccurs: number = 1;
     private resolved: boolean = false;
-    private namespaceResolver?: (prefix: string) => string;
-    private substitutionGroupResolver?: (elementName: string, substitutionHead: string) => boolean;
 
     getComponents(): ValidationParticle[] {
         return this.components;
@@ -69,7 +67,6 @@ export class ChoiceParticle implements ValidationParticle {
     }
 
     setNamespaceResolver(resolver: (prefix: string) => string): void {
-        this.namespaceResolver = resolver;
         // Propagate to child particles
         for (const component of this.components) {
             if (component instanceof ElementNameParticle) {
@@ -79,7 +76,6 @@ export class ChoiceParticle implements ValidationParticle {
     }
 
     setSubstitutionGroupResolver(resolver: (elementName: string, substitutionHead: string) => boolean): void {
-        this.substitutionGroupResolver = resolver;
         // Propagate to child particles
         for (const component of this.components) {
             if (component instanceof ElementNameParticle) {

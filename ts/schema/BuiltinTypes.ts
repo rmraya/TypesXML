@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from "../XMLUtils";
 import { SimpleType } from "./SimpleType";
 import { ValidationResult } from "../grammar/Grammar";
 
@@ -102,6 +103,7 @@ export class BuiltinTypes {
 
     // String validation methods
     private static validateString(value: string): ValidationResult {
+        XMLUtils.ignoreUnused(value);
         return ValidationResult.success();
     }
 

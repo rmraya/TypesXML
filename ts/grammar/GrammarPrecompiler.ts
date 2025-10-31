@@ -12,9 +12,8 @@
 
 import { XMLSchemaParser } from "../schema/XMLSchemaParser";
 import { Catalog } from "../Catalog";
-import { XMLSchemaGrammar } from "../schema/XMLSchemaGrammar";
-import { writeFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { writeFileSync } from 'fs';
+import { resolve } from 'path';
 
 export class GrammarPrecompiler {
     private catalog: Catalog;

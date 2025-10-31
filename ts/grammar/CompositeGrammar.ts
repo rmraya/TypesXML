@@ -12,6 +12,7 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
+import { XMLUtils } from '../XMLUtils';
 import { AttributeGroup } from '../schema/AttributeGroup';
 import { BuiltinTypes } from '../schema/BuiltinTypes';
 import { ContentModel } from '../schema/ContentModel';
@@ -340,6 +341,7 @@ export class CompositeGrammar implements Grammar {
     resolveCrossSchemaGroup(qualifiedName: string): ContentModel | undefined {
         // Try to find the group in all loaded XMLSchemaGrammar instances
         for (const [namespace, grammar] of this.grammars.entries()) {
+            XMLUtils.ignoreUnused(namespace);
             if (grammar instanceof XMLSchemaGrammar) {
                 const group = grammar.getGroupDefinition(qualifiedName);
                 if (group) {
@@ -354,6 +356,7 @@ export class CompositeGrammar implements Grammar {
     resolveAllGroupReferences(): void {
         // Go through all XMLSchemaGrammar instances and try to resolve any unresolved group references
         for (const [namespace, grammar] of this.grammars.entries()) {
+            XMLUtils.ignoreUnused(namespace);
             if (grammar instanceof XMLSchemaGrammar) {
                 // For now, this would need access to unresolved group references
                 // This is a placeholder for post-loading resolution
@@ -564,6 +567,7 @@ export class CompositeGrammar implements Grammar {
         context: ValidationContext,
         grammar: any
     ): ValidationResult {
+        XMLUtils.ignoreUnused(context);
         // Get element declaration and its complex type
         const elementAttrs = grammar.getElementAttributes(elementName);
         if (!elementAttrs || elementAttrs.size === 0) {
@@ -618,16 +622,6 @@ export class CompositeGrammar implements Grammar {
         }
 
         return errors.length > 0 ? new ValidationResult(false, errors) : ValidationResult.success();
-    }
-
-    private performAttributeValidation(grammar: Grammar, elementName: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
-        // For XMLSchemaGrammar, we handle the validation here in CompositeGrammar
-        if (grammar.getGrammarType().toString() === 'xmlschema') {
-            return (grammar as any).validateAttributes(elementName, attributes, context);
-        }
-
-        // For other grammar types, delegate to the grammar
-        return grammar.validateAttributes(elementName, attributes, context);
     }
 
     private performValidation(grammar: Grammar, elementName: string, context: ValidationContext): ValidationResult {
@@ -837,6 +831,7 @@ export class CompositeGrammar implements Grammar {
     resolveAttributeGroup(attributeGroupName: string): AttributeGroup | undefined {
         // First try to resolve in all XMLSchema grammars
         for (const [namespace, grammar] of this.grammars) {
+            XMLUtils.ignoreUnused(namespace);
             if (grammar instanceof XMLSchemaGrammar) {
                 const attributeGroup = grammar.getAttributeGroupDefinition(attributeGroupName);
                 if (attributeGroup) {
@@ -871,6 +866,7 @@ export class CompositeGrammar implements Grammar {
 
         // Finally, try unqualified name in all grammars
         for (const [namespace, grammar] of this.grammars) {
+            XMLUtils.ignoreUnused(namespace);
             if (grammar instanceof XMLSchemaGrammar) {
                 const attributeGroup = grammar.getAttributeGroupDefinition(attributeGroupName);
                 if (attributeGroup) {
@@ -1062,6 +1058,7 @@ export class CompositeGrammar implements Grammar {
     }
 
     private validateComplexType(elementName: string, context: ValidationContext, complexType: any, grammar: any): ValidationResult {
+        XMLUtils.ignoreUnused(elementName);
         // Attributes are already validated during startElement by SAXParser.validateAttributes()
         // No need to validate them again during content validation (endElement)
 

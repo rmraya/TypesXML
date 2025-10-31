@@ -59,6 +59,12 @@ export class XMLUtils {
         return String(text).split(search).join(replacement);
     }
 
+    static ignoreUnused(...args: unknown[]): void {
+        if (args.length > 0) {
+            void args[0];
+        }
+    }
+
     static escapeRegExpChars(text: string): string {
         let result: string = '';
         let length: number = text.length;

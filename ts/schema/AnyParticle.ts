@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils';
 import { Grammar, ValidationContext } from '../grammar/Grammar';
 import { ValidationParticle } from './ValidationParticle';
 
@@ -34,6 +35,7 @@ export class AnyParticle implements ValidationParticle {
     }
 
     addComponent(component: ValidationParticle): void {
+        XMLUtils.ignoreUnused(component);
         throw new Error('AnyParticle does not support adding sub-components');
     }
 
@@ -179,6 +181,7 @@ export class AnyParticle implements ValidationParticle {
     }
 
     setSubstitutionGroupResolver(resolver: (elementName: string, substitutionHead: string) => boolean): void {
+        XMLUtils.ignoreUnused(resolver);
         // AnyParticle doesn't need substitution group resolution since it accepts any element
         // This method is here to satisfy the ValidationParticle interface
     }

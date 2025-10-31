@@ -17,6 +17,7 @@ import { Catalog } from '../Catalog';
 import { DTDGrammar } from '../dtd/DTDGrammar';
 import { DTDParser } from '../dtd/DTDParser';
 import { EntityDecl } from '../dtd/EntityDecl';
+import { XMLUtils } from '../XMLUtils';
 import { XMLSchemaParser } from '../schema/XMLSchemaParser';
 import { CompositeGrammar } from './CompositeGrammar';
 import { DTDComposite } from './DTDComposite';
@@ -32,7 +33,6 @@ export class GrammarHandler {
     private foundNamespaces: string[] = [];
     private validating: boolean = false;
     private includeDefaultAttributes: boolean = true;
-    private relaxNGDeepSearch: boolean = false;
 
     constructor() {
         this.compositeGrammar = CompositeGrammar.getInstance();
@@ -157,6 +157,7 @@ export class GrammarHandler {
         this.validating = validating;
         const allGrammars = this.compositeGrammar.getGrammars();
         for (const [namespace, grammar] of allGrammars) {
+            XMLUtils.ignoreUnused(namespace);
             if (grammar.getGrammarType().toString() === 'xmlschema') {
                 // XMLSchemaGrammar has setValidating method
                 (grammar as any).setValidating(validating);
@@ -168,6 +169,7 @@ export class GrammarHandler {
     }
 
     startDTDProcessing(name: string, publicId: string, systemId: string): void {
+        XMLUtils.ignoreUnused(name, publicId, systemId);
         // Get singleton DTD composite when DOCTYPE is detected
         this.dtdComposite = DTDComposite.getInstance();
         this.dtdComposite.setIncludeDefaultAttributes(this.includeDefaultAttributes);
@@ -175,6 +177,7 @@ export class GrammarHandler {
     }
 
     processDoctype(name: string, publicId: string, systemId: string, internalSubset: string): void {
+        XMLUtils.ignoreUnused(name);
         if (!this.dtdComposite) {
             this.dtdComposite = DTDComposite.getInstance();
         }
@@ -379,9 +382,6 @@ export class GrammarHandler {
             prefixMappings: new Map<string, string>()
         };
 
-        let defaultNamespace: string | undefined = undefined;
-        let defaultSchemaLocation: string | undefined = undefined;
-
         for (const [key, value] of attributesMap) {
             if (key === 'xml:lang' || key === 'xml:space') {
                 continue;
@@ -390,7 +390,6 @@ export class GrammarHandler {
             if (key === 'xmlns') {
                 // Default namespace declaration
                 info.defaultNamespace = value;
-                defaultNamespace = value;
                 info.prefixMappings.set('', value);
             } else if (key.startsWith('xmlns:')) {
                 // Prefixed namespace declaration like xmlns:b="ns-b"
@@ -404,7 +403,6 @@ export class GrammarHandler {
                     const ns: string = parts[i];
                     const location: string = parts[i + 1];
                     info.schemaLocations.set(ns, location);
-                    defaultSchemaLocation = location;
                 }
             } else if (key === 'xsi:noNamespaceSchemaLocation') {
                 // Handle xsi:noNamespaceSchemaLocation specially
@@ -549,6 +547,7 @@ export class GrammarHandler {
     }
 
     private loadDTDForNamespace(location: string, namespace: string): DTDGrammar | null {
+        XMLUtils.ignoreUnused(namespace);
         try {
             const dtdParser: DTDParser = new DTDParser();
             dtdParser.setValidating(this.validating);

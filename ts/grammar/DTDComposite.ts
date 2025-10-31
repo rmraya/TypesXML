@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils';
 import { AttDecl } from '../dtd/AttDecl';
 import { DTDGrammar } from '../dtd/DTDGrammar';
 import { ElementDecl } from '../dtd/ElementDecl';
@@ -20,7 +21,6 @@ import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationResul
 export class DTDComposite implements Grammar {
 
     private static instance: DTDComposite | undefined;
-    private validating: boolean = false;
     private internalDTD: DTDGrammar | undefined;
     private externalDTDs: DTDGrammar[] = [];
     private sharedParameterEntities: Map<string, EntityDecl> = new Map();
@@ -43,7 +43,6 @@ export class DTDComposite implements Grammar {
     }
 
     reset(): void {
-        this.validating = false;
         this.internalDTD = undefined;
         this.externalDTDs = [];
         this.sharedParameterEntities.clear();
@@ -59,7 +58,7 @@ export class DTDComposite implements Grammar {
     }
 
     setValidating(validating: boolean): void {
-        this.validating = validating;
+        XMLUtils.ignoreUnused(validating);
     }
 
     setIncludeDefaultAttributes(include: boolean): void {
@@ -80,7 +79,7 @@ export class DTDComposite implements Grammar {
         const sharedGrammar = new DTDGrammar();
 
         // Add all shared parameter entities to the new grammar
-        this.sharedParameterEntities.forEach((entity, name) => {
+        this.sharedParameterEntities.forEach((entity) => {
             sharedGrammar.addEntity(entity);
         });
 
@@ -119,6 +118,7 @@ export class DTDComposite implements Grammar {
     }
 
     validateAttributes(element: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(context);
         // Use merged attribute information for validation
         const declaredAttributes = this.getElementAttributes(element);
 

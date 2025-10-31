@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils';
 import { ValidationResult, ValidationError } from '../grammar/Grammar';
 import { ContentModel } from './ContentModel';
 import { ValidationParticle } from './ValidationParticle';
@@ -37,6 +38,7 @@ export class AllModel extends ContentModel {
     }
     
     validate(children: string[], context?: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(context);
         const elementCounts = new Map<string, number>();
 
         for (const child of children) {

@@ -461,6 +461,7 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     validateElement(elementName: string, context: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(context);
         // XMLSchemaGrammar only provides infrastructure - no validation logic
         // Just verify element exists in schema
         const elementDecl: SchemaElementDecl | undefined = this.getElementDeclaration(elementName);
@@ -492,6 +493,7 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     validateAttributes(elementName: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(context);
         // XMLSchemaGrammar only provides infrastructure - no validation logic
         // Just verify element exists and perform basic structural checks
         const elementDecl: SchemaElementDecl | undefined = this.getElementDeclaration(elementName);
@@ -573,33 +575,39 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     validateElementContent(elementName: string, children: string[], textContent: string, context: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(elementName, children, textContent, context);
         // XMLSchemaGrammar only provides structure information
         // Actual validation is handled by CompositeGrammar
         return ValidationResult.success();
     }
 
     resolveEntity(name: string): string | undefined {
+        XMLUtils.ignoreUnused(name);
         // Entity methods (for DTD compatibility)
         // XML Schema doesn't support general entities like DTD
         return undefined;
     }
 
     getEntityValue(entityName: string): string | undefined {
+        XMLUtils.ignoreUnused(entityName);
         // XML Schema doesn't support general entities like DTD
         return undefined;
     }
 
     hasEntity(entityName: string): boolean {
+        XMLUtils.ignoreUnused(entityName);
         return false;
     }
 
     getNotation(notationName: string): NotationDecl | undefined {
+        XMLUtils.ignoreUnused(notationName);
         // Notation methods (for DTD compatibility)
         // XML Schema doesn't support notations in the same way as DTD
         return undefined;
     }
 
     hasNotation(notationName: string): boolean {
+        XMLUtils.ignoreUnused(notationName);
         return false;
     }
 

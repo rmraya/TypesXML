@@ -18,18 +18,13 @@ import { XMLDocument } from "./XMLDocument";
 import { XMLElement } from "./XMLElement";
 import { CData } from "./CData";
 import { Grammar } from "./grammar/Grammar";
+import { XMLUtils } from "./XMLUtils";
 
 export class XMLCanonicalizer {
 
-    private grammar: Grammar | undefined;
-
     public static canonicalize(document: XMLDocument, grammar?: Grammar): string {
         const canonicalizer = new XMLCanonicalizer();
-        if (grammar) {
-            canonicalizer.grammar = grammar;
-        } else if (document.getGrammar) {
-            canonicalizer.grammar = document.getGrammar();
-        }
+        XMLUtils.ignoreUnused(grammar);
         return canonicalizer.canonicalizeDocument(document);
     }
 

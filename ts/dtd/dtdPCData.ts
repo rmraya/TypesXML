@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from "../XMLUtils";
 import { Cardinality } from "./ContentModel";
 import { ContentParticle, ContentParticleType } from "./contentParticle";
 
@@ -20,11 +21,11 @@ export class DTDPCData implements ContentParticle {
     }
 
     addParticle(particle: ContentParticle): void {
-        // do nothing
+        XMLUtils.ignoreUnused(particle);
     }
 
     setCardinality(cardinality: (typeof Cardinality)[keyof typeof Cardinality]): void {
-        // do nothing
+        XMLUtils.ignoreUnused(cardinality);
     }
 
     getCardinality(): (typeof Cardinality)[keyof typeof Cardinality] {

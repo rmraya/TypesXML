@@ -10,11 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { ValidationResult, ValidationError } from "../grammar/Grammar";
+import { ValidationResult } from "../grammar/Grammar";
 import { ValidationParticle } from "./ValidationParticle";
-import { ElementNameParticle } from "./ElementNameParticle";
-import { SequenceParticle } from "./SequenceParticle";
-import { ChoiceParticle } from "./ChoiceParticle";
 import { Model, ValidationContext } from "./Model";
 
 export abstract class ContentModel implements Model {

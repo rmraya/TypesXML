@@ -339,7 +339,6 @@ export class SAXParser {
             !this.inComment && !this.inDoctype && !this.inProcessingInstruction) {
             throw new Error('Entity reference not allowed in this context');
         }
-        const textForValidation: string = this.characterRun ? this.normalizeCharacterRun(this.characterRun) : '';
         this.cleanCharacterRun();
         this.pointer++; // skip '&'
         let name: string = '';
@@ -942,6 +941,7 @@ export class SAXParser {
     }
 
     parseRelaxNG(href: string) {
+        XMLUtils.ignoreUnused(href);
         // TODO Silently ignored, not implemented yet
     }
 

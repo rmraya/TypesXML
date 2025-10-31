@@ -213,6 +213,7 @@ export class DTDGrammar implements Grammar {
     }
 
     validateElement(element: string, content: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(content);
         const colonIndex = element.indexOf(':');
         const elementName = colonIndex !== -1 ? element.substring(colonIndex + 1) : element;
         const elementDecl = this.elementDeclMap.get(elementName);
@@ -228,6 +229,7 @@ export class DTDGrammar implements Grammar {
     }
 
     validateAttributes(element: string, attributes: Map<string, string>, context: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(element, attributes, context);
         // DTD attribute validation - simplified for now
         return ValidationResult.success();
     }

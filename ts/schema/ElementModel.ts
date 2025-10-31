@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils';
 import { ValidationResult } from '../grammar/Grammar';
 import { ContentModel } from './ContentModel';
 import { ValidationParticle } from './ValidationParticle';
@@ -33,6 +34,7 @@ export class ElementModel extends ContentModel {
     }
 
     validate(children: string[], context?: ValidationContext): ValidationResult {
+        XMLUtils.ignoreUnused(context);
         const particle = this.toParticle(context);
         try {
             particle.validate(children);
@@ -43,6 +45,7 @@ export class ElementModel extends ContentModel {
     }
 
     toParticle(context?: ValidationContext): ValidationParticle {
+        XMLUtils.ignoreUnused(context);
         const particle = new ElementNameParticle(this.elementName.toString());
         particle.setCardinality(this.minOccurs, this.maxOccurs);
         return particle;

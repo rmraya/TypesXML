@@ -257,6 +257,7 @@ export class DOMBuilder implements ContentHandler {
     }
 
     endElement(name: string): void {
+        XMLUtils.ignoreUnused(name);
         this.stack.pop();
     }
 

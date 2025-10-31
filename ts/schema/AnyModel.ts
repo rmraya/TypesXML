@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils';
 import { ValidationResult } from '../grammar/Grammar';
 import { ContentModel } from './ContentModel';
 import { ValidationParticle } from './ValidationParticle';
@@ -56,6 +57,7 @@ export class AnyModel extends ContentModel implements Model {
     }
 
     canAccept(element: string, position: number, children: string[]): boolean {
+        XMLUtils.ignoreUnused(position, children);
         // Create a temporary particle to check if the element matches
         // Note: We don't have ValidationContext here, so we can't pass targetNamespace
         // This is a limitation of the canAccept interface - it should accept ValidationContext
@@ -64,6 +66,7 @@ export class AnyModel extends ContentModel implements Model {
     }
     
     getPossibleElements(position: number, children: string[]): string[] {
+        XMLUtils.ignoreUnused(position, children);
         return [];
     }
 }

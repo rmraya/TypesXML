@@ -12,6 +12,7 @@
 
 import { dirname, isAbsolute, resolve } from "path";
 import { Catalog } from "../Catalog";
+import { XMLUtils } from "../XMLUtils";
 import { SAXParser } from "../SAXParser";
 import { SchemaAttributeDecl } from "./Attribute";
 import { AttributeGroup } from "./AttributeGroup";
@@ -156,7 +157,7 @@ export class XMLSchemaParser {
                 parser.setCatalog(this.catalog);
             }
 
-            const schemaHandler: SchemaParsingHandler = new SchemaParsingHandler(grammar, this.crossSchemaResolver, this.crossSchemaAttributeGroupResolver);
+            const schemaHandler: SchemaParsingHandler = new SchemaParsingHandler(grammar, this.crossSchemaResolver);
 
             if (this.catalog) {
                 schemaHandler.setCatalog(this.catalog);
@@ -322,7 +323,7 @@ export class XMLSchemaParser {
             parser.setCatalog(this.catalog);
         }
 
-        const schemaHandler: SchemaParsingHandler = new SchemaParsingHandler(grammar, this.crossSchemaResolver, this.crossSchemaAttributeGroupResolver);
+    const schemaHandler: SchemaParsingHandler = new SchemaParsingHandler(grammar, this.crossSchemaResolver);
 
         if (this.catalog) {
             schemaHandler.setCatalog(this.catalog);
@@ -358,6 +359,7 @@ export class XMLSchemaParser {
         const elementEntries: [string, any][] = Array.from(elementDeclarations.entries());
 
         for (const [elementName, elementDecl] of elementEntries) {
+            XMLUtils.ignoreUnused(elementName);
             const typeName: any = elementDecl.getTypeName();
             if (typeName && !elementDecl.getType()) {
                 // Use the enhanced getTypeDefinition method which handles qualified names
@@ -379,6 +381,7 @@ export class XMLSchemaParser {
         const attributeEntries: [string, any][] = Array.from(attributeDeclarations.entries());
 
         for (const [attributeName, attributeDecl] of attributeEntries) {
+            XMLUtils.ignoreUnused(attributeName);
             const attributeType = attributeDecl.getType();
             if (attributeType) {
                 const typeName: any = attributeType.getTypeName();
@@ -401,6 +404,7 @@ export class XMLSchemaParser {
         const typeEntries: [string, any][] = Array.from(typeDefinitions.entries());
 
         for (const [typeName, typeDefinition] of typeEntries) {
+            XMLUtils.ignoreUnused(typeName);
             if (typeDefinition.isComplexType && typeDefinition.isComplexType()) {
                 const baseTypeQName = typeDefinition.getBaseTypeQName();
                 if (baseTypeQName && !typeDefinition.getBaseType()) {
@@ -437,6 +441,7 @@ export class XMLSchemaParser {
         // Phase 5: Provide fallback types for critical elements that couldn't be resolved
         // This prevents complete validation failures for schemas with external dependencies
         for (const [elementName, elementDecl] of elementEntries) {
+            XMLUtils.ignoreUnused(elementName);
             const typeName: any = elementDecl.getTypeName();
             if (typeName && !elementDecl.getType()) {
                 // As a final fallback, try to create a simple string type for unresolved references
@@ -453,7 +458,7 @@ export class XMLSchemaParser {
         // Resolve attribute group references after all parsing is complete
         const attributeGroupReferences = handler.getAttributeGroupReferences();
         for (const reference of attributeGroupReferences) {
-            const { ref, refQName, targetComplexType, elementPath } = reference;
+            const { refQName, targetComplexType, elementPath } = reference;
             let resolved = false;
 
             // First try to resolve within the current grammar

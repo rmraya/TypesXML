@@ -83,32 +83,31 @@ export class SchemaParsingHandler implements ContentHandler {
     // Cross-schema resolver for group references
     private crossSchemaResolver?: (qualifiedName: string) => ContentModel | undefined;
 
-    // Cross-schema resolver for attribute group references
-    private crossSchemaAttributeGroupResolver?: (qualifiedName: string) => AttributeGroup | undefined;
-
     constructor(
         grammar: XMLSchemaGrammar,
-        crossSchemaResolver?: (qualifiedName: string) => ContentModel | undefined,
-        crossSchemaAttributeGroupResolver?: (qualifiedName: string) => AttributeGroup | undefined
+        crossSchemaResolver?: (qualifiedName: string) => ContentModel | undefined
     ) {
         this.grammar = grammar;
         this.crossSchemaResolver = crossSchemaResolver;
-        this.crossSchemaAttributeGroupResolver = crossSchemaAttributeGroupResolver;
     }
 
     setCatalog(catalog: Catalog): void {
+        XMLUtils.ignoreUnused(catalog);
         // Not used in schema parsing
     }
 
     setValidating(validating: boolean): void {
+        XMLUtils.ignoreUnused(validating);
         // Not used in schema parsing
     }
 
     setIncludeDefaultAttributes(include: boolean): void {
+        XMLUtils.ignoreUnused(include);
         // Not used in schema parsing
     }
 
     setGrammarHandler(grammarHandler: GrammarHandler): void {
+        XMLUtils.ignoreUnused(grammarHandler);
         // Not used in schema parsing - schema handler uses XMLSchemaGrammar directly
     }
 
@@ -176,6 +175,7 @@ export class SchemaParsingHandler implements ContentHandler {
         this.includes = [];
         this.redefines = [];
         this.imports = [];
+        this.attributeGroupReferences = [];
     }
 
     startDocument(): void {
@@ -193,6 +193,7 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     xmlDeclaration(version: string, encoding: string, standalone: string | undefined): void {
+        XMLUtils.ignoreUnused(version, encoding, standalone);
         // Not needed for schema parsing
     }
 
@@ -221,7 +222,7 @@ export class SchemaParsingHandler implements ContentHandler {
                 this.processAttributeDeclaration(attributes);
                 break;
             case 'anyAttribute':
-                this.processAnyAttribute(attributes);
+                this.processAnyAttribute();
                 break;
             case 'sequence':
                 this.processSequence(attributes);
@@ -230,7 +231,7 @@ export class SchemaParsingHandler implements ContentHandler {
                 this.processChoice(attributes);
                 break;
             case 'all':
-                this.processAll(attributes);
+                this.processAll();
                 break;
             case 'any':
                 this.processAny(attributes);
@@ -320,22 +321,27 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     internalSubset(declaration: string): void {
+        XMLUtils.ignoreUnused(declaration);
         // Not used in schema parsing
     }
 
     characters(ch: string): void {
+        XMLUtils.ignoreUnused(ch);
         // Schema parsing doesn't need character content
     }
 
     ignorableWhitespace(ch: string): void {
+        XMLUtils.ignoreUnused(ch);
         // Ignore whitespace in schema
     }
 
     comment(ch: string): void {
+        XMLUtils.ignoreUnused(ch);
         // Ignore comments in schema
     }
 
     processingInstruction(target: string, data: string): void {
+        XMLUtils.ignoreUnused(target, data);
         // Ignore PIs in schema
     }
 
@@ -348,6 +354,7 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     startDTD(name: string, publicId: string, systemId: string): void {
+        XMLUtils.ignoreUnused(name, publicId, systemId);
         // Not used in schema parsing
     }
 
@@ -356,6 +363,7 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     skippedEntity(name: string): void {
+        XMLUtils.ignoreUnused(name);
         // Not used in schema parsing
     }
 
@@ -699,7 +707,7 @@ export class SchemaParsingHandler implements ContentHandler {
         }
     }
 
-    private processAnyAttribute(attributes: XMLAttribute[]): void {
+    private processAnyAttribute(): void {
         // xs:anyAttribute allows attributes from specified namespaces
         if (this.currentType && this.currentType.isComplexType()) {
             const complexType = this.currentType as ComplexType;
@@ -779,32 +787,6 @@ export class SchemaParsingHandler implements ContentHandler {
             // Add target namespace prefix if available
             const prefix = this.getPrefixForNamespace(this.targetNamespace);
             return prefix ? `${prefix}:${qname}` : qname;
-        }
-
-        return qname;
-    }
-
-    private expandQName(qname: string): string {
-        const colonIndex: number = qname.indexOf(':');
-        if (colonIndex !== -1) {
-            // Has a prefix - resolve to namespace
-            const prefix: string = qname.substring(0, colonIndex);
-            const localName: string = qname.substring(colonIndex + 1);
-            const namespaceURI: string | undefined = this.namespacePrefixes.get(prefix);
-            if (namespaceURI) {
-                return `{${namespaceURI}}${localName}`;
-            }
-            // If prefix not found, return as-is
-            return qname;
-        }
-
-        // No prefix - check if it's a schema built-in or use target namespace
-        if (this.isSchemaNamespace(qname)) {
-            // XML Schema built-in types don't need namespace expansion
-            return qname;
-        } else if (this.targetNamespace) {
-            // Use target namespace for unprefixed names
-            return `{${this.targetNamespace}}${qname}`;
         }
 
         return qname;
@@ -1045,38 +1027,6 @@ export class SchemaParsingHandler implements ContentHandler {
         this.deferredGroupReferences = [];
     }
 
-    private resolveDeferredAttributeGroupReferences(): void {
-        for (const reference of this.attributeGroupReferences) {
-
-            // First look for the attribute group definition locally in handler
-            let attributeGroup: AttributeGroup | undefined = this.attributeGroupDefinitions.get(reference.refQName);
-
-            // If not found locally, check the main grammar (which includes merged schemas)
-            if (!attributeGroup) {
-                attributeGroup = this.grammar.getAttributeGroupDefinition(reference.refQName);
-            }
-
-            // If still not found, try cross-schema resolver as fallback
-            if (!attributeGroup && this.crossSchemaAttributeGroupResolver) {
-                attributeGroup = this.crossSchemaAttributeGroupResolver(reference.refQName);
-            }
-
-            if (attributeGroup) {
-                const groupAttributes: Map<string, SchemaAttributeDecl> = attributeGroup.getAttributes();
-
-                // Copy all attributes from the resolved group to the target complex type
-                for (const [attrName, attrDecl] of Array.from(groupAttributes.entries())) {
-                    reference.targetComplexType.addAttribute(attrName, attrDecl);
-                }
-            } else {
-                console.warn(`Attribute group reference ${reference.ref} could not be resolved - definition not found`);
-            }
-        }
-
-        // Clear the references list
-        this.attributeGroupReferences = [];
-    }
-
     private processAttributeGroup(attributes: XMLAttribute[]): void {
         const name: string | undefined = this.getAttributeValue(attributes, 'name');
         const ref: string | undefined = this.getAttributeValue(attributes, 'ref');
@@ -1224,7 +1174,7 @@ export class SchemaParsingHandler implements ContentHandler {
         this.currentContentModel = choice;
     }
 
-    private processAll(attributes: XMLAttribute[]): void {
+    private processAll(): void {
         // All groups always have cardinality 1 in XML Schema
         const all: AllModel = new AllModel();
 
@@ -1347,32 +1297,5 @@ export class SchemaParsingHandler implements ContentHandler {
         }
 
         // Store notation declaration if needed by grammar
-    }
-
-    // Schema validation helper methods
-
-    private validateTypeReference(typeName: string): void {
-        // Built-in XML Schema types are always valid
-        if (this.isBuiltInType(typeName)) {
-            return;
-        }
-
-        // Defer validation to post-processing phase since types
-        // can be defined later or in imported schemas
-    }
-
-    private isBuiltInType(typeName: string): boolean {
-        const builtInTypes = [
-            'string', 'boolean', 'decimal', 'float', 'double', 'duration', 'dateTime', 'time', 'date',
-            'gYearMonth', 'gYear', 'gMonthDay', 'gDay', 'gMonth', 'hexBinary', 'base64Binary', 'anyURI',
-            'QName', 'NOTATION', 'normalizedString', 'token', 'language', 'NMTOKEN', 'NMTOKENS', 'Name',
-            'NCName', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'integer', 'nonPositiveInteger',
-            'negativeInteger', 'long', 'int', 'short', 'byte', 'nonNegativeInteger', 'unsignedLong',
-            'unsignedInt', 'unsignedShort', 'unsignedByte', 'positiveInteger'
-        ];
-
-        // Check local name portion for built-in types
-        const localName = typeName.includes(':') ? typeName.split(':')[1] : typeName;
-        return builtInTypes.includes(localName);
     }
 }
