@@ -97,7 +97,7 @@ export class XMLSchemaTestSuite {
             this.testSchemaFileParsing();
             this.testInstanceFileParsing();
             this.testValidationModeToggle();
-            
+
             // Perform error analysis
             this.performErrorAnalysis();
         } finally {
@@ -444,7 +444,7 @@ export class XMLSchemaTestSuite {
             const errorMessage = error instanceof Error ? error.message : String(error);
             const normalizedError = this.normalizeErrorMessage(errorMessage);
             const errorCategory = this.categorizeError(normalizedError);
-            
+
             return {
                 success: false,
                 error: errorMessage,
@@ -884,21 +884,33 @@ export class XMLSchemaTestSuite {
         normalized = normalized.replace(/column \d+/g, 'column X');
         normalized = normalized.replace(/position \d+/g, 'position X');
         normalized = normalized.replace(/line:\s*\d+/g, 'line: X');
-        
+
         // Remove specific element/attribute names for grouping
-        normalized = normalized.replace(/"[^"]+"/g, '"ELEMENT_NAME"');
-        normalized = normalized.replace(/'[^']+'/g, "'ELEMENT_NAME'");
-        
+        normalized = normalized.replace(/"[^"]+"/g, (match: string, offset: number, source: string) => {
+            const prefix: string = source.substring(Math.max(0, offset - 40), offset);
+            if (prefix.includes('schema for namespace ')) {
+                return match;
+            }
+            return '"ELEMENT_NAME"';
+        });
+        normalized = normalized.replace(/'[^']+'/g, (match: string, offset: number, source: string) => {
+            const prefix: string = source.substring(Math.max(0, offset - 40), offset);
+            if (prefix.includes('schema for namespace ')) {
+                return match;
+            }
+            return "'ELEMENT_NAME'";
+        });
+
         // Remove specific file paths
         normalized = normalized.replace(/\/[^\s]+\.xml/g, '/PATH/file.xml');
         normalized = normalized.replace(/\/[^\s]+\.xsd/g, '/PATH/file.xsd');
 
         // Remove specific namespace URIs
         normalized = normalized.replace(/http:\/\/[^\s]+/g, 'http://NAMESPACE_URI');
-        
+
         // Normalize common patterns
         normalized = normalized.replace(/\b\d+\b/g, 'N');
-        
+
         return normalized.trim();
     }
 
@@ -970,13 +982,13 @@ export class XMLSchemaTestSuite {
         // Helper function to collect errors from test results
         const collectErrors = (tests: any[], errorsByType: Map<string, ErrorTypeInfo>, errorsByCategory: Map<string, ErrorCategoryInfo>) => {
             // Only collect errors from files that were expected to be valid but failed
-            const testsWithErrors = tests.filter(t => 
-                !t.success && 
-                t.normalizedError && 
-                t.errorCategory && 
+            const testsWithErrors = tests.filter(t =>
+                !t.success &&
+                t.normalizedError &&
+                t.errorCategory &&
                 t.expected === 'valid'  // Only collect errors from files expected to be valid
             );
-            
+
             for (const test of testsWithErrors) {
                 // Track by error type
                 if (errorsByType.has(test.normalizedError)) {
@@ -1058,7 +1070,7 @@ export class XMLSchemaTestSuite {
             totalUniqueErrors: allErrorsByType.size,
             mostCommonError: mostCommonError,
             mostCommonErrorCount: mostCommonCount,
-            errorCategories: Array.from(allErrorsByCategory.keys()).sort((a, b) => 
+            errorCategories: Array.from(allErrorsByCategory.keys()).sort((a, b) =>
                 allErrorsByCategory.get(b)!.totalCount - allErrorsByCategory.get(a)!.totalCount
             ),
             recommendations: this.generateRecommendations(allErrorsByCategory)
@@ -1067,7 +1079,7 @@ export class XMLSchemaTestSuite {
 
     private generateRecommendations(errorsByCategory: Map<string, ErrorCategoryInfo>): string[] {
         const recommendations: string[] = [];
-        
+
         const sortedCategories = Array.from(errorsByCategory.entries())
             .sort(([, a], [, b]) => b.totalCount - a.totalCount)
             .slice(0, 5); // Top 5 categories

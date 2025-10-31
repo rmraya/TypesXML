@@ -73,7 +73,7 @@ export class SimpleType extends SchemaType {
                 if (!this.patterns) {
                     this.patterns = [];
                 }
-                this.patterns.push(new RegExp(value));
+                this.patterns.push(new RegExp('^(?:' + value + ')$'));
                 break;
             case 'minLength':
                 this.minLength = parseInt(value);
@@ -212,6 +212,10 @@ export class SimpleType extends SchemaType {
 
     getTypeName(): string | undefined {
         return this.typeName;
+    }
+
+    getWhitespace(): 'preserve' | 'replace' | 'collapse' | undefined {
+        return this.whiteSpace;
     }
 
     getUnionMemberTypes(): string[] | undefined {

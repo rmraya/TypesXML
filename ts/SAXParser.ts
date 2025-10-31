@@ -80,6 +80,22 @@ export class SAXParser {
         this.resetNamespaceContext();
     }
 
+    private resetParserState(): void {
+        this.pointer = 0;
+        this.elementStack = 0;
+        this.elementNameStack = [];
+        this.xmlSpaceStack = [];
+        this.characterRun = '';
+        this.rootParsed = false;
+        this.inCDATA = false;
+        this.inComment = false;
+        this.inDoctype = false;
+        this.inProcessingInstruction = false;
+        this.childrenNames = [];
+        this.lastParsedAttributeLexical.clear();
+        this.characterRunPreservedCR.clear();
+    }
+
     setContentHandler(contentHandler: ContentHandler): void {
         this.contentHandler = contentHandler;
         this.contentHandler.setValidating(this.validating);
@@ -150,6 +166,15 @@ export class SAXParser {
         this.reader = new FileReader(resolvedPath, encoding);
         try {
             this.buffer = this.reader.read();
+
+            this.resetParserState();
+
+            // Reset grammar state so each document starts with a clean composite
+            if (typeof this.grammarHandler.initialize === 'function') {
+                this.grammarHandler.initialize();
+                this.grammarHandler.setIncludeDefaultAttributes(this.includeDefaultAttributes);
+            }
+
             this.contentHandler.initialize();
             this.readDocument();
         } catch (error) {
@@ -314,6 +339,7 @@ export class SAXParser {
             !this.inComment && !this.inDoctype && !this.inProcessingInstruction) {
             throw new Error('Entity reference not allowed in this context');
         }
+        const textForValidation: string = this.characterRun ? this.normalizeCharacterRun(this.characterRun) : '';
         this.cleanCharacterRun();
         this.pointer++; // skip '&'
         let name: string = '';
@@ -588,6 +614,7 @@ export class SAXParser {
     }
 
     endElement() {
+        const textForValidation: string = this.characterRun ? this.normalizeCharacterRun(this.characterRun) : '';
         this.cleanCharacterRun();
         this.pointer += 2; // skip '</'
         let name: string = '';
@@ -624,7 +651,7 @@ export class SAXParser {
             const elementValidationResult = this.grammarHandler.getGrammar().validateElement(name, {
                 attributes: new Map(),
                 childrenNames: actualChildrenNames,  // Pass the real child element names
-                textContent: this.characterRun,
+                textContent: textForValidation,
                 attributeOnly: false
             });
 

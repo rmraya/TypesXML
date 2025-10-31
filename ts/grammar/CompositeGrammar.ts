@@ -15,10 +15,21 @@ import { resolve } from 'path';
 import { AttributeGroup } from '../schema/AttributeGroup';
 import { BuiltinTypes } from '../schema/BuiltinTypes';
 import { ContentModel } from '../schema/ContentModel';
+import { SchemaElementDecl } from '../schema/Element';
 import { SchemaType } from '../schema/SchemaType';
 import { SimpleType } from '../schema/SimpleType';
 import { XMLSchemaGrammar } from '../schema/XMLSchemaGrammar';
 import { AttributeInfo, Grammar, GrammarType, ValidationContext, ValidationError, ValidationResult } from './Grammar';
+
+const COLLAPSE_WHITESPACE_TYPES: Set<string> = new Set([
+    'boolean', 'decimal', 'integer', 'nonPositiveInteger', 'negativeInteger', 'long', 'int', 'short', 'byte',
+    'nonNegativeInteger', 'positiveInteger', 'unsignedLong', 'unsignedInt', 'unsignedShort', 'unsignedByte',
+    'float', 'double', 'duration', 'dateTime', 'time', 'date', 'gYearMonth', 'gYear', 'gMonthDay', 'gDay', 'gMonth',
+    'token', 'language', 'Name', 'NCName', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'NMTOKEN', 'NMTOKENS',
+    'base64Binary', 'hexBinary', 'anyURI', 'QName', 'NOTATION'
+]);
+
+const REPLACE_WHITESPACE_TYPES: Set<string> = new Set(['normalizedString']);
 
 export class CompositeGrammar implements Grammar {
     private static instance: CompositeGrammar | undefined;
@@ -121,9 +132,27 @@ export class CompositeGrammar implements Grammar {
     // Simple method to update prefix mappings from document namespace declarations
     updatePrefixMappings(prefixMappings: Map<string, string>): void {
         // Merge new prefix mappings instead of replacing
-        prefixMappings.forEach((namespace, prefix) => {
-            if (!this.prefixToNamespace.has(prefix) || this.prefixToNamespace.get(prefix) !== namespace) {
-                this.prefixToNamespace.set(prefix, namespace);
+        prefixMappings.forEach((namespace: string, prefix: string) => {
+            const resolvedNamespace: string = namespace;
+
+            if (prefix === '') {
+                const isSchemaDefault: boolean = resolvedNamespace === 'http://www.w3.org/2001/XMLSchema';
+                if (isSchemaDefault) {
+                    // Avoid persisting the XML Schema default namespace as the
+                    // active default for instance documents.
+                    if (this.prefixToNamespace.get('') === 'http://www.w3.org/2001/XMLSchema') {
+                        this.prefixToNamespace.delete('');
+                    }
+                    if (this.defaultNamespace === 'http://www.w3.org/2001/XMLSchema') {
+                        this.defaultNamespace = '';
+                    }
+                    return;
+                }
+                this.defaultNamespace = resolvedNamespace;
+            }
+
+            if (!this.prefixToNamespace.has(prefix) || this.prefixToNamespace.get(prefix) !== resolvedNamespace) {
+                this.prefixToNamespace.set(prefix, resolvedNamespace);
             }
         });
     }
@@ -131,14 +160,132 @@ export class CompositeGrammar implements Grammar {
     // Simple method to resolve prefix to namespace
     private resolvePrefix(prefix: string): string {
         if (prefix === '') {
-            // For empty prefix, use default namespace or primary grammar's target namespace
-            return this.defaultNamespace || (this.primaryGrammar?.getTargetNamespace?.() || '');
+            if (this.prefixToNamespace.has('')) {
+                const mappedNamespace: string = this.prefixToNamespace.get('') || '';
+                this.defaultNamespace = mappedNamespace;
+                return mappedNamespace;
+            }
+            // When no default namespace mapping is currently active, treat
+            // unprefixed element/attribute names as belonging to no namespace.
+            // Relying on a previously cached default namespace (often set while
+            // parsing schemas where xmlns="http://www.w3.org/2001/XMLSchema")
+            // causes instance documents without a default namespace to be
+            // misclassified as XSD elements.
+            return '';
         }
-        return this.prefixToNamespace.get(prefix) || '';
+
+        if (this.prefixToNamespace.has(prefix)) {
+            return this.prefixToNamespace.get(prefix) || '';
+        }
+
+        return '';
     }
 
     getNamespaceResolver(): (prefix: string) => string {
         return (prefix: string) => this.resolvePrefix(prefix);
+    }
+
+    private resolveElementLookupCandidates(elementName: string, grammar: any): { localName: string; namespaces: Array<string | undefined> } {
+        const namespaces: Array<string | undefined> = [];
+        const addNamespace = (candidate?: string): void => {
+            const normalized: string | undefined = candidate === '' ? undefined : candidate;
+            if (!namespaces.some((existing: string | undefined) => existing === normalized)) {
+                namespaces.push(normalized);
+            }
+        };
+
+        if (elementName.startsWith('{')) {
+            const closeBraceIndex: number = elementName.indexOf('}');
+            const extractedLocalName: string = closeBraceIndex !== -1 ? elementName.substring(closeBraceIndex + 1) : elementName;
+            if (closeBraceIndex !== -1) {
+                const extractedNamespace: string = elementName.substring(1, closeBraceIndex);
+                addNamespace(extractedNamespace);
+            } else {
+                addNamespace(undefined);
+            }
+            return { localName: extractedLocalName, namespaces };
+        }
+
+        const colonIndex: number = elementName.indexOf(':');
+        if (colonIndex !== -1) {
+            const prefix: string = elementName.substring(0, colonIndex);
+            const localName: string = elementName.substring(colonIndex + 1);
+
+            const documentNamespace: string = this.resolvePrefix(prefix);
+            addNamespace(documentNamespace);
+
+            if (grammar && typeof grammar.getNamespaceDeclarations === 'function') {
+                const namespaceDeclarations: Map<string, string> = grammar.getNamespaceDeclarations();
+                const schemaNamespace: string | undefined = namespaceDeclarations.get(prefix);
+                addNamespace(schemaNamespace);
+            }
+
+            if (grammar && typeof grammar.getTargetNamespace === 'function') {
+                addNamespace(grammar.getTargetNamespace());
+            }
+
+            addNamespace(undefined);
+
+            return { localName, namespaces };
+        }
+
+        const localName: string = elementName;
+
+        if (grammar && typeof grammar.getElementFormDefault === 'function' && grammar.getElementFormDefault()) {
+            if (grammar && typeof grammar.getTargetNamespace === 'function') {
+                addNamespace(grammar.getTargetNamespace());
+            }
+        }
+
+        const defaultNamespace: string = this.resolvePrefix('');
+        addNamespace(defaultNamespace);
+
+        addNamespace(undefined);
+
+        return { localName, namespaces };
+    }
+
+    private lookupElementDeclaration(grammar: any, elementName: string): SchemaElementDecl | undefined {
+        if (!grammar || typeof grammar.getElementDeclaration !== 'function') {
+            return undefined;
+        }
+
+        const directMatch: SchemaElementDecl | undefined = grammar.getElementDeclaration(elementName);
+        if (directMatch) {
+            return directMatch;
+        }
+
+        const lookupInfo: { localName: string; namespaces: Array<string | undefined> } =
+            this.resolveElementLookupCandidates(elementName, grammar);
+
+        for (const namespaceCandidate of lookupInfo.namespaces) {
+            const declaration: SchemaElementDecl | undefined =
+                grammar.getElementDeclaration(lookupInfo.localName, namespaceCandidate);
+            if (declaration) {
+                return declaration;
+            }
+        }
+
+        return undefined;
+    }
+
+    private findGrammarForElement(elementName: string, currentGrammar?: Grammar): Grammar | undefined {
+        for (const grammarCandidate of this.grammars.values()) {
+            if (grammarCandidate === currentGrammar) {
+                continue;
+            }
+
+            if (grammarCandidate.getGrammarType().toString() !== 'xmlschema') {
+                continue;
+            }
+
+            const declaration: SchemaElementDecl | undefined = this.lookupElementDeclaration(grammarCandidate as any, elementName);
+            if (declaration) {
+                return grammarCandidate;
+            }
+        }
+
+        return undefined;
     }
 
     private getGrammarForNamespace(namespaceURI?: string): Grammar | undefined {
@@ -229,10 +376,13 @@ export class CompositeGrammar implements Grammar {
             return new Map();
         }
 
-        // Use proper element lookup that considers elementFormDefault
-        if ((grammar as any).getElementFormDefault) {
-            const elementName_ForLookup: string = this.findElementNameForLookup(grammar as any, elementName);
-            return grammar.getElementAttributes(elementName_ForLookup) || new Map();
+        if ((grammar as any).getElementDeclaration) {
+            const elementDecl: SchemaElementDecl | undefined = this.lookupElementDeclaration(grammar, elementName);
+            if (elementDecl) {
+                const lookupKey: string = elementDecl.getName();
+                const attributes: Map<string, AttributeInfo> = grammar.getElementAttributes(lookupKey) || new Map();
+                return attributes;
+            }
         }
 
         return grammar.getElementAttributes(elementName) || new Map();
@@ -252,10 +402,13 @@ export class CompositeGrammar implements Grammar {
             return new Map();
         }
 
-        // Use proper element lookup that considers elementFormDefault
-        if ((grammar as any).getElementFormDefault) {
-            const elementName_ForLookup: string = this.findElementNameForLookup(grammar as any, elementName);
-            return grammar.getDefaultAttributes?.(elementName_ForLookup) || new Map();
+        if ((grammar as any).getElementDeclaration) {
+            const elementDecl: SchemaElementDecl | undefined = this.lookupElementDeclaration(grammar, elementName);
+            if (elementDecl) {
+                const lookupKey: string = elementDecl.getName();
+                const defaults: Map<string, string> = grammar.getDefaultAttributes?.(lookupKey) || new Map();
+                return defaults;
+            }
         }
 
         return grammar.getDefaultAttributes?.(elementName) || new Map();
@@ -277,7 +430,20 @@ export class CompositeGrammar implements Grammar {
 
         const namespaceURI: string = this.resolvePrefix(prefix);
 
-        const grammar: Grammar | undefined = this.getGrammarForNamespace(namespaceURI) || this.primaryGrammar;
+        let grammar: Grammar | undefined = this.getGrammarForNamespace(namespaceURI) || this.primaryGrammar;
+
+        if (elementName.indexOf(':') === -1) {
+            const needsFallback: boolean = !grammar || (grammar.getGrammarType().toString() === 'xmlschema' &&
+                !this.lookupElementDeclaration(grammar as any, elementName));
+
+            if (needsFallback) {
+                const fallbackGrammar: Grammar | undefined = this.findGrammarForElement(elementName, grammar);
+                if (fallbackGrammar) {
+                    grammar = fallbackGrammar;
+                }
+            }
+        }
+
         return grammar ? this.performValidation(grammar, elementName, context) : ValidationResult.success();
     }
 
@@ -312,18 +478,22 @@ export class CompositeGrammar implements Grammar {
         // 3a. Handle xsi:type attribute if present
         const xsiType: string | undefined = attributes.get('xsi:type');
         if (xsiType && context.attributeOnly) {
-            // Convert unprefixed element names to prefixed names for consistent storage
-            let storageElementName: string = elementName;
+            // Always keep the raw element name mapping so lookups succeed even if
+            // no prefix is available during content validation.
+            this.xsiTypeMap.set(elementName, xsiType);
+
+            // Also record a prefixed variant when we know the conventional prefix
+            // for the schema's target namespace. This mirrors how we try to
+            // retrieve the value later when the parser resolves prefixes.
             if (elementName.indexOf(':') === -1) {
                 const targetNamespace: string | undefined = elementGrammar.getTargetNamespace();
                 if (targetNamespace) {
                     const conventionalPrefix: string | undefined = this.findPrefixForNamespace(targetNamespace);
                     if (conventionalPrefix) {
-                        storageElementName = `${conventionalPrefix}:${elementName}`;
+                        this.xsiTypeMap.set(`${conventionalPrefix}:${elementName}`, xsiType);
                     }
                 }
             }
-            this.xsiTypeMap.set(storageElementName, xsiType);
         }
 
         // 3b. Group attributes by namespace for proper validation
@@ -463,19 +633,7 @@ export class CompositeGrammar implements Grammar {
     private performValidation(grammar: Grammar, elementName: string, context: ValidationContext): ValidationResult {
         // For XMLSchemaGrammar, we handle the validation here in CompositeGrammar
         if (grammar.getGrammarType().toString() === 'xmlschema') {
-            // Convert unprefixed element names to prefixed names for schema validation
-            let validationElementName: string = elementName;
-            if (elementName.indexOf(':') === -1) {
-                const targetNamespace: string | undefined = grammar.getTargetNamespace();
-                if (targetNamespace) {
-                    const conventionalPrefix: string | undefined = this.findPrefixForNamespace(targetNamespace);
-                    if (conventionalPrefix) {
-                        validationElementName = `${conventionalPrefix}:${elementName}`;
-                    }
-                }
-            }
-
-            return this.validateXMLSchemaElement(grammar as any, validationElementName, context);
+            return this.validateXMLSchemaElement(grammar as any, elementName, context);
         }
 
         // For other grammar types, delegate to the grammar
@@ -483,15 +641,22 @@ export class CompositeGrammar implements Grammar {
     }
 
     private validateXMLSchemaElement(grammar: any, elementName: string, context: ValidationContext): ValidationResult {
-        // Try to find element declaration using proper elementFormDefault logic
-        let elementDecl: any = this.findElementDeclaration(grammar, elementName);
+        const elementDecl: SchemaElementDecl | undefined = this.lookupElementDeclaration(grammar, elementName);
 
         if (!elementDecl) {
+            const targetNamespace: string | undefined = grammar.getTargetNamespace?.();
+
+            if (targetNamespace === 'http://www.w3.org/2001/XMLSchema') {
+                // Allow schema documents to pass through structural validation.
+                // Semantic validation is handled separately by XMLSchemaParser.
+                return ValidationResult.success();
+            }
+
             return ValidationResult.error(`No declaration found for element '${elementName}'`);
         }
 
         // Check if element is abstract
-        if (elementDecl.isAbstract && elementDecl.isAbstract()) {
+        if (elementDecl.isAbstract()) {
             return ValidationResult.error(`Abstract element '${elementName.toString()}' cannot be used directly`);
         }
 
@@ -503,6 +668,17 @@ export class CompositeGrammar implements Grammar {
             // During attribute validation, store xsi:type if present
             if (xsiType) {
                 this.xsiTypeMap.set(elementName, xsiType);
+
+                if (elementName.indexOf(':') === -1) {
+                    const targetNamespace: string | undefined = grammar.getTargetNamespace?.();
+                    if (targetNamespace) {
+                        const conventionalPrefix: string | undefined = this.findPrefixForNamespace(targetNamespace);
+                        if (conventionalPrefix) {
+                            const prefixedName: string = `${conventionalPrefix}:${elementName}`;
+                            this.xsiTypeMap.set(prefixedName, xsiType);
+                        }
+                    }
+                }
             }
 
             // Attribute validation is already handled by the main validateAttributes method
@@ -511,7 +687,17 @@ export class CompositeGrammar implements Grammar {
         }
 
         // During content validation, check for stored xsi:type
-        const storedXsiType: string | undefined = this.xsiTypeMap.get(elementName);
+        let storedXsiType: string | undefined = this.xsiTypeMap.get(elementName);
+
+        if (!storedXsiType && elementName.indexOf(':') === -1) {
+            const targetNamespace: string | undefined = grammar.getTargetNamespace?.();
+            if (targetNamespace) {
+                const conventionalPrefix: string | undefined = this.findPrefixForNamespace(targetNamespace);
+                if (conventionalPrefix) {
+                    storedXsiType = this.xsiTypeMap.get(`${conventionalPrefix}:${elementName}`);
+                }
+            }
+        }
 
         if (storedXsiType) {
             // Use the type specified by xsi:type with enhanced resolution
@@ -528,6 +714,15 @@ export class CompositeGrammar implements Grammar {
 
             // Remove the mapping after use to prevent memory leaks
             this.xsiTypeMap.delete(elementName);
+            if (elementName.indexOf(':') === -1) {
+                const targetNamespace: string | undefined = grammar.getTargetNamespace?.();
+                if (targetNamespace) {
+                    const conventionalPrefix: string | undefined = this.findPrefixForNamespace(targetNamespace);
+                    if (conventionalPrefix) {
+                        this.xsiTypeMap.delete(`${conventionalPrefix}:${elementName}`);
+                    }
+                }
+            }
         } else {
             // Use the element's declared type
             elementType = elementDecl.resolveType(grammar);
@@ -570,9 +765,14 @@ export class CompositeGrammar implements Grammar {
                 // Try to find the grammar for this namespace
                 const targetGrammar = this.getGrammarForNamespace(namespaceURI);
                 if (targetGrammar && targetGrammar !== grammar) {
-                    resolvedType = (targetGrammar as any).getTypeDefinition(localName);
-                    if (resolvedType) {
-                        return resolvedType;
+                    if (typeof (targetGrammar as any).getTypeDefinition === 'function') {
+                        const candidateNames: string[] = [xsiTypeName, localName, `{${namespaceURI}}${localName}`];
+                        for (const candidate of candidateNames) {
+                            const resolved = (targetGrammar as any).getTypeDefinition(candidate);
+                            if (resolved) {
+                                return resolved;
+                            }
+                        }
                     }
                 }
 
@@ -721,11 +921,12 @@ export class CompositeGrammar implements Grammar {
     }
 
     validateSimpleType(textContent: string, simpleType: SimpleType): ValidationResult {
+        const value: string = this.applyWhitespaceRules(textContent, simpleType);
         const errors: ValidationError[] = [];
 
         // Use custom validator if available (for built-in types)
         if (simpleType.hasCustomValidator()) {
-            const customResult: ValidationResult = simpleType.getCustomValidator()!(textContent);
+            const customResult: ValidationResult = simpleType.getCustomValidator()!(value);
             if (!customResult.isValid) {
                 return customResult;
             }
@@ -733,8 +934,8 @@ export class CompositeGrammar implements Grammar {
 
         // Check enumeration constraints
         if (simpleType.hasEnumeration()) {
-            if (!simpleType.getEnumeration().includes(textContent)) {
-                errors.push(new ValidationError(`Value '${textContent}' is not in enumeration`));
+            if (!simpleType.getEnumeration().includes(value)) {
+                errors.push(new ValidationError(`Value '${value}' is not in enumeration`));
             }
         }
 
@@ -743,32 +944,32 @@ export class CompositeGrammar implements Grammar {
             const patterns: RegExp[] = simpleType.getPatterns();
             let matches: boolean = false;
             for (const pattern of patterns) {
-                if (pattern.test(textContent)) {
+                if (pattern.test(value)) {
                     matches = true;
                     break;
                 }
             }
             if (!matches) {
-                errors.push(new ValidationError(`Value '${textContent}' does not match required pattern`));
+                errors.push(new ValidationError(`Value '${value}' does not match required pattern`));
             }
         }
 
         // Check length constraints
-        if (simpleType.hasLength() && textContent.length !== simpleType.getLength()) {
+        if (simpleType.hasLength() && value.length !== simpleType.getLength()) {
             errors.push(new ValidationError(`Value length must be exactly ${simpleType.getLength()} characters`));
         }
-        if (simpleType.hasMinLength() && textContent.length < simpleType.getMinLength()) {
+        if (simpleType.hasMinLength() && value.length < simpleType.getMinLength()) {
             errors.push(new ValidationError(`Value too short (minimum ${simpleType.getMinLength()} characters)`));
         }
-        if (simpleType.hasMaxLength() && textContent.length > simpleType.getMaxLength()) {
+        if (simpleType.hasMaxLength() && value.length > simpleType.getMaxLength()) {
             errors.push(new ValidationError(`Value too long (maximum ${simpleType.getMaxLength()} characters)`));
         }
 
         // Check numeric range constraints
         if (simpleType.isNumericType()) {
-            const numericValue: number = parseFloat(textContent);
+            const numericValue: number = parseFloat(value);
             if (isNaN(numericValue)) {
-                errors.push(new ValidationError(`Invalid numeric value: '${textContent}'`));
+                errors.push(new ValidationError(`Invalid numeric value: '${value}'`));
             } else {
                 if (simpleType.hasMinInclusive() && numericValue < simpleType.getMinInclusive()) {
                     errors.push(new ValidationError(`Value too small (minimum ${simpleType.getMinInclusive()})`));
@@ -788,25 +989,85 @@ export class CompositeGrammar implements Grammar {
         return errors.length > 0 ? new ValidationResult(false, errors) : ValidationResult.success();
     }
 
+    private applyWhitespaceRules(value: string, simpleType: SimpleType): string {
+        const behavior: 'preserve' | 'replace' | 'collapse' = this.resolveWhitespaceBehavior(simpleType);
+        if (behavior === 'preserve') {
+            return value;
+        }
+
+        let normalized: string = value.replace(/[\t\r\n]/g, ' ');
+        if (behavior === 'collapse') {
+            normalized = normalized.replace(/\s+/g, ' ').trim();
+        }
+        return normalized;
+    }
+
+    private resolveWhitespaceBehavior(simpleType: SimpleType): 'preserve' | 'replace' | 'collapse' {
+        let current: SchemaType | undefined = simpleType;
+        while (current) {
+            if (current instanceof SimpleType) {
+                const facet: 'preserve' | 'replace' | 'collapse' | undefined = current.getWhitespace();
+                if (facet) {
+                    return facet;
+                }
+            }
+            current = current.getBaseType();
+        }
+
+        const baseTypeName: string | undefined = this.findSchemaBaseTypeName(simpleType);
+        if (baseTypeName) {
+            if (COLLAPSE_WHITESPACE_TYPES.has(baseTypeName)) {
+                return 'collapse';
+            }
+            if (REPLACE_WHITESPACE_TYPES.has(baseTypeName)) {
+                return 'replace';
+            }
+        }
+
+        return 'preserve';
+    }
+
+    private findSchemaBaseTypeName(simpleType: SimpleType): string | undefined {
+        let current: SchemaType | undefined = simpleType;
+        while (current) {
+            if (current instanceof SimpleType) {
+                const builtinName: string | undefined = this.extractBuiltinTypeName(current);
+                if (builtinName) {
+                    return builtinName;
+                }
+            }
+            current = current.getBaseType();
+        }
+        return undefined;
+    }
+
+    private extractBuiltinTypeName(simpleType: SimpleType): string | undefined {
+        const namespace: string = simpleType.getTargetNamespace();
+        const name: string | undefined = simpleType.getName();
+        if (name) {
+            const localName: string = name.includes(':') ? name.substring(name.indexOf(':') + 1) : name;
+            if (namespace === 'http://www.w3.org/2001/XMLSchema' || name.startsWith('xsd:') || name.startsWith('xs:')) {
+                return localName;
+            }
+        }
+
+        if (typeof simpleType.getTypeName === 'function') {
+            const typeName: string | undefined = simpleType.getTypeName();
+            if (typeName) {
+                return typeName.includes(':') ? typeName.substring(typeName.indexOf(':') + 1) : typeName;
+            }
+        }
+
+        return undefined;
+    }
+
     private validateComplexType(elementName: string, context: ValidationContext, complexType: any, grammar: any): ValidationResult {
         // Attributes are already validated during startElement by SAXParser.validateAttributes()
         // No need to validate them again during content validation (endElement)
 
         // Validate content
         // Convert unprefixed child element names to prefixed format for validation
-        const children: string[] = context.childrenNames.map((childName: string) => {
-            if (childName.indexOf(':') === -1) {
-                // Child element is unprefixed - need to add the appropriate prefix
-                const targetNamespace: string | undefined = grammar.getTargetNamespace();
-                if (targetNamespace) {
-                    const prefix: string | undefined = this.findPrefixForNamespace(targetNamespace);
-                    if (prefix) {
-                        return `${prefix}:${childName}`;
-                    }
-                }
-            }
-            return childName;
-        });
+        const children: string[] = [...context.childrenNames];
 
         return this.validateComplexTypeContent(children, context.textContent || '', complexType, grammar);
     }
@@ -886,7 +1147,7 @@ export class CompositeGrammar implements Grammar {
             // Create substitution group resolver
             const substitutionGroupResolver: (elementName: string, substitutionHead: string) => boolean = (elementName: string, substitutionHead: string): boolean => {
                 // Look up the element declaration
-                const elementDecl: any = grammar.getElementDeclaration(elementName);
+                const elementDecl: SchemaElementDecl | undefined = this.lookupElementDeclaration(grammar, elementName);
                 if (!elementDecl) {
                     return false;
                 }
@@ -1079,79 +1340,6 @@ export class CompositeGrammar implements Grammar {
             totalElements,
             totalTypes
         };
-    }
-
-    debugNamespaceMapping(): void {
-        // Debug method for development - intentionally empty to avoid console output
-    }
-
-    private findElementDeclaration(grammar: any, elementName: string): any {
-        // Element lookup strategy based on XML Schema elementFormDefault rules
-
-        const colonIndex: number = elementName.indexOf(':');
-        const hasPrefix: boolean = colonIndex !== -1;
-        const localName: string = hasPrefix ? elementName.substring(colonIndex + 1) : elementName;
-
-        // Check the grammar's elementFormDefault setting to determine storage pattern
-        const elementFormDefault: boolean = grammar.getElementFormDefault ? grammar.getElementFormDefault() : false;
-
-        // Try direct lookup first (element name as provided)
-        let elementDecl: any = grammar.getElementDeclaration(elementName);
-        if (elementDecl) {
-            return elementDecl;
-        }
-
-        if (hasPrefix) {
-            if (!elementFormDefault) {
-                // elementFormDefault="unqualified" - elements stored WITHOUT prefixes
-                elementDecl = grammar.getElementDeclaration(localName);
-                if (elementDecl) {
-                    return elementDecl;
-                }
-            }
-        }
-
-        return undefined;
-    }
-
-    private findElementNameForLookup(grammar: any, elementName: string): string {
-        // Find the actual element name to use for lookup based on how elements are stored
-        // Try to find the element and return the key that works
-
-        const colonIndex: number = elementName.indexOf(':');
-        const hasPrefix: boolean = colonIndex !== -1;
-        const localName: string = hasPrefix ? elementName.substring(colonIndex + 1) : elementName;
-
-        // Try direct lookup first
-        if (grammar.getElementDeclaration(elementName)) {
-            return elementName;
-        }
-
-        // If element has prefix but not found, try local name
-        if (hasPrefix && grammar.getElementDeclaration(localName)) {
-            return localName;
-        }
-
-        // If element has no prefix, and elementFormDefault is true, try with target namespace prefix
-        if (!hasPrefix && grammar.getElementFormDefault && grammar.getElementFormDefault() && grammar.getTargetNamespace) {
-            const targetNS: string | undefined = grammar.getTargetNamespace();
-            if (targetNS) {
-                const prefix: string | undefined = this.findPrefixForNamespace(targetNS);
-                if (prefix) {
-                    const qualifiedName: string = `${prefix}:${elementName}`;
-                    if (grammar.getElementDeclaration(qualifiedName)) {
-                        return qualifiedName;
-                    }
-                }
-            }
-        }
-
-        // If still not found, this might be a local element
-        // For local elements, we need to find them in the context of their parent
-        // This is a placeholder - we'll enhance this with context-aware lookup
-
-        // Return original name as fallback
-        return elementName;
     }
 
     private findPrefixForNamespace(namespaceURI: string): string | undefined {

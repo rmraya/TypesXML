@@ -32,23 +32,21 @@ import { XMLSchemaGrammar } from "./XMLSchemaGrammar";
 export class SchemaParsingHandler implements ContentHandler {
     private grammar: XMLSchemaGrammar;
     private elementStack: string[] = [];
-    private currentElement?: string;
     private targetNamespace: string = '';
     private elementFormDefault: boolean = false;
     private attributeFormDefault: boolean = false;
 
     // Namespace prefix mapping
     private namespacePrefixes: Map<string, string> = new Map();
-    private defaultNamespace: string = '';
 
     // Schema composition tracking
     private includes: string[] = [];
-    private imports: Array<{ namespace: string, location?: string }> = [];
+    private redefines: string[] = [];
+    private imports: Array<{ namespace: string; schemaLocation?: string }> = [];
 
     // Type being processed
     private currentType?: SimpleType | ComplexType;
     private currentElementDecl?: SchemaElementDecl;
-    private currentAttributeDecl?: SchemaAttributeDecl;
     private currentAttributeGroup?: AttributeGroup;
 
     // Content model tracking
@@ -118,8 +116,12 @@ export class SchemaParsingHandler implements ContentHandler {
         return this.includes;
     }
 
-    getImports(): Array<{ namespace: string, location?: string }> {
+    getImports(): Array<{ namespace: string; schemaLocation?: string }> {
         return this.imports;
+    }
+
+    getRedefines(): string[] {
+        return this.redefines;
     }
 
     getNamespaceResolver(): (prefix: string) => string {
@@ -172,6 +174,7 @@ export class SchemaParsingHandler implements ContentHandler {
     initialize(): void {
         this.elementStack = [];
         this.includes = [];
+        this.redefines = [];
         this.imports = [];
     }
 
@@ -194,7 +197,6 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     startElement(name: string, attributes: XMLAttribute[]): void {
-        this.currentElement = name;
         this.elementStack.push(name);
 
         // Process namespace declarations first
@@ -263,6 +265,9 @@ export class SchemaParsingHandler implements ContentHandler {
             case 'include':
                 this.processInclude(attributes);
                 break;
+            case 'redefine':
+                this.processRedefine(attributes);
+                break;
             case 'group':
                 this.processGroup(attributes);
                 break;
@@ -312,8 +317,6 @@ export class SchemaParsingHandler implements ContentHandler {
         }
 
         this.elementStack.pop();
-        this.currentElement = this.elementStack.length > 0 ?
-            this.elementStack[this.elementStack.length - 1] : undefined;
     }
 
     internalSubset(declaration: string): void {
@@ -386,6 +389,7 @@ export class SchemaParsingHandler implements ContentHandler {
         const name = this.getAttributeValue(attributes, 'name');
         const ref = this.getAttributeValue(attributes, 'ref');
         const type = this.getAttributeValue(attributes, 'type');
+        const formAttribute: string | undefined = this.getAttributeValue(attributes, 'form');
 
         // Schema spec requires exactly one of 'name' or 'ref'
         if (!name && !ref) {
@@ -415,14 +419,15 @@ export class SchemaParsingHandler implements ContentHandler {
         if (this.currentContentModel) {
             // Inside a content model (sequence/choice/all) - create element particle
             let elementName: string;
+            const elementForm: 'qualified' | 'unqualified' = this.resolveElementForm(formAttribute);
 
             if (ref) {
                 // Element reference - use the referenced element's qualified name
                 elementName = this.parseQName(ref);
             } else if (name) {
                 // Inline element declaration - apply form qualification rules
-                if (this.elementFormDefault && this.targetNamespace) {
-                    const prefix = this.getPrefixForNamespace(this.targetNamespace);
+                if (elementForm === 'qualified' && this.targetNamespace) {
+                    const prefix: string | undefined = this.getPrefixForNamespace(this.targetNamespace);
                     elementName = prefix ? `${prefix}:${name}` : name;
                 } else {
                     elementName = name;
@@ -439,6 +444,9 @@ export class SchemaParsingHandler implements ContentHandler {
                 // Handle other attributes
                 elementDecl.setMinOccurs(minOccurs);
                 elementDecl.setMaxOccurs(maxOccurs === -1 ? 'unbounded' : maxOccurs);
+                elementDecl.setForm(elementForm);
+                const elementNamespace: string | undefined = elementForm === 'qualified' ? (this.targetNamespace || undefined) : undefined;
+                elementDecl.setNamespaceURI(elementNamespace);
 
                 const abstract = this.getAttributeValue(attributes, 'abstract');
                 if (abstract === 'true') {
@@ -459,9 +467,7 @@ export class SchemaParsingHandler implements ContentHandler {
                 return;
             }
 
-            // For CompositeGrammar storage consistency, ensure element name has prefix
-            const elementNameForStorage: string = this.ensureElementPrefix(elementName);
-            const particle = new ElementModel(elementNameForStorage, minOccurs, maxOccurs);
+            const particle = new ElementModel(elementName, minOccurs, maxOccurs);
 
             // Add particle to current content model based on its type
             if (this.currentContentModel instanceof SequenceModel) {
@@ -479,6 +485,7 @@ export class SchemaParsingHandler implements ContentHandler {
                 qname = prefix ? `${prefix}:${name}` : name;
             }
             const elementDecl = new SchemaElementDecl(qname);
+            const elementNamespace: string | undefined = this.targetNamespace || undefined;
 
             if (type) {
                 const typeQName = this.parseQName(type);
@@ -506,6 +513,8 @@ export class SchemaParsingHandler implements ContentHandler {
             }
 
             this.currentElementDecl = elementDecl;
+            elementDecl.setForm('qualified');
+            elementDecl.setNamespaceURI(elementNamespace);
             this.grammar.addElementDeclaration(qname, elementDecl);
         }
     }
@@ -671,10 +680,8 @@ export class SchemaParsingHandler implements ContentHandler {
             attrDecl.setForm(form);
         }
 
-        this.currentAttributeDecl = attrDecl;
-
         // If this is a global attribute declaration, add to grammar
-        if (name && !this.currentType) {
+        if (name && !this.currentType && !this.currentAttributeGroup) {
             // Global attribute declaration
             const globalAttrName = this.targetNamespace ? `{${this.targetNamespace}}${name}` : name;
             attrDecl.setName(globalAttrName);
@@ -738,7 +745,7 @@ export class SchemaParsingHandler implements ContentHandler {
         if (namespace) {
             this.imports.push({
                 namespace: namespace,
-                location: schemaLocation
+                schemaLocation: schemaLocation
             });
         }
     }
@@ -747,6 +754,13 @@ export class SchemaParsingHandler implements ContentHandler {
         const schemaLocation = this.getAttributeValue(attributes, 'schemaLocation');
         if (schemaLocation) {
             this.includes.push(schemaLocation);
+        }
+    }
+
+    private processRedefine(attributes: XMLAttribute[]): void {
+        const schemaLocation = this.getAttributeValue(attributes, 'schemaLocation');
+        if (schemaLocation) {
+            this.redefines.push(schemaLocation);
         }
     }
 
@@ -810,6 +824,16 @@ export class SchemaParsingHandler implements ContentHandler {
         return builtinTypes.includes(localName);
     }
 
+    private resolveElementForm(formAttribute: string | undefined): 'qualified' | 'unqualified' {
+        if (formAttribute === 'qualified') {
+            return 'qualified';
+        }
+        if (formAttribute === 'unqualified') {
+            return 'unqualified';
+        }
+        return this.elementFormDefault ? 'qualified' : 'unqualified';
+    }
+
     private processNamespaceDeclarations(attributes: XMLAttribute[]): void {
         for (const attr of attributes) {
             const attrName: string = attr.getName();
@@ -817,7 +841,6 @@ export class SchemaParsingHandler implements ContentHandler {
 
             if (attrName === 'xmlns') {
                 // Default namespace declaration
-                this.defaultNamespace = attrValue;
                 this.grammar.addNamespaceDeclaration('', attrValue);
             } else if (attrName.startsWith('xmlns:')) {
                 // Prefixed namespace declaration
@@ -1023,9 +1046,6 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     private resolveDeferredAttributeGroupReferences(): void {
-        // Debug: Show what attribute groups are available in the grammar
-        const availableAttributeGroups = this.grammar.getAttributeGroupDefinitions();
-
         for (const reference of this.attributeGroupReferences) {
 
             // First look for the attribute group definition locally in handler
@@ -1174,7 +1194,7 @@ export class SchemaParsingHandler implements ContentHandler {
     }
 
     private finishAttributeDeclaration(): void {
-        this.currentAttributeDecl = undefined;
+        // No additional state to clear
     }
 
     // Content model processing methods
@@ -1291,25 +1311,6 @@ export class SchemaParsingHandler implements ContentHandler {
                 this.currentContentModel = undefined;
             }
         }
-    }
-
-    // Helper method to ensure element names have prefixes for CompositeGrammar storage
-    private ensureElementPrefix(elementName: string): string {
-        // If element already has prefix, return as-is
-        if (elementName.includes(':')) {
-            return elementName;
-        }
-
-        // For CompositeGrammar storage, ALL elements must have prefixes
-        // This ensures consistent lookups regardless of elementFormDefault
-        if (this.targetNamespace) {
-            const prefix = this.getPrefixForNamespace(this.targetNamespace);
-            if (prefix) {
-                return `${prefix}:${elementName}`;
-            }
-        }
-
-        return elementName;
     }
 
     private parseOccurrence(value: string | undefined, defaultValue: number): number {

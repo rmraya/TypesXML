@@ -32,6 +32,7 @@ export class XMLSchemaGrammar implements Grammar {
 
     // Element and attribute declarations
     private elementDeclarations: Map<string, SchemaElementDecl> = new Map();
+    private elementDeclarationAliases: Map<string, string> = new Map();
     private attributeDeclarations: Map<string, SchemaAttributeDecl> = new Map();
 
     // Group definitions
@@ -39,6 +40,7 @@ export class XMLSchemaGrammar implements Grammar {
 
     // Attribute group definitions
     private attributeGroupDefinitions: Map<string, AttributeGroup> = new Map();
+    private attributeGroupAliases: Map<string, string> = new Map();
 
     // Namespace mappings
     private namespaces: Map<string, string> = new Map();
@@ -59,6 +61,94 @@ export class XMLSchemaGrammar implements Grammar {
 
         // Initialize built-in types
         BuiltinTypes.initialize();
+    }
+
+    static createElementKey(localName: string, namespaceURI?: string): string {
+        const normalizedNamespace: string = namespaceURI || '';
+        return `{${normalizedNamespace}}${localName}`;
+    }
+
+    private registerElementAlias(canonicalKey: string, alias?: string): void {
+        if (!alias) {
+            return;
+        }
+        const trimmedAlias: string = alias.trim();
+        if (trimmedAlias.length === 0) {
+            return;
+        }
+        if (!this.elementDeclarationAliases.has(trimmedAlias)) {
+            this.elementDeclarationAliases.set(trimmedAlias, canonicalKey);
+        }
+    }
+
+    private registerAttributeGroupAlias(canonicalKey: string, alias?: string): void {
+        if (!alias) {
+            return;
+        }
+
+        const trimmedAlias: string = alias.trim();
+        if (trimmedAlias.length === 0) {
+            return;
+        }
+
+        if (!this.attributeGroupAliases.has(trimmedAlias)) {
+            this.attributeGroupAliases.set(trimmedAlias, canonicalKey);
+        }
+    }
+
+    private findSchemaPrefixForNamespace(namespaceURI: string): string | undefined {
+        const namespaceEntries: [string, string][] = Array.from(this.namespaces.entries());
+        for (const [prefix, uri] of namespaceEntries) {
+            if (uri === namespaceURI) {
+                return prefix;
+            }
+        }
+        return undefined;
+    }
+
+    private resolveElementNameComponents(name: string, element?: SchemaElementDecl): { localName: string; namespaceURI?: string } {
+        let namespaceURI: string | undefined = element?.getNamespaceURI();
+        let localName: string = name;
+
+        if (name.startsWith('{')) {
+            const closeBraceIndex: number = name.indexOf('}');
+            if (closeBraceIndex !== -1) {
+                const extractedNamespace: string = name.substring(1, closeBraceIndex);
+                const extractedLocalName: string = name.substring(closeBraceIndex + 1);
+                localName = extractedLocalName;
+                if (!namespaceURI && extractedNamespace !== '') {
+                    namespaceURI = extractedNamespace;
+                }
+            }
+        } else {
+            const colonIndex: number = name.indexOf(':');
+            if (colonIndex !== -1) {
+                const prefix: string = name.substring(0, colonIndex);
+                localName = name.substring(colonIndex + 1);
+                if (!namespaceURI) {
+                    const mappedNamespace: string | undefined = this.namespaces.get(prefix);
+                    if (mappedNamespace) {
+                        namespaceURI = mappedNamespace;
+                    } else if (prefix === 'xml') {
+                        namespaceURI = 'http://www.w3.org/XML/1998/namespace';
+                    } else if (prefix === 'xmlns') {
+                        namespaceURI = 'http://www.w3.org/2000/xmlns/';
+                    }
+                }
+            } else {
+                localName = name;
+            }
+        }
+
+        if (!namespaceURI && element && element.getForm() === 'qualified') {
+            namespaceURI = this.targetNamespace || undefined;
+        }
+
+        if (element && !element.getNamespaceURI() && namespaceURI) {
+            element.setNamespaceURI(namespaceURI);
+        }
+
+        return { localName, namespaceURI };
     }
 
     setValidating(validating: boolean): void {
@@ -219,11 +309,42 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     addAttributeGroupDefinition(name: string, group: AttributeGroup): void {
-        this.attributeGroupDefinitions.set(name, group);
+        const components: { localName: string; namespaceURI?: string } = this.resolveElementNameComponents(name);
+        const effectiveNamespace: string | undefined = components.namespaceURI || group.getTargetNamespace() || this.targetNamespace || undefined;
+        const canonicalKey: string = XMLSchemaGrammar.createElementKey(components.localName, effectiveNamespace);
+
+        this.attributeGroupDefinitions.set(canonicalKey, group);
+        this.registerAttributeGroupAlias(canonicalKey, canonicalKey);
+
+        this.registerAttributeGroupAlias(canonicalKey, name);
+        this.registerAttributeGroupAlias(canonicalKey, group.getName());
+
+        if (effectiveNamespace) {
+            const clarkName: string = XMLSchemaGrammar.createElementKey(components.localName, effectiveNamespace);
+            this.registerAttributeGroupAlias(canonicalKey, clarkName);
+
+            const schemaPrefix: string | undefined = this.findSchemaPrefixForNamespace(effectiveNamespace);
+            if (schemaPrefix) {
+                const qualifiedName: string = `${schemaPrefix}:${components.localName}`;
+                this.registerAttributeGroupAlias(canonicalKey, qualifiedName);
+            }
+        }
+
+        this.registerAttributeGroupAlias(canonicalKey, components.localName);
     }
 
     getAttributeGroupDefinition(name: string): AttributeGroup | undefined {
-        return this.attributeGroupDefinitions.get(name);
+        const aliasKey: string | undefined = this.attributeGroupAliases.get(name);
+        if (aliasKey) {
+            const aliasMatch: AttributeGroup | undefined = this.attributeGroupDefinitions.get(aliasKey);
+            if (aliasMatch) {
+                return aliasMatch;
+            }
+        }
+
+        const components: { localName: string; namespaceURI?: string } = this.resolveElementNameComponents(name);
+        const canonicalKey: string = XMLSchemaGrammar.createElementKey(components.localName, components.namespaceURI || this.targetNamespace);
+        return this.attributeGroupDefinitions.get(canonicalKey);
     }
 
     getAttributeGroupDefinitions(): Map<string, AttributeGroup> {
@@ -231,12 +352,95 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     addElementDeclaration(name: string, element: SchemaElementDecl): void {
-        this.validateElementDeclaration(name, element);
-        this.elementDeclarations.set(name, element);
+        const components: { localName: string; namespaceURI?: string } = this.resolveElementNameComponents(name, element);
+        const canonicalKey: string = XMLSchemaGrammar.createElementKey(components.localName, components.namespaceURI);
+
+        this.validateElementDeclaration(canonicalKey, element);
+        this.elementDeclarations.set(canonicalKey, element);
+
+        this.registerElementAlias(canonicalKey, name);
+        this.registerElementAlias(canonicalKey, element.getName());
+
+        if (components.namespaceURI) {
+            const clarkName: string = XMLSchemaGrammar.createElementKey(components.localName, components.namespaceURI);
+            this.registerElementAlias(canonicalKey, clarkName);
+
+            const schemaPrefix: string | undefined = this.findSchemaPrefixForNamespace(components.namespaceURI);
+            if (schemaPrefix) {
+                const qualifiedName: string = `${schemaPrefix}:${components.localName}`;
+                this.registerElementAlias(canonicalKey, qualifiedName);
+            }
+        } else {
+            this.registerElementAlias(canonicalKey, components.localName);
+        }
     }
 
-    getElementDeclaration(name: string): SchemaElementDecl | undefined {
-        return this.elementDeclarations.get(name);
+    getElementDeclaration(name: string, namespaceURI?: string): SchemaElementDecl | undefined {
+        if (namespaceURI !== undefined) {
+            const canonicalKey: string = XMLSchemaGrammar.createElementKey(name, namespaceURI);
+            const directMatch: SchemaElementDecl | undefined = this.elementDeclarations.get(canonicalKey);
+            if (directMatch) {
+                this.registerElementAlias(canonicalKey, name);
+                return directMatch;
+            }
+        }
+
+        const aliasKey: string | undefined = this.elementDeclarationAliases.get(name);
+        if (aliasKey) {
+            const aliasMatch: SchemaElementDecl | undefined = this.elementDeclarations.get(aliasKey);
+            if (aliasMatch) {
+                return aliasMatch;
+            }
+        }
+
+        const components: { localName: string; namespaceURI?: string } = this.resolveElementNameComponents(name);
+        const namespaceCandidates: Array<string | undefined> = [];
+
+        if (namespaceURI !== undefined) {
+            namespaceCandidates.push(namespaceURI);
+        }
+
+        if (components.namespaceURI !== undefined) {
+            namespaceCandidates.push(components.namespaceURI);
+        }
+
+        if (this.targetNamespace) {
+            namespaceCandidates.push(this.targetNamespace);
+        }
+
+        namespaceCandidates.push(undefined);
+
+        const seenNamespaces: Set<string | undefined> = new Set<string | undefined>();
+        for (const candidateNamespace of namespaceCandidates) {
+            const normalizedNamespace: string | undefined = candidateNamespace === '' ? undefined : candidateNamespace;
+            if (seenNamespaces.has(normalizedNamespace)) {
+                continue;
+            }
+            seenNamespaces.add(normalizedNamespace);
+
+            const candidateKey: string = XMLSchemaGrammar.createElementKey(components.localName, normalizedNamespace);
+            const candidateMatch: SchemaElementDecl | undefined = this.elementDeclarations.get(candidateKey);
+            if (candidateMatch) {
+                this.registerElementAlias(candidateKey, name);
+                return candidateMatch;
+            }
+        }
+
+        const declarationEntries: SchemaElementDecl[] = Array.from(this.elementDeclarations.values());
+        for (const declaration of declarationEntries) {
+            if (declaration.getName() === name) {
+                const declarationComponents: { localName: string; namespaceURI?: string } =
+                    this.resolveElementNameComponents(declaration.getName(), declaration);
+                const declarationKey: string = XMLSchemaGrammar.createElementKey(
+                    declarationComponents.localName,
+                    declarationComponents.namespaceURI
+                );
+                this.registerElementAlias(declarationKey, name);
+                return declaration;
+            }
+        }
+
+        return undefined;
     }
 
     getElementDeclarations(): Map<string, SchemaElementDecl> {
@@ -507,9 +711,11 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     private validateElementDeclaration(name: string, element: SchemaElementDecl): void {
+        const elementDisplayName: string = element.getName();
+
         // Check for duplicate element declarations - this IS forbidden by XML Schema spec
         if (this.elementDeclarations.has(name)) {
-            throw new Error(`Duplicate element declaration: '${name}'`);
+            throw new Error(`Duplicate element declaration: '${elementDisplayName}'`);
         }
 
         // Validate the element itself - check for spec violations
@@ -525,7 +731,7 @@ export class XMLSchemaGrammar implements Grammar {
                 this.validateTypeNameSyntax(typeName);
             } catch (error) {
                 // Only throw for actual syntax violations forbidden by XML Schema spec
-                throw new Error(`Element '${name}' has invalid type name syntax: ${(error as Error).message}`);
+                throw new Error(`Element '${elementDisplayName}' has invalid type name syntax: ${(error as Error).message}`);
             }
         }
     }
@@ -560,8 +766,9 @@ export class XMLSchemaGrammar implements Grammar {
 
     private validateNamespaceConsistency(): void {
         // Validate that all qualified names use declared namespace prefixes
-        for (const [name, elementDecl] of this.elementDeclarations) {
-            this.validateQualifiedName(name, 'element');
+        for (const elementDecl of this.elementDeclarations.values()) {
+            const qualifiedElementName: string = elementDecl.getName();
+            this.validateQualifiedName(qualifiedElementName, 'element');
 
             const typeName = elementDecl.getTypeName();
             if (typeName && typeName.includes(':')) {
@@ -584,6 +791,21 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     private validateQualifiedName(qname: string, context: string): void {
+        if (!qname) {
+            return;
+        }
+
+        if (qname.startsWith('{')) {
+            const closeBrace: number = qname.indexOf('}');
+            if (closeBrace !== -1) {
+                const localName: string = qname.substring(closeBrace + 1);
+                if (!XMLUtils.isValidNCName(localName)) {
+                    throw new Error(`Invalid local name '${localName}' in ${context} '${qname}'`);
+                }
+                return;
+            }
+        }
+
         const colonIndex = qname.indexOf(':');
         if (colonIndex !== -1) {
             const prefix = qname.substring(0, colonIndex);
@@ -603,7 +825,8 @@ export class XMLSchemaGrammar implements Grammar {
         // XML Schema spec: Check that all type references are syntactically valid
         // AND that required types actually exist (this is a spec requirement)
 
-        for (const [name, elementDecl] of this.elementDeclarations) {
+        for (const elementDecl of this.elementDeclarations.values()) {
+            const elementDisplayName: string = elementDecl.getName();
             const typeName = elementDecl.getTypeName();
             if (typeName) {
                 try {
@@ -611,7 +834,7 @@ export class XMLSchemaGrammar implements Grammar {
                 } catch (error) {
                     // In validating mode, throw for syntax errors (spec violations)
                     if (this.validatingMode) {
-                        throw new Error(`Element '${name}' type reference syntax error: ${(error as Error).message}`);
+                        throw new Error(`Element '${elementDisplayName}' type reference syntax error: ${(error as Error).message}`);
                     }
                     // In non-validating mode, silently ignore syntax errors
                 }
@@ -627,14 +850,11 @@ export class XMLSchemaGrammar implements Grammar {
 
                     if (isLocalReference && !isBuiltinType) {
                         // Local type reference that doesn't exist - this IS a spec violation
-                        const errorMsg = `Element '${name}' references undefined type '${typeName}' - local type must be defined in this schema`;
+                        const errorMsg = `Element '${elementDisplayName}' references undefined type '${typeName}' - local type must be defined in this schema`;
                         if (this.validatingMode) {
                             throw new Error(errorMsg);
                         }
                         // In non-validating mode, silently ignore the error
-                    } else {
-                        // Cross-schema or qualified reference - debug only (not a local spec violation)
-                        console.debug(`Element '${name}' references type '${typeName}' - will be resolved during cross-schema processing`);
                     }
                 }
             }
@@ -668,8 +888,6 @@ export class XMLSchemaGrammar implements Grammar {
                                 throw new Error(errorMsg);
                             }
                             // In non-validating mode, silently ignore the error
-                        } else {
-                            console.debug(`Type '${name}' references base type '${baseTypeQName}' - will be resolved during cross-schema processing`);
                         }
                     }
                 }
@@ -693,22 +911,18 @@ export class XMLSchemaGrammar implements Grammar {
 
     private validateSubstitutionGroups(): void {
         // Validate that substitution group heads exist and are valid
-        for (const [name, elementDecl] of this.elementDeclarations) {
+        for (const elementDecl of this.elementDeclarations.values()) {
+            const elementDisplayName: string = elementDecl.getName();
             const substitutionGroup = elementDecl.getSubstitutionGroup();
             if (substitutionGroup) {
                 const headElement = this.getElementDeclaration(substitutionGroup);
                 if (!headElement) {
-                    throw new Error(`Element '${name}' references undefined substitution group head '${substitutionGroup}'`);
+                    throw new Error(`Element '${elementDisplayName}' references undefined substitution group head '${substitutionGroup}'`);
                 }
 
                 // Schema spec: substitution group head cannot be abstract in all cases
                 // but this is a complex rule that depends on context, so we'll just warn
-                if (headElement.isAbstract()) {
-                    if (this.validatingMode) {
-                        throw new Error(`Element '${name}' uses abstract substitution group head '${substitutionGroup}'`);
-                    }
-                    // In non-validating mode, silently ignore
-                }
+                // Abstract substitution group heads are permitted; defer enforcement to higher-level validation when needed.
             }
         }
     }
@@ -740,11 +954,19 @@ export class XMLSchemaGrammar implements Grammar {
         // Check base type dependencies
         if (type.isComplexType()) {
             const complexType = type as ComplexType;
-            const baseTypeQName = complexType.getBaseTypeQName();
-            if (baseTypeQName) {
-                const baseType = this.getTypeDefinition(baseTypeQName);
-                if (baseType) {
-                    this.checkCircularDependency(baseTypeQName, baseType, visited, currentPath);
+            const explicitBaseType: SchemaType | undefined = complexType.getBaseType?.();
+            if (explicitBaseType && explicitBaseType !== type) {
+                const explicitBaseName: string | undefined = explicitBaseType.getName?.() || complexType.getBaseTypeQName();
+                if (explicitBaseName) {
+                    this.checkCircularDependency(explicitBaseName, explicitBaseType, visited, currentPath);
+                }
+            } else {
+                const baseTypeQName = complexType.getBaseTypeQName();
+                if (baseTypeQName) {
+                    const baseType = this.getTypeDefinition(baseTypeQName);
+                    if (baseType && baseType !== type) {
+                        this.checkCircularDependency(baseTypeQName, baseType, visited, currentPath);
+                    }
                 }
             }
         }
@@ -753,28 +975,46 @@ export class XMLSchemaGrammar implements Grammar {
     }
 
     private validateGlobalUniqueness(): void {
-        // Check for name conflicts between different component types
-        const allNames = new Set<string>();
+        const typeCanonicalNames: Set<string> = new Set<string>();
 
-        // Elements should not conflict with types in same target namespace
-        for (const name of this.elementDeclarations.keys()) {
-            if (this.types.has(name)) {
+        for (const [typeName] of this.types) {
+            if (typeName.startsWith('xs:') || typeName.startsWith('xsd:')) {
+                continue;
+            }
+
+            const typeComponents: { localName: string; namespaceURI?: string } = this.resolveElementNameComponents(typeName);
+            let namespaceForType: string | undefined = typeComponents.namespaceURI;
+
+            if (!namespaceForType && typeName.indexOf(':') === -1 && !typeName.startsWith('{')) {
+                namespaceForType = this.targetNamespace || undefined;
+            }
+
+            if (namespaceForType === 'http://www.w3.org/2001/XMLSchema') {
+                continue;
+            }
+
+            const canonicalTypeName: string = XMLSchemaGrammar.createElementKey(typeComponents.localName, namespaceForType);
+            typeCanonicalNames.add(canonicalTypeName);
+        }
+
+        for (const elementKey of this.elementDeclarations.keys()) {
+            if (typeCanonicalNames.has(elementKey)) {
+                const conflictingElement: SchemaElementDecl | undefined = this.elementDeclarations.get(elementKey);
+                const elementNameToReport: string = conflictingElement ? conflictingElement.getName() : elementKey;
                 if (this.validatingMode) {
-                    throw new Error(`Name conflict: '${name}' is defined as both element and type`);
+                    throw new Error(`Name conflict: '${elementNameToReport}' is defined as both element and type`);
                 }
-                // In non-validating mode, silently ignore
             }
         }
 
-        // Check for attribute name conflicts with target namespace elements
-        for (const name of this.attributeDeclarations.keys()) {
-            if (name.startsWith(`{${this.targetNamespace}}`)) {
-                const localName = name.substring(`{${this.targetNamespace}}`.length);
-                if (this.elementDeclarations.has(localName)) {
+        for (const [attributeName] of this.attributeDeclarations) {
+            const attributeComponents: { localName: string; namespaceURI?: string } = this.resolveElementNameComponents(attributeName);
+            if (attributeComponents.namespaceURI && attributeComponents.namespaceURI === this.targetNamespace) {
+                const attributeKey: string = XMLSchemaGrammar.createElementKey(attributeComponents.localName, attributeComponents.namespaceURI);
+                if (this.elementDeclarations.has(attributeKey)) {
                     if (this.validatingMode) {
-                        throw new Error(`Name conflict: '${localName}' is defined as both element and attribute in target namespace`);
+                        throw new Error(`Name conflict: '${attributeComponents.localName}' is defined as both element and attribute in target namespace`);
                     }
-                    // In non-validating mode, silently ignore
                 }
             }
         }

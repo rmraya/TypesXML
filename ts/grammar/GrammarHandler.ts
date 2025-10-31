@@ -46,6 +46,14 @@ export class GrammarHandler {
         });
     }
 
+    private trace(message: string): void {
+        if (this.silent) {
+            return;
+        }
+        const sourceHint: string = this.currentFile ? ` (current file: ${this.currentFile})` : '';
+        console.log(`[GrammarHandler] ${message}${sourceHint}`);
+    }
+
     initialize(): void {
         CompositeGrammar.resetInstance();
         DTDComposite.resetInstance();
@@ -190,28 +198,51 @@ export class GrammarHandler {
 
     processNamespaces(attributesMap: Map<string, string>): void {
         const namespaceInfo: NamespaceInfo = this.extractNamespaceInfo(attributesMap);
+        const schemaParser = XMLSchemaParser.getInstance();
+
+        if (namespaceInfo.schemaLocations.size > 0) {
+            const hints: string = Array.from(namespaceInfo.schemaLocations.entries())
+                .map(([ns, location]) => `${ns || '(no namespace)'} -> ${location}`)
+                .join(', ');
+            this.trace(`xsi:schemaLocation provided hints: ${hints}`);
+        }
+
+        if (namespaceInfo.noNamespaceSchemaLocation) {
+            this.trace(`xsi:noNamespaceSchemaLocation hint: ${namespaceInfo.noNamespaceSchemaLocation}`);
+        }
 
         this.checkAndValidateCurrentSchema(namespaceInfo);
+
+        if (namespaceInfo.prefixMappings.size > 0) {
+            this.compositeGrammar.updatePrefixMappings(namespaceInfo.prefixMappings);
+        }
 
         if (namespaceInfo.defaultNamespace) {
             if (!this.foundNamespaces.includes(namespaceInfo.defaultNamespace)) {
                 this.foundNamespaces.push(namespaceInfo.defaultNamespace);
                 let location: string = '';
+                let locationSource: string = 'none';
                 if (namespaceInfo.schemaLocations.has(namespaceInfo.defaultNamespace)) {
                     location = namespaceInfo.schemaLocations.get(namespaceInfo.defaultNamespace)!;
+                    locationSource = 'xsi:schemaLocation';
                 } else {
                     // try to find it in catalog
                     const catalogLocation: string | undefined = this.catalog?.matchURI(namespaceInfo.defaultNamespace) ||
                         this.catalog?.matchSystem(namespaceInfo.defaultNamespace);
                     if (catalogLocation) {
                         location = catalogLocation;
+                        locationSource = 'catalog';
                     }
                 }
                 if (location !== '') {
-                    // Update prefix mappings when we actually load a schema
-                    this.compositeGrammar.updatePrefixMappings(namespaceInfo.prefixMappings);
+                    this.trace(`Attempting to load schema for namespace '${namespaceInfo.defaultNamespace}' using ${locationSource} hint '${location}'`);
                     // Load schema for default namespace
-                    this.loadSchemaForNamespace(XMLSchemaParser.getInstance(), namespaceInfo.defaultNamespace, location);
+                    this.loadSchemaForNamespace(schemaParser, namespaceInfo.defaultNamespace, location);
+                } else if (schemaParser.isSchemaAlreadyParsed(namespaceInfo.defaultNamespace)) {
+                    this.trace(`Using cached grammar for namespace '${namespaceInfo.defaultNamespace}' (no explicit location hint)`);
+                    this.loadSchemaForNamespace(schemaParser, namespaceInfo.defaultNamespace);
+                } else {
+                    this.trace(`No schema location found for default namespace '${namespaceInfo.defaultNamespace}'`);
                 }
             }
         }
@@ -220,21 +251,30 @@ export class GrammarHandler {
                 if (!this.foundNamespaces.includes(ns)) {
                     this.foundNamespaces.push(ns);
                     let location: string = '';
+                    let locationSource: string = 'none';
                     if (namespaceInfo.schemaLocations.has(ns)) {
                         location = namespaceInfo.schemaLocations.get(ns)!;
+                        locationSource = 'xsi:schemaLocation';
                     } else {
                         // try to find it in catalog
                         const catalogLocation: string | undefined = this.catalog?.matchURI(ns) ||
                             this.catalog?.matchSystem(ns);
                         if (catalogLocation) {
                             location = catalogLocation;
+                            locationSource = 'catalog';
                         }
                     }
                     if (location !== '') {
-                        // Update prefix mappings when we actually load a schema
-                        this.compositeGrammar.updatePrefixMappings(namespaceInfo.prefixMappings);
+                        this.trace(`Attempting to load schema for namespace '${ns}' using ${locationSource} hint '${location}'`);
                         // Load schema for declared namespace
-                        this.loadSchemaForNamespace(XMLSchemaParser.getInstance(), ns, location);
+                        this.loadSchemaForNamespace(schemaParser, ns, location);
+                    } else {
+                        if (schemaParser.isSchemaAlreadyParsed(ns)) {
+                            this.trace(`Using cached grammar for namespace '${ns}' (no explicit location hint)`);
+                            this.loadSchemaForNamespace(schemaParser, ns);
+                        } else {
+                            this.trace(`No schema location found for namespace '${ns}'`);
+                        }
                     }
                 }
             });
@@ -380,23 +420,10 @@ export class GrammarHandler {
         namespace: string,
         hintLocation?: string
     ): void {
-        // Skip if already loaded
-        if (this.compositeGrammar.hasGrammar(namespace)) {
-            return;
-        }
-
         // Skip XMLSchema-instance namespace - it's handled by pre-compiled grammar
         if (namespace === 'http://www.w3.org/2001/XMLSchema-instance') {
+            this.trace(`Skipping schema load for reserved namespace '${namespace}'`);
             return;
-        }
-
-        // Check cache first
-        if (schemaParser.isSchemaAlreadyParsed(namespace)) {
-            const cachedGrammar: Grammar | null = schemaParser.getCachedSchema(namespace);
-            if (cachedGrammar) {
-                this.compositeGrammar.addGrammar(namespace, cachedGrammar);
-                return;
-            }
         }
 
         // Resolve location
@@ -409,73 +436,114 @@ export class GrammarHandler {
             }
         }
 
-        if (location) {
-            try {
-                // Resolve and normalize paths
-                let resolvedLocation: string = location;
+        if (!location) {
+            if (this.compositeGrammar.hasGrammar(namespace)) {
+                this.trace(`Namespace '${namespace}' already has a loaded grammar, skipping load request`);
+                return;
+            }
 
-                // Convert file:// URLs to real paths
-                if (location.startsWith('file://')) {
-                    resolvedLocation = fileURLToPath(location);
-                }
-                // Handle HTTP/HTTPS URLs - check catalog first
-                else if (location.startsWith('http://') || location.startsWith('https://')) {
-                    if (this.catalog) {
-                        const catalogMatch: string | undefined = this.catalog.matchURI(location) || this.catalog.matchSystem(location);
-                        if (catalogMatch) {
-                            resolvedLocation = catalogMatch;
-                        } else {
-                            return;
-                        }
-                    } else {
-                        return;
-                    }
-                }
-                // Handle relative paths
-                else if (!isAbsolute(location)) {
-                    // This is a relative path - resolve it relative to the current document
-                    if (this.currentFile) {
-                        const documentDir: string = dirname(this.currentFile);
-                        resolvedLocation = resolve(documentDir, location);
-                    } else {
-                        return;
-                    }
-                }
-
-                // Try to load as XSD first (most common case)
-                const xsdGrammar: Grammar | null = schemaParser.parseSchema(resolvedLocation, namespace);
-                if (xsdGrammar) {
-                    // Set validating mode on newly created XMLSchemaGrammar
-                    if (xsdGrammar.getGrammarType().toString() === 'xmlschema') {
-                        (xsdGrammar as any).setValidating(this.validating);
-                    }
-                    this.compositeGrammar.addGrammar(namespace, xsdGrammar);
-                } else {
-                    // If XSD parsing fails, try DTD as fallback
-                    const dtdGrammar: DTDGrammar | null = this.loadDTDForNamespace(resolvedLocation, namespace);
-                    if (dtdGrammar) {
-                        this.compositeGrammar.addGrammar(namespace, dtdGrammar);
-                    } else {
-                        if (this.validating) {
-                            throw new Error(`Failed to load schema for namespace "${namespace}"`);
-                        } else if (!this.silent) {
-                            console.warn('Failed to load schema for namespace "' + namespace + '"');
-                        }
-                    }
-                }
-            } catch (error) {
-                if (this.validating) {
-                    throw new Error(`Exception loading schema for namespace "${namespace}": ${(error as Error).message}`);
-                } else if (!this.silent) {
-                    console.warn('Exception loading schema for namespace "' + namespace + '": ' + (error as Error).message);
-                    // Schema loading failed - will be reported in validation
+            if (schemaParser.isSchemaAlreadyParsed(namespace)) {
+                const cachedGrammar: Grammar | null = schemaParser.getCachedSchema(namespace);
+                if (cachedGrammar) {
+                    this.trace(`Using cached grammar for namespace '${namespace}'`);
+                    this.compositeGrammar.addGrammar(namespace, cachedGrammar);
+                    return;
                 }
             }
-        } else {
+
+            this.trace(`No location hint available for namespace '${namespace}'`);
             if (this.validating) {
                 throw new Error(`No location found for namespace "${namespace}"`);
             } else if (!this.silent) {
                 console.warn('No location found for namespace "' + namespace + '"');
+            }
+            return;
+        }
+
+        try {
+            // Resolve and normalize paths
+            let resolvedLocation: string = location;
+
+            // Convert file:// URLs to real paths
+            if (location.startsWith('file://')) {
+                resolvedLocation = fileURLToPath(location);
+            }
+            // Handle HTTP/HTTPS URLs - check catalog first
+            else if (location.startsWith('http://') || location.startsWith('https://')) {
+                if (this.catalog) {
+                    const catalogMatch: string | undefined = this.catalog.matchURI(location) || this.catalog.matchSystem(location);
+                    if (catalogMatch) {
+                        resolvedLocation = catalogMatch;
+                        this.trace(`Resolved remote schema reference '${location}' to local resource '${resolvedLocation}' for namespace '${namespace}' via catalog`);
+                    } else {
+                        this.trace(`Unable to resolve remote schema reference '${location}' for namespace '${namespace}' because catalog did not provide a mapping`);
+                        return;
+                    }
+                } else {
+                    this.trace(`Unable to resolve remote schema reference '${location}' for namespace '${namespace}' without catalog support`);
+                    return;
+                }
+            }
+            // Handle relative paths
+            else if (!isAbsolute(location)) {
+                // This is a relative path - resolve it relative to the current document
+                if (this.currentFile) {
+                    const documentDir: string = dirname(this.currentFile);
+                    resolvedLocation = resolve(documentDir, location);
+                    this.trace(`Resolved relative schema reference '${location}' to '${resolvedLocation}' for namespace '${namespace}'`);
+                } else {
+                    this.trace(`Cannot resolve relative schema reference '${location}' for namespace '${namespace}' because current file is unknown`);
+                    return;
+                }
+            }
+
+            const alreadyProcessedPath: boolean = schemaParser.hasProcessedSchemaPath(resolvedLocation);
+            if (alreadyProcessedPath) {
+                if (this.compositeGrammar.hasGrammar(namespace)) {
+                    this.trace(`Namespace '${namespace}' already has a loaded grammar, skipping load request`);
+                    return;
+                }
+                const cachedGrammar: Grammar | null = schemaParser.getCachedSchema(namespace);
+                if (cachedGrammar) {
+                    this.trace(`Using cached grammar for namespace '${namespace}' resolved from '${resolvedLocation}'`);
+                    this.compositeGrammar.addGrammar(namespace, cachedGrammar);
+                    return;
+                }
+            }
+
+            this.trace(`Loading schema for namespace '${namespace}' from '${resolvedLocation}'`);
+
+            // Try to load as XSD first (most common case)
+            const xsdGrammar: Grammar | null = schemaParser.parseSchema(resolvedLocation, namespace);
+            if (xsdGrammar) {
+                // Set validating mode on newly created XMLSchemaGrammar
+                if (xsdGrammar.getGrammarType().toString() === 'xmlschema') {
+                    (xsdGrammar as any).setValidating(this.validating);
+                }
+                this.compositeGrammar.addGrammar(namespace, xsdGrammar);
+                this.trace(`Successfully loaded XML Schema grammar for namespace '${namespace}'`);
+            } else {
+                // If XSD parsing fails, try DTD as fallback
+                const dtdGrammar: DTDGrammar | null = this.loadDTDForNamespace(resolvedLocation, namespace);
+                if (dtdGrammar) {
+                    this.compositeGrammar.addGrammar(namespace, dtdGrammar);
+                    this.trace(`Loaded DTD grammar for namespace '${namespace}' as fallback`);
+                } else {
+                    if (this.validating) {
+                        this.trace(`Failed to load schema for namespace '${namespace}' from '${resolvedLocation}' while in validating mode`);
+                        throw new Error(`Failed to load schema for namespace "${namespace}"`);
+                    } else if (!this.silent) {
+                        console.warn('Failed to load schema for namespace "' + namespace + '"');
+                    }
+                }
+            }
+        } catch (error) {
+            this.trace(`Exception while loading schema for namespace '${namespace}' from '${location}': ${(error as Error).message}`);
+            if (this.validating) {
+                throw new Error(`Exception loading schema for namespace "${namespace}": ${(error as Error).message}`);
+            } else if (!this.silent) {
+                console.warn('Exception loading schema for namespace "' + namespace + '": ' + (error as Error).message);
+                // Schema loading failed - will be reported in validation
             }
         }
     }
