@@ -571,15 +571,19 @@ export class GrammarHandler {
             return undefined;
         }
 
-        const colonIndex: number = trimmed.indexOf(':');
-        if (colonIndex !== -1) {
-            const scheme: string = trimmed.substring(0, colonIndex).toLowerCase();
-            if (scheme !== 'http' && scheme !== 'https' && scheme !== 'file') {
-                this.trace(`Rejected schema location '${trimmed}' for namespace '${namespace}' due to unsupported scheme '${scheme}'`);
+        if (/^\w+:/.test(trimmed)) {
+            try {
+                const parsed = new URL(trimmed);
+                if (!['http:', 'https:', 'file:'].includes(parsed.protocol)) {
+                    this.trace(`Rejected schema location '${trimmed}' for namespace '${namespace}' due to unsupported protocol '${parsed.protocol}'`);
+                    return undefined;
+                }
+                return parsed.href;
+            } catch (error) {
+                XMLUtils.ignoreUnused(error);
+                this.trace(`Rejected schema location '${trimmed}' for namespace '${namespace}' because it is not a valid URL`);
                 return undefined;
             }
-            const remainder: string = trimmed.substring(colonIndex);
-            return scheme + remainder;
         }
 
         return trimmed;
