@@ -195,11 +195,75 @@ export class BuiltinTypes {
 
     // Numeric validation methods
     private static validateDecimal(value: string): ValidationResult {
-        const pattern = /^[+-]?(\d+\.?\d*|\d*\.\d+)$/;
-        if (!pattern.test(value)) {
+        if (value.length === 0) {
             return ValidationResult.error("Invalid decimal format");
         }
+
+        const trimmed: string = value.trim();
+        if (trimmed !== value) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
+        let signless: string = trimmed;
+        const firstChar: string = trimmed.charAt(0);
+        if (firstChar === '+' || firstChar === '-') {
+            signless = trimmed.substring(1);
+        }
+
+        if (signless.length === 0) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
+        if (signless.toLowerCase().indexOf('e') !== -1) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
+        const dotIndex = signless.indexOf('.');
+        if (dotIndex === -1) {
+            if (!BuiltinTypes.isAllDigits(signless)) {
+                return ValidationResult.error("Invalid decimal format");
+            }
+            return ValidationResult.success();
+        }
+
+        const integerPart: string = signless.substring(0, dotIndex);
+        const fractionalPart: string = signless.substring(dotIndex + 1);
+
+        if (signless.indexOf('.', dotIndex + 1) !== -1) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
+        if (integerPart.length === 0 && fractionalPart.length === 0) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
+        if (integerPart.length > 0 && !BuiltinTypes.isAllDigits(integerPart)) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
+        if (fractionalPart.length > 0 && !BuiltinTypes.isAllDigits(fractionalPart)) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
+        if (fractionalPart.length === 0 && integerPart.length === 0) {
+            return ValidationResult.error("Invalid decimal format");
+        }
+
         return ValidationResult.success();
+    }
+
+    private static isAllDigits(value: string): boolean {
+        if (value.length === 0) {
+            return false;
+        }
+
+        for (let i = 0; i < value.length; i++) {
+            const code = value.charCodeAt(i);
+            if (code < 48 || code > 57) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static validateInteger(value: string): ValidationResult {

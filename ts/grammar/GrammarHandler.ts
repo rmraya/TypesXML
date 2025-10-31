@@ -425,12 +425,14 @@ export class GrammarHandler {
         }
 
         // Resolve location
-        let location: string | undefined = hintLocation;
+        let location: string | undefined = hintLocation ? this.sanitizeSchemaLocation(namespace, hintLocation) : undefined;
         if (!location && this.catalog) {
             if (namespace.startsWith('urn:')) {
-                location = this.catalog.matchURI(namespace);
+                const matched = this.catalog.matchURI(namespace);
+                location = matched ? this.sanitizeSchemaLocation(namespace, matched) : undefined;
             } else if (namespace.startsWith('http')) {
-                location = this.catalog.matchSystem(namespace);
+                const matched = this.catalog.matchSystem(namespace);
+                location = matched ? this.sanitizeSchemaLocation(namespace, matched) : undefined;
             }
         }
 
@@ -471,7 +473,12 @@ export class GrammarHandler {
                 if (this.catalog) {
                     const catalogMatch: string | undefined = this.catalog.matchURI(location) || this.catalog.matchSystem(location);
                     if (catalogMatch) {
-                        resolvedLocation = catalogMatch;
+                        const sanitizedMatch: string | undefined = this.sanitizeSchemaLocation(namespace, catalogMatch);
+                        if (!sanitizedMatch) {
+                            this.trace(`Catalog mapping for '${location}' produced unsupported location '${catalogMatch}' for namespace '${namespace}'`);
+                            return;
+                        }
+                        resolvedLocation = sanitizedMatch;
                         this.trace(`Resolved remote schema reference '${location}' to local resource '${resolvedLocation}' for namespace '${namespace}' via catalog`);
                     } else {
                         this.trace(`Unable to resolve remote schema reference '${location}' for namespace '${namespace}' because catalog did not provide a mapping`);
@@ -550,6 +557,32 @@ export class GrammarHandler {
                 // Schema loading failed - will be reported in validation
             }
         }
+    }
+
+    private sanitizeSchemaLocation(namespace: string, rawLocation: string): string | undefined {
+        const trimmed: string = rawLocation.trim();
+        if (trimmed.length === 0) {
+            this.trace(`Discarded empty schema location hint for namespace '${namespace}'`);
+            return undefined;
+        }
+
+        if (trimmed.indexOf('\0') !== -1) {
+            this.trace(`Discarded schema location for namespace '${namespace}' because it contains null bytes`);
+            return undefined;
+        }
+
+        const colonIndex: number = trimmed.indexOf(':');
+        if (colonIndex !== -1) {
+            const scheme: string = trimmed.substring(0, colonIndex).toLowerCase();
+            if (scheme !== 'http' && scheme !== 'https' && scheme !== 'file') {
+                this.trace(`Rejected schema location '${trimmed}' for namespace '${namespace}' due to unsupported scheme '${scheme}'`);
+                return undefined;
+            }
+            const remainder: string = trimmed.substring(colonIndex);
+            return scheme + remainder;
+        }
+
+        return trimmed;
     }
 
     private loadDTDForNamespace(location: string, namespace: string): DTDGrammar | null {

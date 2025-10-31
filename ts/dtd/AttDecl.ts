@@ -20,6 +20,7 @@ export class AttDecl implements XMLNode {
     private defaultDecl: string;
     private defaultValue: string;
     private enumeration: string[] = [];
+    private notationValues: string[] = [];
 
     constructor(name: string, attType: string, defaultDecl: string, defaultValue: string) {
         this.name = name;
@@ -39,33 +40,9 @@ export class AttDecl implements XMLNode {
         let standardTypes: string[] = ['CDATA', 'ID', 'IDREF', 'IDREFS', 'NMTOKEN', 'NMTOKENS', 'ENTITY', 'ENTITIES'];
         if (!standardTypes.includes(this.attType)) {
             if (this.attType.startsWith('NOTATION')) {
-                const match = this.attType.match(/NOTATION\s+\(([^)]+)\)/);
-                if (!match) {
-                    throw new Error(`Invalid NOTATION attribute type: ${this.attType}`);
-                }
-                // Validate each NOTATION name
-                const notationNames = match[1].split('|').map(v => v.trim());
-                if (notationNames.length === 0) {
-                    throw new Error(`Empty NOTATION name list: ${this.attType}`);
-                }
-                for (const name of notationNames) {
-                    if (!this.isValidName(name)) {
-                        throw new Error(`Invalid NOTATION name "${name}" in attribute type: ${this.attType}`);
-                    }
-                }
+                this.notationValues = this.parseNotationType(this.attType);
             } else if (this.attType.startsWith('(') && this.attType.endsWith(')')) {
-                // Check for valid enumeration values
-                const enumValues = this.attType.slice(1, -1).split('|').map(v => v.trim());
-                if (enumValues.length === 0) {
-                    throw new Error(`Empty enumeration attribute type: ${this.attType}`);
-                }
-                // Ensure all enumeration values are valid
-                for (const value of enumValues) {
-                    if (!XMLUtils.isValidNMTOKEN(value)) {
-                        throw new Error(`Invalid enumeration value "${value}" for attribute type: ${this.attType}`);
-                    }
-                    this.enumeration.push(value);
-                }
+                this.enumeration = this.parseEnumerationValues(this.attType);
             } else {
                 throw new Error(`Invalid attribute type: ${this.attType}`);
             }
@@ -131,19 +108,67 @@ export class AttDecl implements XMLNode {
             return value.split(/\s+/).every(entity => this.isValidName(entity));
         }
         if (this.attType.startsWith('(')) {
-            // Enumeration - check if value is in the list
-            const enumValues = this.attType.slice(1, -1).split('|').map(v => v.trim());
-            return enumValues.includes(value);
+            // Enumeration - check if value is in the list populated during construction
+            if (this.enumeration.length === 0) {
+                this.enumeration = this.parseEnumerationValues(this.attType);
+            }
+            return this.enumeration.includes(value);
         }
         if (this.attType.startsWith('NOTATION')) {
-            // NOTATION type with enumeration
-            const match = this.attType.match(/NOTATION\s*\(([^)]+)\)/);
-            if (match) {
-                const notationValues = match[1].split('|').map(v => v.trim());
-                return notationValues.includes(value);
+            if (this.notationValues.length === 0) {
+                this.notationValues = this.parseNotationType(this.attType);
             }
+            return this.notationValues.includes(value);
         }
         return true; // Default to valid for other types
+    }
+
+    private parseNotationType(type: string): string[] {
+        const openParen: number = type.indexOf('(');
+        const closeParen: number = type.lastIndexOf(')');
+        if (openParen === -1 || closeParen === -1 || closeParen <= openParen + 1) {
+            throw new Error(`Invalid NOTATION attribute type: ${type}`);
+        }
+
+        const prefix: string = type.substring(0, openParen).trim();
+        if (prefix !== 'NOTATION') {
+            throw new Error(`Invalid NOTATION attribute type: ${type}`);
+        }
+
+        const suffix: string = type.substring(closeParen + 1).trim();
+        if (suffix.length !== 0) {
+            throw new Error(`Invalid NOTATION attribute type: ${type}`);
+        }
+
+        const rawList: string = type.substring(openParen + 1, closeParen);
+        const names: string[] = rawList.split('|').map(v => v.trim()).filter(name => name.length > 0);
+        if (names.length === 0) {
+            throw new Error(`Empty NOTATION name list: ${type}`);
+        }
+
+        for (const name of names) {
+            if (!this.isValidName(name)) {
+                throw new Error(`Invalid NOTATION name "${name}" in attribute type: ${type}`);
+            }
+        }
+
+        return names;
+    }
+
+    private parseEnumerationValues(type: string): string[] {
+        const inner: string = type.substring(1, type.length - 1);
+        const values: string[] = inner.split('|').map(v => v.trim()).filter(token => token.length > 0);
+        if (values.length === 0) {
+            throw new Error(`Empty enumeration attribute type: ${type}`);
+        }
+
+        for (const value of values) {
+            if (!XMLUtils.isValidNMTOKEN(value)) {
+                throw new Error(`Invalid enumeration value "${value}" for attribute type: ${type}`);
+            }
+        }
+
+        return values;
     }
 
     private isValidName(name: string): boolean {
