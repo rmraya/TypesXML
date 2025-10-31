@@ -11,14 +11,14 @@
  *******************************************************************************/
 
 import { existsSync } from 'fs';
-import { dirname, isAbsolute, resolve } from 'path';
+import { dirname, isAbsolute, relative, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { Catalog } from '../Catalog';
 import { DTDGrammar } from '../dtd/DTDGrammar';
 import { DTDParser } from '../dtd/DTDParser';
 import { EntityDecl } from '../dtd/EntityDecl';
-import { XMLUtils } from '../XMLUtils';
 import { XMLSchemaParser } from '../schema/XMLSchemaParser';
+import { XMLUtils } from '../XMLUtils';
 import { CompositeGrammar } from './CompositeGrammar';
 import { DTDComposite } from './DTDComposite';
 import { Grammar } from './Grammar';
@@ -487,7 +487,13 @@ export class GrammarHandler {
                 // This is a relative path - resolve it relative to the current document
                 if (this.currentFile) {
                     const documentDir: string = dirname(this.currentFile);
-                    resolvedLocation = resolve(documentDir, location);
+                    const candidate: string = resolve(documentDir, location);
+                    const relativeFromDoc: string = relative(documentDir, candidate);
+                    if (relativeFromDoc.startsWith('..')) {
+                        this.trace(`Rejected relative schema reference '${location}' for namespace '${namespace}' because it resolves outside the source directory`);
+                        return;
+                    }
+                    resolvedLocation = candidate;
                     this.trace(`Resolved relative schema reference '${location}' to '${resolvedLocation}' for namespace '${namespace}'`);
                 } else {
                     this.trace(`Cannot resolve relative schema reference '${location}' for namespace '${namespace}' because current file is unknown`);

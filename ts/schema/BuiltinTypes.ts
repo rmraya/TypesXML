@@ -10,9 +10,9 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { ValidationResult } from "../grammar/Grammar";
 import { XMLUtils } from "../XMLUtils";
 import { SimpleType } from "./SimpleType";
-import { ValidationResult } from "../grammar/Grammar";
 
 export class BuiltinTypes {
     private static types: Map<string, SimpleType> = new Map();
@@ -28,7 +28,7 @@ export class BuiltinTypes {
         // Base types
         this.createType("anyType", xsNamespace, () => ValidationResult.success());
         this.createType("anySimpleType", xsNamespace, () => ValidationResult.success());
-        
+
         // String types
         this.createType("string", xsNamespace, this.validateString);
         this.createType("normalizedString", xsNamespace, this.validateNormalizedString);
@@ -40,7 +40,7 @@ export class BuiltinTypes {
         this.createType("IDREF", xsNamespace, this.validateIDREF);
         this.createType("ENTITY", xsNamespace, BuiltinTypes.validateNCName);
         this.createType("NMTOKEN", xsNamespace, this.validateNMTOKEN);
-        
+
         // Numeric types
         this.createType("decimal", xsNamespace, this.validateDecimal);
         this.createType("integer", xsNamespace, BuiltinTypes.validateInteger);
@@ -58,7 +58,7 @@ export class BuiltinTypes {
         this.createType("unsignedByte", xsNamespace, this.validateUnsignedByte);
         this.createType("float", xsNamespace, this.validateFloat);
         this.createType("double", xsNamespace, this.validateDouble);
-        
+
         // Date/time types
         this.createType("duration", xsNamespace, this.validateDuration);
         this.createType("dateTime", xsNamespace, this.validateDateTime);
@@ -69,7 +69,7 @@ export class BuiltinTypes {
         this.createType("gMonthDay", xsNamespace, this.validateGMonthDay);
         this.createType("gDay", xsNamespace, this.validateGDay);
         this.createType("gMonth", xsNamespace, this.validateGMonth);
-        
+
         // Other types
         this.createType("boolean", xsNamespace, this.validateBoolean);
         this.createType("base64Binary", xsNamespace, this.validateBase64Binary);
@@ -121,7 +121,7 @@ export class BuiltinTypes {
         if (!normalized.isValid) {
             return normalized;
         }
-        
+
         if (value !== value.trim() || /\s{2,}/.test(value)) {
             return ValidationResult.error("token cannot have leading/trailing whitespace or consecutive spaces");
         }
@@ -129,11 +129,28 @@ export class BuiltinTypes {
     }
 
     private static validateLanguage(value: string): ValidationResult {
-        // RFC 3066 language codes
-        const pattern = /^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$/;
-        if (!pattern.test(value)) {
+        // RFC 3066 language codes - use iterative checks to avoid regex backtracking issues
+        if (!value) {
             return ValidationResult.error("Invalid language code format");
         }
+
+        const segments: string[] = value.split('-');
+        if (segments.length === 0) {
+            return ValidationResult.error("Invalid language code format");
+        }
+
+        const primaryTag: string = segments[0];
+        if (!/^[a-zA-Z]{1,8}$/.test(primaryTag)) {
+            return ValidationResult.error("Invalid language code format");
+        }
+
+        for (let i = 1; i < segments.length; i++) {
+            const subTag: string = segments[i];
+            if (!/^[a-zA-Z0-9]{1,8}$/.test(subTag)) {
+                return ValidationResult.error("Invalid language code format");
+            }
+        }
+
         return ValidationResult.success();
     }
 
@@ -152,7 +169,7 @@ export class BuiltinTypes {
         if (!nameResult.isValid) {
             return nameResult;
         }
-        
+
         if (value.includes(':')) {
             return ValidationResult.error("NCName cannot contain colon");
         }
@@ -198,7 +215,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num > 0) {
             return ValidationResult.error("nonPositiveInteger must be <= 0");
@@ -211,7 +228,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num >= 0) {
             return ValidationResult.error("negativeInteger must be < 0");
@@ -224,7 +241,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num < -9223372036854775808 || num > 9223372036854775807) {
             return ValidationResult.error("long value out of range");
@@ -237,7 +254,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num < -2147483648 || num > 2147483647) {
             return ValidationResult.error("int value out of range");
@@ -250,7 +267,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num < -32768 || num > 32767) {
             return ValidationResult.error("short value out of range");
@@ -263,7 +280,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num < -128 || num > 127) {
             return ValidationResult.error("byte value out of range");
@@ -276,7 +293,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num < 0) {
             return ValidationResult.error("nonNegativeInteger must be >= 0");
@@ -289,7 +306,7 @@ export class BuiltinTypes {
         if (!intResult.isValid) {
             return intResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num <= 0) {
             return ValidationResult.error("positiveInteger must be > 0");
@@ -302,7 +319,7 @@ export class BuiltinTypes {
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num > 18446744073709551615) {
             return ValidationResult.error("unsignedLong value out of range");
@@ -315,7 +332,7 @@ export class BuiltinTypes {
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num > 4294967295) {
             return ValidationResult.error("unsignedInt value out of range");
@@ -328,7 +345,7 @@ export class BuiltinTypes {
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num > 65535) {
             return ValidationResult.error("unsignedShort value out of range");
@@ -341,7 +358,7 @@ export class BuiltinTypes {
         if (!nonNegResult.isValid) {
             return nonNegResult;
         }
-        
+
         const num = parseInt(value, 10);
         if (num > 255) {
             return ValidationResult.error("unsignedByte value out of range");
@@ -353,7 +370,7 @@ export class BuiltinTypes {
         if (value === "INF" || value === "-INF" || value === "NaN") {
             return ValidationResult.success();
         }
-        
+
         const num = parseFloat(value);
         if (isNaN(num)) {
             return ValidationResult.error("Invalid float format");
@@ -492,14 +509,14 @@ export class BuiltinTypes {
         if (parts.length > 2) {
             return ValidationResult.error("QName can have at most one colon");
         }
-        
+
         for (const part of parts) {
             const ncNameResult = BuiltinTypes.validateNCName(part);
             if (!ncNameResult.isValid) {
                 return ValidationResult.error("Invalid QName: " + ncNameResult.errors[0].message);
             }
         }
-        
+
         return ValidationResult.success();
     }
 }

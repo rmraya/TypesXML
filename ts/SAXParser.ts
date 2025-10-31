@@ -764,12 +764,15 @@ export class SAXParser {
             return text;
         }
 
-        return text
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&quot;/g, '"')
-            .replace(/&apos;/g, "'");
+        const predefinedEntities: Record<string, string> = {
+            lt: '<',
+            gt: '>',
+            amp: '&',
+            quot: '"',
+            apos: "'",
+        };
+
+        return text.replace(/&(lt|gt|amp|quot|apos);/g, (_match, entity: string) => predefinedEntities[entity]);
     }
 
     private isXmlSpacePreserve(): boolean {
