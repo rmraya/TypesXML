@@ -22,6 +22,7 @@ export { ProcessingInstruction } from "./ProcessingInstruction";
 export { SAXParser } from "./SAXParser";
 export { TextNode } from "./TextNode";
 export { XMLAttribute } from "./XMLAttribute";
+export { RelaxNGParser } from "./RelaxNGParser";
 export { XMLCanonicalizer } from "./XMLCanonicalizer";
 export { XMLComment } from "./XMLComment";
 export { XMLDeclaration } from "./XMLDeclaration";

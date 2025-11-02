@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable MD033 -->
 <div style="display:flex; vertical-align: top;">
-    <img src="./typesXML.png" alt="TypesXML logo" style="width:90px; height:90px;float:left; margin-right: 16px;"/> TypesXML is an open-source TypeScript XML library providing a standards-compliant XML 1.0/1.1 parser with both streaming (SAX) and in-memory (DOM) APIs, DTD and XML Schema validation, OASIS catalog–based resolution and entity handling, namespace-aware processing, broad encoding support, and utilities for writing and testing XML. It emphasizes correctness, extensibility, efficient handling of large documents, and clear error reporting for robust XML processing.
+    <img src="./typesXML.png" alt="TypesXML logo" style="width:90px; height:90px;float:left; margin-right: 16px;"/> TypesXML is an open-source TypeScript XML library providing a standards-compliant XML 1.0/1.1 parser with both streaming (SAX) and in-memory (DOM) APIs, DTD and XML Schema validation, RelaxNG default-attribute support, OASIS catalog–based resolution and entity handling, namespace-aware processing, broad encoding support, and utilities for writing and testing XML. It emphasizes correctness, extensibility, efficient handling of large documents, and clear error reporting for robust XML processing.
 </div>
 
 ## Licensing
@@ -19,6 +19,7 @@ The Grammar interface provides validation support for:
 
 - **DTD Validation**: Document Type Definition support with validation
 - **XML Schema**: Implementation with 76% W3C test suite success rate, including complex types, sequences, choices, and namespace-aware validation
+- **RelaxNG default attributes**: Extraction of default attribute values from RelaxNG grammars referenced through `xml-model` processing instructions (no RelaxNG structural validation yet)
 
 ### Key Features
 
@@ -27,6 +28,7 @@ The Grammar interface provides validation support for:
 - **Namespace Support**: XML namespace handling with QualifiedName system
 - **Encoding Support**: Character encodings including UTF-8, UTF-16LE
 - **XML Writer**: Utilities for writing XML documents with proper formatting
+- **RelaxNG Defaults**: Applies default attributes defined in RelaxNG schemas to parsed documents when `xml-model` hints are present
 
 ### ContentHandler Interface
 
@@ -34,11 +36,12 @@ The SAX parser exposes methods through the `ContentHandler` interface:
 
 - `initialize(): void`
 - `setCatalog(catalog: Catalog): void`
-- `setGrammar(grammar: Grammar): void`
+- `setValidating(validating: boolean): void`
 - `setIncludeDefaultAttributes(include: boolean): void`
+- `setGrammarHandler(grammarHandler: GrammarHandler): void`
 - `startDocument(): void`
 - `endDocument(): void`
-- `xmlDeclaration(version: string, encoding: string, standalone: string): void`
+- `xmlDeclaration(version: string, encoding: string, standalone: string | undefined): void`
 - `startElement(name: string, atts: Array<XMLAttribute>): void`
 - `endElement(name: string): void`
 - `internalSubset(declaration: string): void`
@@ -68,7 +71,7 @@ The `DOMBuilder` class implements the `ContentHandler` interface and builds a DO
 ### DTD Support
 
 - **DTD Grammar Implementation**: Parsing and validation of Document Type Definitions including element declarations, attribute lists, entities, and notations
-- **Default Attribute Processing**: Setting of default attribute values from DTD declarations
+- **Default Attribute Processing**: Setting of default attribute values from DTD declarations, XML Schema, and RelaxNG grammars
 - **Internal and External Subset Processing**: DTD merging with precedence handling
 - **Error Handling**: Validation with error reporting
 
@@ -90,11 +93,7 @@ npm install typesxml
 ### Basic Usage
 
 ```TypeScript
-import { ContentHandler } from "./ContentHandler";
-import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser } from "./SAXParser";
-import { XMLDocument } from "./XMLDocument";
-import { XMLElement } from "./XMLElement";
+import { ContentHandler, DOMBuilder, SAXParser, XMLDocument, XMLElement } from "typesxml";
 
 export class Test {
 

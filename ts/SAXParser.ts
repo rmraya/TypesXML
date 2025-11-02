@@ -11,17 +11,18 @@
  *******************************************************************************/
 
 import { existsSync, unlinkSync, writeFileSync } from "fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "os";
 import { fileURLToPath } from "url";
 import { Catalog } from "./Catalog";
 import { Constants } from "./Constants";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
-import { XMLAttribute } from "./XMLAttribute";
-import { XMLUtils } from "./XMLUtils";
 import { AttributeInfo, AttributeUse, Grammar } from "./grammar/Grammar";
 import { GrammarHandler } from "./grammar/GrammarHandler";
+import { RelaxNGParser } from "./RelaxNGParser";
+import { XMLAttribute } from "./XMLAttribute";
+import { XMLUtils } from "./XMLUtils";
 
 interface AttributeMetadata {
     specified: boolean;
@@ -61,7 +62,8 @@ export class SAXParser {
     ignoreGrammars: boolean = false;
     private lastParsedAttributeLexical: Map<string, string> = new Map<string, string>();
     private characterRunPreservedCR: Set<number>;
-
+    private defaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
+    private isRelaxNG: boolean = false;
     static readonly MIN_BUFFER_SIZE: number = 2048;
 
     constructor() {
@@ -149,6 +151,8 @@ export class SAXParser {
         }
 
         this.resetNamespaceContext();
+        this.defaultAttributes = new Map();
+        this.isRelaxNG = false;
 
         // Resolve URI/URL to local file path
         const resolvedPath: string = this.resolveURIToPath(path);
@@ -569,7 +573,7 @@ export class SAXParser {
         });
 
         // Validate attributes when validating mode is enabled
-        if (this.validating) {
+        if (this.validating && !this.isRelaxNG) {
             const attributeMap: Map<string, string> = new Map<string, string>();
             attributes.forEach(attr => {
                 attributeMap.set(attr.getName(), attr.getValue());
@@ -644,7 +648,7 @@ export class SAXParser {
         }
 
         // Validate element content when validating mode is enabled  
-        if (this.validating) {
+        if (this.validating && !this.isRelaxNG) {
             // Get the current element's children before validation
             const actualChildrenNames: string[] = this.childrenNames.length > 0 ? this.childrenNames[this.childrenNames.length - 1] : [];
             const elementValidationResult = this.grammarHandler.getGrammar().validateElement(name, {
@@ -944,8 +948,61 @@ export class SAXParser {
     }
 
     parseRelaxNG(href: string) {
-        XMLUtils.ignoreUnused(href);
-        // TODO Silently ignored, not implemented yet
+        if (!href || href.trim() === '') {
+            throw new Error('Invalid path: path to RelaxNG schema cannot be empty');
+        }
+        let resolvedPath: string;
+        try {
+            // Check if it's a file:// URL
+            if (href.startsWith('file://')) {
+                resolvedPath = fileURLToPath(href);
+            } else if (isAbsolute(href)) {
+                // Handle absolute paths
+                resolvedPath = href;
+            } else {
+                const baseDir: string | undefined = this.currentFile ? dirname(this.currentFile) : undefined;
+                resolvedPath = baseDir ? resolve(baseDir, href) : resolve(href);
+            }
+
+            if (!existsSync(resolvedPath) && this.catalog) {
+                const candidates: Array<string | undefined> = [
+                    this.catalog.matchSystem(href),
+                    this.catalog.matchURI(href),
+                    this.catalog.matchPublic(href)
+                ];
+
+                let resolvedFromCatalog: string | undefined;
+                for (const candidate of candidates) {
+                    if (!candidate) {
+                        continue;
+                    }
+                    const normalizedCandidate: string = candidate.startsWith('file://') ? fileURLToPath(candidate) : candidate;
+                    if (existsSync(normalizedCandidate)) {
+                        resolvedFromCatalog = normalizedCandidate;
+                        break;
+                    }
+                }
+
+                if (resolvedFromCatalog) {
+                    resolvedPath = resolvedFromCatalog;
+                } else if (this.validating) {
+                    throw new Error(`RelaxNG schema file not found: ${href}`);
+                } else {
+                    return;
+                }
+            } else if (!existsSync(resolvedPath)) {
+                if (this.validating) {
+                    throw new Error(`RelaxNG schema file not found: ${href}`);
+                }
+                return;
+            }
+
+            let relaxngParser = new RelaxNGParser(resolvedPath, this.catalog);
+            this.defaultAttributes = relaxngParser.getElements();
+            this.isRelaxNG = true;
+        } catch (error: Error | any) {
+            throw new Error(`Error accessing RelaxNG schema at ${href}: ${error.message}`);
+        }
     }
 
     parseDoctype() {
@@ -1411,11 +1468,6 @@ export class SAXParser {
             metadata.set(key, { specified: true });
         });
 
-        if (attributeInfos.size === 0) {
-            this.lastParsedAttributeLexical = new Map<string, string>();
-            return { attributes: result, metadata };
-        }
-
         const lexicalSource: Map<string, string> = this.lastParsedAttributeLexical;
         attributeInfos.forEach((attributeInfo: AttributeInfo) => {
             const matchingKey: string | undefined = this.findAttributeKeyForInfo(result, attributeInfo);
@@ -1448,6 +1500,21 @@ export class SAXParser {
                 }
             }
         });
+
+        if (this.includeDefaultAttributes && this.isRelaxNG) {
+            const relaxDefaults: Map<string, string> | undefined = this.defaultAttributes.get(elementName);
+            if (relaxDefaults) {
+                relaxDefaults.forEach((value: string, key: string) => {
+                    if (!result.has(key)) {
+                        result.set(key, value);
+                        metadata.set(key, {
+                            specified: false,
+                            lexical: value
+                        });
+                    }
+                });
+            }
+        }
 
         this.lastParsedAttributeLexical = new Map<string, string>();
         return { attributes: result, metadata };
@@ -2172,44 +2239,124 @@ export class SAXParser {
             throw new Error('Invalid path: path cannot be empty');
         }
 
-        let resolvedPath: string;
+        const trimmedPath: string = path.trim();
+
+        const resolveViaCatalog = (identifier: string): string | undefined => {
+            if (!this.catalog || !identifier) {
+                return undefined;
+            }
+
+            const candidates: Array<string | undefined> = [
+                this.catalog.matchSystem(identifier),
+                this.catalog.matchURI(identifier),
+                this.catalog.matchPublic(identifier)
+            ];
+
+            for (const candidate of candidates) {
+                if (!candidate) {
+                    continue;
+                }
+
+                const normalizedCandidate: string = candidate.startsWith('file://')
+                    ? fileURLToPath(candidate)
+                    : candidate;
+
+                if (existsSync(normalizedCandidate)) {
+                    return normalizedCandidate;
+                }
+            }
+
+            return undefined;
+        };
+
+        const localCandidates: string[] = [];
+        let preferredForError: string = trimmedPath;
+
+        if (trimmedPath.startsWith('file://')) {
+            const fileCandidate: string = fileURLToPath(trimmedPath);
+            localCandidates.push(fileCandidate);
+            preferredForError = fileCandidate;
+        } else if (!trimmedPath.includes('://')) {
+            if (isAbsolute(trimmedPath)) {
+                localCandidates.push(trimmedPath);
+                preferredForError = trimmedPath;
+            } else {
+                if (this.currentFile) {
+                    const baseCandidate: string = resolve(dirname(this.currentFile), trimmedPath);
+                    localCandidates.push(baseCandidate);
+                    preferredForError = baseCandidate;
+                }
+                const cwdCandidate: string = resolve(trimmedPath);
+                localCandidates.push(cwdCandidate);
+                if (preferredForError === trimmedPath) {
+                    preferredForError = cwdCandidate;
+                }
+            }
+        }
 
         try {
-            // Check if it's a file:// URL
-            if (path.startsWith('file://')) {
-                resolvedPath = fileURLToPath(path);
+            for (const candidate of localCandidates) {
+                if (existsSync(candidate)) {
+                    return candidate;
+                }
             }
-            // Check if it's an HTTP/HTTPS URL (not supported for local file access)
-            else if (path.startsWith('http://') || path.startsWith('https://')) {
+
+            const catalogIdentifiers: string[] = [];
+            if (this.catalog) {
+                const seen = new Set<string>();
+                const addIdentifier = (identifier: string | undefined) => {
+                    if (!identifier) {
+                        return;
+                    }
+                    if (!seen.has(identifier)) {
+                        seen.add(identifier);
+                        catalogIdentifiers.push(identifier);
+                    }
+                };
+
+                addIdentifier(trimmedPath);
+                for (const candidate of localCandidates) {
+                    addIdentifier(candidate);
+                }
+            }
+
+            for (const identifier of catalogIdentifiers) {
+                const catalogResolved = resolveViaCatalog(identifier);
+                if (!catalogResolved) {
+                    continue;
+                }
+
+                const resolvedPath: string = catalogResolved.startsWith('file://')
+                    ? fileURLToPath(catalogResolved)
+                    : catalogResolved;
+
+                if (!existsSync(resolvedPath)) {
+                    throw new Error(`File not found: ${resolvedPath} (original path: ${path})`);
+                }
+                return resolvedPath;
+            }
+
+            const target: string = preferredForError;
+
+            if (target.startsWith('http://') || target.startsWith('https://')) {
                 throw new Error(`Unsupported protocol: HTTP/HTTPS URLs are not supported for local file access: ${path}`);
             }
-            // Check if it's another URL scheme
-            else if (path.includes('://')) {
+
+            if (target.includes('://')) {
                 throw new Error(`Unsupported protocol: Unknown URL scheme in: ${path}`);
             }
-            // Handle absolute paths
-            else if (isAbsolute(path)) {
-                resolvedPath = path;
-            }
-            // Handle relative paths
-            else {
-                // Resolve relative to current working directory
-                resolvedPath = resolve(path);
+
+            if (existsSync(target)) {
+                return target;
             }
 
-            // Verify the file exists and is accessible
-            if (!existsSync(resolvedPath)) {
-                throw new Error(`File not found: ${resolvedPath} (original path: ${path})`);
-            }
-
-            return resolvedPath;
+            throw new Error(`File not found: ${target} (original path: ${path})`);
 
         } catch (error) {
             if (error instanceof Error) {
                 throw error;
-            } else {
-                throw new Error(`Failed to resolve path "${path}": ${String(error)}`);
             }
+            throw new Error(`Failed to resolve path "${path}": ${String(error)}`);
         }
     }
 }

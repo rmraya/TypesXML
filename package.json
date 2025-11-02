@@ -2,7 +2,7 @@
   "name": "typesxml",
   "productName": "TypesXML",
   "version": "2.0.0",
-  "description": "Open source XML library written in TypeScript with DTD validation and default attribute support",
+  "description": "Open source XML library written in TypeScript with validation for DTD / XML Schema and default attribute support for DTD, XML Schema and RelaxNG",
   "keywords": [
     "XML",
     "Parser",
@@ -10,6 +10,8 @@
     "SAX",
     "DTD",
     "Validation",
+    "RelaxNG",
+    "XML Schema",
     "DITA",
     "Catalog",
     "Default Attributes"
@@ -35,7 +37,7 @@
     "url": "https://github.com/rmraya/TypesXML.git"
   },
   "devDependencies": {
-    "@types/node": "^24.7.2",
+    "@types/node": "^24.9.2",
     "typescript": "^5.9.3"
   }
 }
