@@ -6,3 +6,5 @@ package-lock.json
 /.scannerwork/
 ts/test.ts
 test.xml
+catalog/
+tests/
