@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { Catalog } from "./Catalog";
+import { Grammar } from "./grammar/Grammar";
 import { XMLAttribute } from "./XMLAttribute";
 
 export interface ContentHandler {
@@ -40,4 +41,6 @@ export interface ContentHandler {
     endDTD(): void;
 
     skippedEntity(name: string): void;
+
+    getGrammar(): Grammar | undefined;
 }

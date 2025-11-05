@@ -10,6 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+// Core classes
 export { CData } from "./CData";
 export { Catalog } from "./Catalog";
 export { Constants } from "./Constants";
@@ -18,6 +19,7 @@ export { DOMBuilder } from "./DOMBuilder";
 export { FileReader } from "./FileReader";
 export { Indenter } from "./Indenter";
 export { ProcessingInstruction } from "./ProcessingInstruction";
+export { RelaxNGParser } from "./RelaxNGParser";
 export { SAXParser } from "./SAXParser";
 export { TextNode } from "./TextNode";
 export { XMLAttribute } from "./XMLAttribute";
@@ -30,13 +32,29 @@ export { XMLNode } from "./XMLNode";
 export { XMLUtils } from "./XMLUtils";
 export { XMLWriter } from "./XMLWriter";
 
+// DTD classes
 export { AttDecl } from "./dtd/AttDecl";
 export { AttListDecl } from "./dtd/AttListDecl";
+export { Cardinality, ContentModel, ContentModelType } from "./dtd/ContentModel";
 export { DTDParser } from "./dtd/DTDParser";
+export { DTDChoice } from "./dtd/dtdChoice";
+export { DTDChoiceModel } from "./dtd/DTDChoiceModel";
+export type { DTDContentModel } from "./dtd/DTDContentModel";
+export { DTDContentModelParser } from "./dtd/DTDContentModelParser";
+export { DTDContentModelTokenizer } from "./dtd/DTDContentModelTokenizer";
+export type { DTDToken } from "./dtd/DTDContentModelTokenizer";
+export { DTDElementNameParticle } from "./dtd/DTDElementNameParticle";
+export { DTDGrammar } from "./dtd/DTDGrammar";
+export { DTDName } from "./dtd/dtdName";
+export { DTDPCData } from "./dtd/dtdPCData";
+export { DTDSequenceModel } from "./dtd/DTDSequenceModel";
+export { DTDSecuence } from "./dtd/dtdSecuence";
 export { ElementDecl } from "./dtd/ElementDecl";
 export { EntityDecl } from "./dtd/EntityDecl";
-export { InternalSubset } from "./dtd/InternalSubset";
 export { NotationDecl } from "./dtd/NotationDecl";
+export { ContentParticleType } from "./dtd/contentParticle";
+export type { ContentParticle } from "./dtd/contentParticle";
 
-export { ContentModel } from "./grammar/ContentModel";
-export { Grammar } from "./grammar/Grammar";
+// Grammar classes
+export { AttributeInfo, AttributeUse, GrammarType, ValidationContext, ValidationError, ValidationResult, ValidationWarning } from "./grammar/Grammar";
+export type { Grammar } from "./grammar/Grammar";

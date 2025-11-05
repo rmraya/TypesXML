@@ -1,8 +1,8 @@
 /*******************************************************************************
- * Copyright (c) 2023 - 2024 Maxprograms.
+ * Copyright (c) 2023-2025 Maxprograms.
  *
  * This program and the accompanying materials
- * are made available under the terms of the Eclipse   License 1.0
+ * are made available under the terms of the Eclipse Public License 1.0
  * which accompanies this distribution, and is available at
  * https://www.eclipse.org/org/documents/epl-v10.html
  *
@@ -12,6 +12,8 @@
 
 import { Constants } from "../Constants";
 import { XMLNode } from "../XMLNode";
+import { DTDContentModel } from "./DTDContentModel";
+import { DTDContentModelParser } from "./DTDContentModelParser";
 
 export class ElementDecl implements XMLNode {
 
@@ -21,6 +23,22 @@ export class ElementDecl implements XMLNode {
     constructor(name: string, contentSpec: string) {
         this.name = name;
         this.contentSpec = contentSpec;
+        this.validateContentSpec();
+    }
+
+    validateContentSpec() {
+        const validSpecs: string[] = ['EMPTY', 'ANY'];
+        if (validSpecs.includes(this.contentSpec)) {
+            return;
+        }
+        // Build and validate the content model using the complete parser
+        let simplified: string = this.contentSpec.replace(/\r?\n/g, ' ');
+        simplified = simplified.replace(/\s+/g, '').trim();
+        const parser: DTDContentModelParser = new DTDContentModelParser(simplified);
+        const model: DTDContentModel = parser.parse();
+        if (!model.validate()) {
+            throw new Error('Invalid content specification: ' + simplified);
+        }
     }
 
     getName(): string {
@@ -30,7 +48,7 @@ export class ElementDecl implements XMLNode {
     getContentSpec(): string {
         return this.contentSpec;
     }
-    
+
     getNodeType(): number {
         return Constants.ELEMENT_DECL_NODE;
     }
@@ -40,7 +58,10 @@ export class ElementDecl implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        // TODO
-        throw new Error("Method not implemented.");
+        if (node instanceof ElementDecl) {
+            return this.name === node.name &&
+                this.contentSpec === node.contentSpec;
+        }
+        return false;
     }
 }

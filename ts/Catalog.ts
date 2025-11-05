@@ -317,6 +317,22 @@ export class Catalog {
         }
         return undefined;
     }
+
+    matchURI(uri: string): string | undefined {
+        if (uri) {
+            // Apply URI rewrites first
+            for (let pair of this.uriRewrites) {
+                if (uri.startsWith(pair[0])) {
+                    uri = pair[1] + uri.substring(pair[0].length);
+                }
+            }
+            // Look up in URI catalog
+            if (this.uriCatalog.has(uri)) {
+                return this.uriCatalog.get(uri);
+            }
+        }
+        return undefined;
+    }
 }
 
 

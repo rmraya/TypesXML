@@ -21,7 +21,6 @@ export class DOMBuilder implements ContentHandler {
     stack: Array<XMLElement> = [];
     catalog: Catalog | undefined;
     dtdParser: DTDParser | undefined;
-    grammarUrl: string | undefined;
     grammar: Grammar | undefined;
 
     initialize(): void {
@@ -32,10 +31,6 @@ export class DOMBuilder implements ContentHandler {
 
     setCatalog(catalog: Catalog): void {
         this.catalog = catalog;
-    }
-
-    setDTDParser(dtdParser: DTDParser): void {
-        this.dtdParser = dtdParser;
     }
 
     getDocument(): XMLDocument | undefined {
@@ -117,14 +112,6 @@ export class DOMBuilder implements ContentHandler {
         } else {
             this.document?.addProcessingInstruction(pi);
         }
-        if (target === 'xml-model' && this.catalog) {
-            // TODO process the xml-model 
-            /*
-            let atts: Map<string, string> = this.parseXmlModel(data);
-            let href: string = atts.get('href');
-            let schematypens: string = atts.get('schematypens');
-            */
-        }
     }
 
     parseXmlModel(text: string): Map<string, string> {
@@ -187,13 +174,12 @@ export class DOMBuilder implements ContentHandler {
         if (this.catalog) {
             let url = this.catalog.resolveEntity(publicId, systemId);
             if (url) {
-                this.grammarUrl = url;
-                // TODO check grammar type (DTD, XSD or RelaxNG) and use the ritght parser
-                if (this.dtdParser && this.grammarUrl) {
-                    let dtdGrammar: Grammar = this.dtdParser.parseDTD(this.grammarUrl);
-                    if (dtdGrammar) {
-                        this.grammar = dtdGrammar;
-                    }
+                if (!this.dtdParser) {
+                    this.dtdParser = new DTDParser();
+                }
+                let dtdGrammar: Grammar = this.dtdParser.parseDTD(url);
+                if (dtdGrammar) {
+                    this.grammar = dtdGrammar;
                 }
             }
         }
@@ -201,6 +187,10 @@ export class DOMBuilder implements ContentHandler {
 
     endDTD(): void {
         // do nothing
+    }
+
+    getGrammar(): Grammar | undefined {
+        return this.grammar;
     }
 
     skippedEntity(name: string): void {

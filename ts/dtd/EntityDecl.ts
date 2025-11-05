@@ -1,8 +1,8 @@
 /*******************************************************************************
- * Copyright (c) 2023 - 2024 Maxprograms.
+ * Copyright (c) 2023-2025 Maxprograms.
  *
  * This program and the accompanying materials
- * are made available under the terms of the Eclipse   License 1.0
+ * are made available under the terms of the Eclipse Public License 1.0
  * which accompanies this distribution, and is available at
  * https://www.eclipse.org/org/documents/epl-v10.html
  *
@@ -17,9 +17,11 @@ export class EntityDecl implements XMLNode {
 
     private name: string;
     private parameterEntity: boolean;
-    private value: string; systemId: string;
+    private value: string;
+    private systemId: string;
     private publicId: string;
     private ndata: string;
+    private externalContentLoaded: boolean = false; // Track if external content has been loaded
 
     constructor(name: string, parameterEntity: boolean, value: string, systemId: string, publicId: string, ndata: string) {
         // parameterEntities are only used in DTDs
@@ -39,12 +41,35 @@ export class EntityDecl implements XMLNode {
         return this.value;
     }
 
+    setValue(value: string): void {
+        this.value = value;
+        if (this.systemId || this.publicId) {
+            this.externalContentLoaded = true;
+        }
+    }
+
+    isExternalContentLoaded(): boolean {
+        return this.externalContentLoaded;
+    }
+
+    isParameterEntity(): boolean {
+        return this.parameterEntity;
+    }
+
     getSystemId(): string {
         return this.systemId;
     }
 
     getPublicId(): string {
         return this.publicId;
+    }
+
+    getNotationName(): string {
+        return this.ndata;
+    }
+
+    isExternal(): boolean {
+        return this.systemId !== '' || this.publicId !== '';
     }
 
     getNodeType(): number {
@@ -64,7 +89,14 @@ export class EntityDecl implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        // TODO
+        if (node instanceof EntityDecl) {
+            return this.name === node.name &&
+                this.parameterEntity === node.parameterEntity &&
+                this.value === node.value &&
+                this.systemId === node.systemId &&
+                this.publicId === node.publicId &&
+                this.ndata === node.ndata;
+        }
         return false;
     }
 }

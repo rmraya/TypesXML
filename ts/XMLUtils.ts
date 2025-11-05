@@ -127,4 +127,136 @@ export class XMLUtils {
         }
         return true;
     }
+
+    static isValidXMLName(name: string): boolean {
+        if (name.length === 0) {
+            return false;
+        }
+
+        // XML 1.0 spec: Names must start with a letter, underscore, or colon
+        const firstChar = name.charAt(0);
+        if (!XMLUtils.isNameStartChar(firstChar)) {
+            return false;
+        }
+
+        // Check remaining characters
+        for (let i = 1; i < name.length; i++) {
+            const char = name.charAt(i);
+            if (!XMLUtils.isNameChar(char)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    static isNameStartChar(char: string): boolean {
+        // XML 1.0 spec: NameStartChar
+        const code = char.charCodeAt(0);
+        
+        return (
+            char === ':' ||
+            char === '_' ||
+            (code >= 0x41 && code <= 0x5A) ||     // [A-Z]
+            (code >= 0x61 && code <= 0x7A) ||     // [a-z]
+            (code >= 0xC0 && code <= 0xD6) ||     // [#xC0-#xD6]
+            (code >= 0xD8 && code <= 0xF6) ||     // [#xD8-#xF6] (excludes #xD7)
+            (code >= 0xF8 && code <= 0x2FF) ||    // [#xF8-#x2FF]
+            (code >= 0x370 && code <= 0x37D) ||   // [#x370-#x37D]
+            (code >= 0x37F && code <= 0x1FFF) ||  // [#x37F-#x1FFF]
+            (code >= 0x200C && code <= 0x200D) || // [#x200C-#x200D]
+            (code >= 0x2070 && code <= 0x218F) || // [#x2070-#x218F]
+            (code >= 0x2C00 && code <= 0x2FEF) || // [#x2C00-#x2FEF]
+            (code >= 0x3001 && code <= 0xD7FF) || // [#x3001-#xD7FF]
+            (code >= 0xF900 && code <= 0xFDCF) || // [#xF900-#xFDCF]
+            (code >= 0xFDF0 && code <= 0xFFFD) || // [#xFDF0-#xFFFD]
+            (code >= 0x10000 && code <= 0xEFFFF)  // [#x10000-#xEFFFF]
+        );
+    }
+
+    static isNameChar(char: string): boolean {
+        // XML 1.0 spec: NameChar includes NameStartChar plus additional characters
+        const code = char.charCodeAt(0);
+        
+        // First check if it's a valid NameStartChar
+        if (XMLUtils.isNameStartChar(char)) {
+            return true;
+        }
+        
+        // Additional characters allowed in names (but not at the start)
+        return (
+            char === '-' ||
+            char === '.' ||
+            (code >= 0x30 && code <= 0x39) ||     // [0-9]
+            code === 0xB7 ||                      // #xB7
+            (code >= 0x0300 && code <= 0x036F) || // [#x0300-#x036F]
+            (code >= 0x203F && code <= 0x2040)    // [#x203F-#x2040]
+        );
+    }
+
+    static isValidNCName(name: string): boolean {
+        if (name.length === 0) {
+            return false;
+        }
+
+        // NCName cannot contain colons (Non-Colonized Name)
+        if (name.includes(':')) {
+            return false;
+        }
+
+        // NCName must start with a letter or underscore (no colon allowed)
+        const firstChar = name.charAt(0);
+        if (!XMLUtils.isNCNameStartChar(firstChar)) {
+            return false;
+        }
+
+        // Check remaining characters
+        for (let i = 1; i < name.length; i++) {
+            const char = name.charAt(i);
+            if (!XMLUtils.isNameChar(char)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    static isNCNameStartChar(char: string): boolean {
+        // Same as NameStartChar but without colon
+        const code = char.charCodeAt(0);
+        
+        return (
+            char === '_' ||
+            (code >= 0x41 && code <= 0x5A) ||     // [A-Z]
+            (code >= 0x61 && code <= 0x7A) ||     // [a-z]
+            (code >= 0xC0 && code <= 0xD6) ||     // [#xC0-#xD6]
+            (code >= 0xD8 && code <= 0xF6) ||     // [#xD8-#xF6] (excludes #xD7)
+            (code >= 0xF8 && code <= 0x2FF) ||    // [#xF8-#x2FF]
+            (code >= 0x370 && code <= 0x37D) ||   // [#x370-#x37D]
+            (code >= 0x37F && code <= 0x1FFF) ||  // [#x37F-#x1FFF]
+            (code >= 0x200C && code <= 0x200D) || // [#x200C-#x200D]
+            (code >= 0x2070 && code <= 0x218F) || // [#x2070-#x218F]
+            (code >= 0x2C00 && code <= 0x2FEF) || // [#x2C00-#x2FEF]
+            (code >= 0x3001 && code <= 0xD7FF) || // [#x3001-#xD7FF]
+            (code >= 0xF900 && code <= 0xFDCF) || // [#xF900-#xFDCF]
+            (code >= 0xFDF0 && code <= 0xFFFD) || // [#xFDF0-#xFFFD]
+            (code >= 0x10000 && code <= 0xEFFFF)  // [#x10000-#xEFFFF]
+        );
+    }
+
+    static isValidNMTOKEN(token: string): boolean {
+        if (token.length === 0) {
+            return false;
+        }
+
+        // NMTOKEN can contain name characters but doesn't need to start with letter
+        for (let i = 0; i < token.length; i++) {
+            const char = token.charAt(i);
+            if (!XMLUtils.isNameChar(char)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

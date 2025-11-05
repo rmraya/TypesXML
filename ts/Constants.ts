@@ -30,4 +30,7 @@ export class Constants {
     static readonly ELEMENT_DECL_NODE: number = 12;
     static readonly INTERNAL_SUBSET_NODE: number = 13;
     static readonly NOTATION_DECL_NODE: number = 14;
+
+    // RelaxNG Namespace URI
+    static readonly RELAXNG_NS_URI: string = 'http://relaxng.org/ns/structure/1.0';
 }
