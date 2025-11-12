@@ -1,8 +1,13 @@
 # TypesXML
 
-Open source XML library written in TypeScript with DOM and SAX support. Implements full DTD parsing and validation. 
+Open source XML library written in TypeScript with DOM and SAX support. 
 
-Implements a SAX parser that exposes these methods from the `ContentHandler` interface:
+ - Full DTD parsing and validation. 
+ - Full support for [OASIS XML Catalogs](https://www.oasis-open.org/committees/entity/spec-2001-08-06.html)
+
+## SAX Parser
+
+TypesXML implements a SAX parser that exposes these methods from the `ContentHandler` interface:
 
 * initialize(): void;
 * setCatalog(catalog: Catalog): void;
