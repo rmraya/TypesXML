@@ -1,6 +1,6 @@
 # TypesXML
 
-Open source XML library written in TypeScript
+Open source XML library written in TypeScript with DOM and SAX support. Implements full DTD parsing and validation. 
 
 Implements a SAX parser that exposes these methods from the `ContentHandler` interface:
 
@@ -21,6 +21,8 @@ Implements a SAX parser that exposes these methods from the `ContentHandler` int
 * startDTD(name: string, publicId: string, systemId: string): void;
 * endDTD(): void;
 * skippedEntity(name: string): void;
+
+## DOM support
 
 Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tree from an XML document.
 
