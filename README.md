@@ -3,7 +3,7 @@
 Open source XML library written in TypeScript with DOM and SAX support. 
 
  - Full DTD parsing and validation. 
- - Full support for [OASIS XML Catalogs](https://www.oasis-open.org/committees/entity/spec-2001-08-06.html)
+ - Full support for OASIS XML Catalogs.
 
 ## SAX Parser
 
