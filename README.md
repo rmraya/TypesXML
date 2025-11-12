@@ -24,15 +24,6 @@ Implements a SAX parser that exposes these methods from the `ContentHandler` int
 
 Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tree from an XML document.
 
-## Features currently in development
-
-* Parsing of DTDs and internal subsets from <!DOCTYPE>
-
-## Limitations
-
-* Validation not supported yet
-* Default values for attributes are not set when parsing an element
-
 ## On the Roadmap
 
 * Support for XML Schemas
