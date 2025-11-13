@@ -356,7 +356,19 @@ export class DTDParser {
             keyword += char;
         }
         if (XMLUtils.hasParameterEntity(keyword)) {
-            keyword = this.resolveEntities(keyword);
+            let resolvedKeyword: string = this.resolveEntities(keyword);
+            const bracketIndex: number = resolvedKeyword.indexOf('[');
+            if (bracketIndex !== -1) {
+                const remainder: string = resolvedKeyword.substring(bracketIndex + 1);
+                resolvedKeyword = resolvedKeyword.substring(0, bracketIndex);
+                if (this.source.charAt(this.pointer) !== '[') {
+                    this.source = this.source.substring(0, this.pointer) + '[' + remainder + this.source.substring(this.pointer);
+                } else if (remainder.length > 0) {
+                    const insertionIndex: number = this.pointer + 1;
+                    this.source = this.source.substring(0, insertionIndex) + remainder + this.source.substring(insertionIndex);
+                }
+            }
+            keyword = resolvedKeyword.trim();
         }
         if ('INCLUDE' === keyword) {
             // jump to the start of the content

@@ -64,6 +64,8 @@ export class SAXParser {
     documentEnded: boolean = false;
     inCDATASection: boolean = false;
     pendingCR: boolean = false;
+    readingFromFile: boolean = false;
+    internalSubsetApplied: boolean = false;
 
     constructor() {
         this.characterRun = '';
@@ -79,6 +81,8 @@ export class SAXParser {
         this.documentEnded = false;
         this.inCDATASection = false;
         this.pendingCR = false;
+        this.readingFromFile = false;
+        this.internalSubsetApplied = false;
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -199,6 +203,8 @@ export class SAXParser {
         this.documentEnded = false;
         this.inCDATASection = false;
         this.pendingCR = false;
+        this.readingFromFile = reader instanceof FileReader;
+        this.internalSubsetApplied = false;
         this.contentHandler?.initialize();
     }
 
@@ -922,8 +928,11 @@ export class SAXParser {
         }
     }
 
-    private processInternalSubset(internalSubset: string): void {
+    private processInternalSubset(internalSubset: string, skipIfAlreadyApplied: boolean = false): void {
         if (internalSubset.trim().length === 0) {
+            return;
+        }
+        if (skipIfAlreadyApplied && this.internalSubsetApplied) {
             return;
         }
 
@@ -948,6 +957,7 @@ export class SAXParser {
         if (updatedGrammar) {
             this.contentHandler?.setGrammar(updatedGrammar);
         }
+        this.internalSubsetApplied = true;
     }
 
     parseDoctype() {
@@ -1088,6 +1098,9 @@ export class SAXParser {
                 this.pointer++;
             }
         }
+        if (internalSubset !== '') {
+            this.processInternalSubset(internalSubset);
+        }
         // skip spaces after internal subset
         while (true) {
             this.ensureLookahead(1);
@@ -1108,11 +1121,87 @@ export class SAXParser {
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
+        if (systemId !== '' || publicId !== '') {
+            this.processExternalSubset(publicId, systemId);
+        }
         if (internalSubset !== '') {
             this.contentHandler?.internalSubset(internalSubset);
         }
-        this.processInternalSubset(internalSubset);
+        this.processInternalSubset(internalSubset, true);
         this.contentHandler?.endDTD();
+    }
+
+    private processExternalSubset(publicId: string, systemId: string): void {
+        if (systemId === '' && publicId === '') {
+            return;
+        }
+
+        const resolvedLocation: string | undefined = this.resolveExternalSubsetLocation(publicId, systemId);
+        if (!resolvedLocation) {
+            const target: string = systemId || publicId;
+            if (this.validating) {
+                throw new Error(`External subset not found: ${target}`);
+            }
+            console.warn(`Warning: External subset not found: ${target}`);
+            return;
+        }
+
+        const existingGrammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        const baseDir: string | undefined = this.readingFromFile && this.currentFile ? dirname(this.currentFile) : undefined;
+        const parser: DTDParser = existingGrammar instanceof DTDGrammar ? new DTDParser(existingGrammar, baseDir) : new DTDParser(undefined, baseDir);
+        parser.setValidating(this.validating);
+        if (this.catalog) {
+            parser.setCatalog(this.catalog);
+        }
+        parser.setOverrideExistingDeclarations(false);
+        try {
+            const updatedGrammar: DTDGrammar = parser.parseDTD(resolvedLocation);
+            this.contentHandler?.setGrammar(updatedGrammar);
+        } catch (error) {
+            if (this.validating) {
+                throw error;
+            }
+            console.warn(`Warning: Failed to parse external subset ${resolvedLocation}: ${(error as Error).message}`);
+        }
+    }
+
+    private resolveExternalSubsetLocation(publicId: string, systemId: string): string | undefined {
+        const fromCatalog: string | undefined = this.catalog?.resolveEntity(publicId, systemId);
+        if (fromCatalog) {
+            return fromCatalog;
+        }
+
+        if (!systemId) {
+            return undefined;
+        }
+
+        const lowerSystemId: string = systemId.toLowerCase();
+        if (lowerSystemId.startsWith('http://') || lowerSystemId.startsWith('https://')) {
+            if (this.validating) {
+                throw new Error(`External subset retrieval over HTTP is not supported: ${systemId}`);
+            }
+            console.warn(`Warning: External subset over HTTP/HTTPS is not supported: ${systemId}`);
+            return undefined;
+        }
+
+        if (this.readingFromFile && this.currentFile) {
+            const documentDir: string = dirname(this.currentFile);
+            const relativeCandidate: string = resolve(documentDir, systemId);
+            if (existsSync(relativeCandidate)) {
+                return relativeCandidate;
+            }
+        }
+
+        if (isAbsolute(systemId) && existsSync(systemId)) {
+            return systemId;
+        }
+
+        const absoluteCandidate: string = resolve(systemId);
+        if (existsSync(absoluteCandidate)) {
+            return absoluteCandidate;
+        }
+
+        return undefined;
     }
 
     parsePublicDeclaration(): string[] {
