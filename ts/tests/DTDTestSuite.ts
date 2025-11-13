@@ -87,8 +87,8 @@ export class DTDTestSuite {
                 invalidNotSa++;
             }
         }
-        
-        // External data files
+
+        // External entity files
 
         xmlFiles = readdirSync("./tests/xmltest/valid/ext-sa").filter((file) => file.endsWith(".xml"));
 
@@ -117,15 +117,38 @@ export class DTDTestSuite {
                 invalidExtSa++;
             }
         }
-        console.log('\n\n');
-        console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa);
-        console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa);
-        console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa);
 
+        // Invalid files
 
         if (!existsSync("./tests/xmltest/invalid")) {
             throw new Error("DTD Test Suite invalid folder not found in ./tests/xmltest/invalid");
         }
+        xmlFiles = readdirSync("./tests/xmltest/invalid").filter((file) => file.endsWith(".xml"));
+
+        let invalidCatched: number = 0;
+        let invalidMissed: number = 0;
+
+        for (const xmlFile of xmlFiles) {
+            let parser: SAXParser = new SAXParser();
+            let domBuilder: DOMBuilder = new DOMBuilder();
+            parser.setContentHandler(domBuilder);
+            parser.setValidating(true);
+            try {
+                parser.parseFile("./tests/xmltest/invalid/" + xmlFile);
+                console.log(' -- Invalid file "' + xmlFile + '" not rejected');
+                invalidMissed++;
+            } catch (error) {
+                invalidCatched++;
+            }
+        }
+
+        console.log('\n\n');
+        console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa);
+        console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa);
+        console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa);
+        console.log('Invalid files catched: ' + invalidCatched + ', Invalid files missed: ' + invalidMissed);   
+        console.log('\n\n');
+
 
     }
 }

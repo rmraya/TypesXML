@@ -439,7 +439,7 @@ export class DTDParser {
                     throw new Error('Unknown entity: ' + entityName + ' in resolveEntities while processing "' + context + '"');
                 }
                 if (entity.isExternal() && !entity.isExternalContentLoaded()) {
-                    const externalText: string = this.loadExternalEntity(entity.getPublicId(), entity.getSystemId(), true);
+                    const externalText: string = this.loadExternalEntity(entity.getPublicId(), entity.getSystemId(), true, entity.getName(), entity.isParameterEntity());
                     entity.setValue(externalText);
                 }
                 let replacement: string = entity.getValue();
@@ -620,6 +620,8 @@ export class DTDParser {
                     value += char;
                 }
                 value = this.normalizeEntityLiteral(value);
+                const location: string = this.currentFile || this.baseDirectory || 'DTD';
+                this.validateParameterEntityValue(value, name, location);
                 return new EntityDecl(name, parameterEntity, value, '', '', '');
             }
         } else {
@@ -700,7 +702,7 @@ export class DTDParser {
                     }
                     return new EntityDecl(name, parameterEntity, '', systemId, publicId, ndata);
                 }
-                const externalValue: string = this.loadExternalEntity(publicId, systemId, false);
+                const externalValue: string = this.loadExternalEntity(publicId, systemId, false, name, parameterEntity);
                 return new EntityDecl(name, parameterEntity, externalValue, systemId, publicId, '');
             } else if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
                 i += 'SYSTEM'.length;
@@ -756,7 +758,7 @@ export class DTDParser {
                     // NDATA entities are unparsed and shouldn't have content loaded
                     return new EntityDecl(name, parameterEntity, '', systemId, '', ndata);
                 }
-                const externalValue: string = this.loadExternalEntity('', systemId, false);
+                const externalValue: string = this.loadExternalEntity('', systemId, false, name, parameterEntity);
                 return new EntityDecl(name, parameterEntity, externalValue, systemId, '', '');
             } else {
                 // get entity value
@@ -784,6 +786,88 @@ export class DTDParser {
         let normalized: string = value.replace(/\r\n/g, '\n');
         normalized = normalized.replace(/\r/g, '\n');
         return normalized;
+    }
+
+    private validateParameterEntityValue(content: string, entityName: string, location: string): void {
+        if (!this.validating) {
+            return;
+        }
+        if (content.length === 0) {
+            return;
+        }
+
+        const where: string = location ? ` in ${location}` : '';
+
+        let inSingleQuote: boolean = false;
+        let inDoubleQuote: boolean = false;
+        let parenDepth: number = 0;
+        let index: number = 0;
+
+        while (index < content.length) {
+            const char: string = content.charAt(index);
+
+            if (!inDoubleQuote && char === "'") {
+                inSingleQuote = !inSingleQuote;
+                index++;
+                continue;
+            }
+            if (!inSingleQuote && char === '"') {
+                inDoubleQuote = !inDoubleQuote;
+                index++;
+                continue;
+            }
+            if (inSingleQuote || inDoubleQuote) {
+                index++;
+                continue;
+            }
+
+            if (char === '(') {
+                parenDepth++;
+                index++;
+                continue;
+            }
+            if (char === ')') {
+                if (parenDepth === 0) {
+                    throw new Error(`Invalid parameter entity "%${entityName}"${where}: unmatched ')' in replacement text`);
+                }
+                parenDepth--;
+                index++;
+                continue;
+            }
+            if (content.startsWith('<!--', index)) {
+                const commentEnd: number = content.indexOf('-->', index + 4);
+                if (commentEnd === -1) {
+                    throw new Error(`Invalid parameter entity "%${entityName}"${where}: comment opened but not closed`);
+                }
+                index = commentEnd + 3;
+                continue;
+            }
+            if (content.startsWith('<![', index)) {
+                const sectionEnd: number = content.indexOf(']]>', index + 3);
+                if (sectionEnd === -1) {
+                    throw new Error(`Invalid parameter entity "%${entityName}"${where}: conditional section opened but not closed`);
+                }
+                index = sectionEnd + 3;
+                continue;
+            }
+            if (content.startsWith('<!', index)) {
+                const markupEnd: number = content.indexOf('>', index + 2);
+                if (markupEnd === -1) {
+                    throw new Error(`Invalid parameter entity "%${entityName}"${where}: markup declaration started but not closed`);
+                }
+                index = markupEnd + 1;
+                continue;
+            }
+
+            index++;
+        }
+
+        if (inSingleQuote || inDoubleQuote) {
+            throw new Error(`Invalid parameter entity "%${entityName}"${where}: quote mismatch in replacement text`);
+        }
+        if (parenDepth !== 0) {
+            throw new Error(`Invalid parameter entity "%${entityName}"${where}: parentheses are not balanced`);
+        }
     }
 
     parseNotationDeclaration(declaration: string): NotationDecl {
@@ -1047,7 +1131,7 @@ export class DTDParser {
         return basePath + sep + uri;
     }
 
-    loadExternalEntity(publicId: string, systemId: string, isReferenced: boolean = false): string {
+    loadExternalEntity(publicId: string, systemId: string, isReferenced: boolean = false, entityName: string = '', isParameterEntity: boolean = false): string {
         let reader: FileReader | undefined;
         try {
             let location = this.resolveEntity(publicId, systemId);
@@ -1062,8 +1146,13 @@ export class DTDParser {
             // Validate that content is valid XML text (not binary)
             this.validateTextContent(content, location);
 
-                // XML 1.0 section 2.11: normalize line endings to LF
-                content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            // XML 1.0 section 2.11: normalize line endings to LF
+            content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+            if (isParameterEntity) {
+                const contextName: string = entityName || systemId || publicId || '[external entity]';
+                this.validateParameterEntityValue(content, contextName, location);
+            }
 
             // Don't trim - preserve original content including whitespace/newlines
             return content;
@@ -1080,7 +1169,6 @@ export class DTDParser {
                 throw new Error(`Could not load external entity "${publicId || systemId}": ${(error as Error).message}`);
             } else {
                 // DTD processing - be more lenient for unreferenced entities
-                console.warn(`Warning: Could not load external entity "${publicId || systemId}": ${(error as Error).message}`);
                 return '';
             }
         } finally {
