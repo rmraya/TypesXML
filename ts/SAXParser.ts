@@ -1411,16 +1411,8 @@ export class SAXParser {
                 index = semiIndex + 1;
                 continue;
             }
-            if (entityName === 'lt') {
-                result += '<';
-            } else if (entityName === 'gt') {
-                result += '>';
-            } else if (entityName === 'amp') {
-                result += '&';
-            } else if (entityName === 'apos') {
-                result += '\'';
-            } else if (entityName === 'quot') {
-                result += '"';
+            if (entityName === 'lt' || entityName === 'gt' || entityName === 'amp' || entityName === 'apos' || entityName === 'quot') {
+                result += '&' + entityName + ';';
             } else if (entityName.startsWith('#x')) {
                 const parsed = parseInt(entityName.substring(2), 16);
                 result += String.fromCodePoint(parsed);
