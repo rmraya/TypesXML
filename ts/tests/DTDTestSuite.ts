@@ -10,10 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { existsSync, readdirSync } from "fs"
-import { SAXParser } from "../SAXParser";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { DOMBuilder } from "../DOMBuilder";
-
+import { SAXParser } from "../SAXParser";
+import { XMLCanonicalizer } from "../XMLCanonicalizer";
 
 export class DTDTestSuite {
 
@@ -40,12 +40,22 @@ export class DTDTestSuite {
             parser.setValidating(true);
             try {
                 parser.parseFile("./tests/xmltest/valid/sa/" + xmlFile);
+                const canonicalForm = readFileSync('./tests/xmltest/valid/sa/out/' + xmlFile, "utf-8");
+                const canonicalizer: XMLCanonicalizer = new XMLCanonicalizer();
+                canonicalizer.setDocument(domBuilder.getDocument()!);
+                const generatedCanonicalForm = canonicalizer.toString();
+                if (canonicalForm !== generatedCanonicalForm) {
+                    console.log(' Generated form:\n' + generatedCanonicalForm);
+                    console.log(' Expected form:\n' + canonicalForm);
+                    throw new Error('Canonical form does not match for file ' + xmlFile);
+                }
                 validSa++;
             } catch (error) {
-                console.error('Error parsing file ' + xmlFile + ':', error);
+                console.error('Error parsing file ' + xmlFile + ':', error, '\n');
                 invalidSa++;
             }
         }
+        console.log('\n');
         console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa);
 
         if (!existsSync("./tests/xmltest/invalid")) {

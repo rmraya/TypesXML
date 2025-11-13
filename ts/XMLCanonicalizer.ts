@@ -11,18 +11,18 @@
  *******************************************************************************/
 
 import { Readable } from "stream";
-import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser, ParseSourceOptions, StreamParseOptions } from "./SAXParser";
-import { XMLDocument } from "./XMLDocument";
-import { XMLNode } from "./XMLNode";
-import { XMLDeclaration } from "./XMLDeclaration";
-import { ProcessingInstruction } from "./ProcessingInstruction";
-import { XMLElement } from "./XMLElement";
-import { XMLAttribute } from "./XMLAttribute";
-import { TextNode } from "./TextNode";
 import { CData } from "./CData";
+import { DOMBuilder } from "./DOMBuilder";
+import { ProcessingInstruction } from "./ProcessingInstruction";
+import { ParseSourceOptions, SAXParser, StreamParseOptions } from "./SAXParser";
+import { TextNode } from "./TextNode";
+import { XMLAttribute } from "./XMLAttribute";
 import { XMLComment } from "./XMLComment";
+import { XMLDeclaration } from "./XMLDeclaration";
+import { XMLDocument } from "./XMLDocument";
 import { XMLDocumentType } from "./XMLDocumentType";
+import { XMLElement } from "./XMLElement";
+import { XMLNode } from "./XMLNode";
 
 /**
  * Generates the canonical XML representation defined by the W3C XML Test Suite.
@@ -96,7 +96,11 @@ export class XMLCanonicalizer {
             return this.renderElement(node);
         }
         if (node instanceof TextNode || node instanceof CData) {
-            return this.escapeData(this.getNodeValue(node));
+            const value: string = this.getNodeValue(node);
+            if (this.isWhitespaceOnly(value)) {
+                return "";
+            }
+            return this.escapeData(value);
         }
         return "";
     }
@@ -166,5 +170,18 @@ export class XMLCanonicalizer {
             }
         }
         return result;
+    }
+
+    private isWhitespaceOnly(value: string): boolean {
+        if (value.length === 0) {
+            return true;
+        }
+        for (let i = 0; i < value.length; i++) {
+            const char = value.charAt(i);
+            if (char !== " " && char !== "\t" && char !== "\n" && char !== "\r") {
+                return false;
+            }
+        }
+        return true;
     }
 }
