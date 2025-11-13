@@ -74,12 +74,12 @@ export class XMLUtils {
 
     static validXml10Chars(text: string): string {
         let result: string = '';
-        let length: number = text.length;
-        for (let i: number = 0; i < length; i++) {
-            let c: number = text.charCodeAt(i);
-            if (XMLUtils.isValidXml10Char(c)) {
-                result += String.fromCharCode(c);
+        for (let i: number = 0; i < text.length; ) {
+            const codePoint: number = text.codePointAt(i)!;
+            if (XMLUtils.isValidXml10Char(codePoint)) {
+                result += String.fromCodePoint(codePoint);
             }
+            i += codePoint > 0xFFFF ? 2 : 1;
         }
         return result;
     }
@@ -96,12 +96,12 @@ export class XMLUtils {
 
     static validXml11Chars(text: string): string {
         let result: string = '';
-        let length: number = text.length;
-        for (let i = 0; i < length; i++) {
-            let c: number = text.charCodeAt(i);
-            if (XMLUtils.isValidXml11Char(c)) {
-                result += String.fromCharCode(c);
+        for (let i = 0; i < text.length; ) {
+            const codePoint: number = text.codePointAt(i)!;
+            if (XMLUtils.isValidXml11Char(codePoint)) {
+                result += String.fromCodePoint(codePoint);
             }
+            i += codePoint > 0xFFFF ? 2 : 1;
         }
         return result;
     }

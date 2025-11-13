@@ -465,12 +465,12 @@ export class SAXParser {
         } else if (name === 'quot') {
             this.contentHandler?.characters('"');
         } else if (name.startsWith('#x')) {
-            let code: number = parseInt(name.substring(2), 16);
-            let char: string = String.fromCharCode(code);
+            const codePoint: number = parseInt(name.substring(2), 16);
+            const char: string = String.fromCodePoint(codePoint);
             this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
         } else if (name.startsWith('#')) {
-            let code: number = parseInt(name.substring(1));
-            let char: string = String.fromCharCode(code);
+            const codePoint: number = parseInt(name.substring(1));
+            const char: string = String.fromCodePoint(codePoint);
             this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
         } else if (resolvedEntity !== undefined) {
             this.pointer++; // skip ';'
