@@ -21,6 +21,7 @@ import { NeedMoreDataError } from "./NeedMoreDataError";
 import { RelaxNGParser } from "./RelaxNGParser";
 import { DTDParser } from "./dtd/DTDParser";
 import { DTDGrammar } from "./dtd/DTDGrammar";
+import { AttDecl } from "./dtd/AttDecl";
 import { StreamReader } from "./StreamReader";
 import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
@@ -533,6 +534,7 @@ export class SAXParser {
             }
             rest = rest.trim();
             let attributesMap: Map<string, string> = this.parseAttributes(rest);
+            attributesMap = this.normalizeDTDAttributes(name, attributesMap);
             let attributes: Array<XMLAttribute> = [];
             attributesMap.forEach((value: string, key: string) => {
                 // TODO https://www.w3.org/TR/REC-xml/#AVNormalize
@@ -1318,6 +1320,71 @@ export class SAXParser {
             map.set(name, value);
         }
         return map;
+    }
+
+    private normalizeDTDAttributes(elementName: string, attributes: Map<string, string>): Map<string, string> {
+        const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        if (!(grammar instanceof DTDGrammar)) {
+            return attributes;
+        }
+        const declarations: Map<string, AttDecl> | undefined = grammar.getElementAttributesMap(elementName);
+        if (!declarations || declarations.size === 0) {
+            return attributes;
+        }
+        const normalized: Map<string, string> = new Map<string, string>();
+        attributes.forEach((value: string, name: string) => {
+            const expanded: string = this.decodeAttributeEntities(value, grammar);
+            const decl = declarations.get(name);
+            if (!decl) {
+                normalized.set(name, expanded);
+                return;
+            }
+            if (decl.getType() === 'CDATA') {
+                normalized.set(name, expanded);
+                return;
+            }
+            const collapsed: string = expanded.replace(/[\t\n\r ]+/g, ' ').trim();
+            normalized.set(name, collapsed);
+        });
+        return normalized;
+    }
+
+    private decodeAttributeEntities(value: string, grammar: DTDGrammar | undefined): string {
+        if (value.indexOf('&') === -1) {
+            return value;
+        }
+        let result: string = '';
+        let index: number = 0;
+        while (index < value.length) {
+            const ampIndex: number = value.indexOf('&', index);
+            if (ampIndex === -1) {
+                result += value.substring(index);
+                break;
+            }
+            result += value.substring(index, ampIndex);
+            const semiIndex: number = value.indexOf(';', ampIndex + 1);
+            if (semiIndex === -1) {
+                result += value.substring(ampIndex);
+                break;
+            }
+            const entityName: string = value.substring(ampIndex + 1, semiIndex);
+            if (entityName.startsWith('#x')) {
+                const parsed: number = parseInt(entityName.substring(2), 16);
+                result += String.fromCodePoint(parsed);
+            } else if (entityName.startsWith('#')) {
+                const parsed: number = parseInt(entityName.substring(1));
+                result += String.fromCodePoint(parsed);
+            } else {
+                const replacement: string | undefined = grammar?.resolveEntity(entityName);
+                if (replacement !== undefined) {
+                    result += this.expandEntityReplacement(replacement, grammar);
+                } else {
+                    result += '&' + entityName + ';';
+                }
+            }
+            index = semiIndex + 1;
+        }
+        return result;
     }
 
     private expandEntityReplacement(value: string, grammar: Grammar | undefined, depth: number = 0): string {
