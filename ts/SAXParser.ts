@@ -1267,42 +1267,56 @@ export class SAXParser {
     }
 
     parseAttributes(text: string): Map<string, string> {
-        let map: Map<string, string> = new Map<string, string>();
-        let pairs: string[] = [];
-        let separator: string = '';
-        while (text.indexOf('=') != -1) {
-            let i: number = 0;
-            for (; i < text.length; i++) {
-                let char: string = text[i];
-                if (XMLUtils.isXmlSpace(char) || '=' === char) {
+        const map: Map<string, string> = new Map<string, string>();
+        let index: number = 0;
+        while (index < text.length) {
+            while (index < text.length && XMLUtils.isXmlSpace(text.charAt(index))) {
+                index++;
+            }
+            if (index >= text.length) {
+                break;
+            }
+            const nameStart: number = index;
+            while (index < text.length) {
+                const char: string = text.charAt(index);
+                if (char === '=' || XMLUtils.isXmlSpace(char)) {
                     break;
                 }
+                index++;
             }
-            for (; i < text.length; i++) {
-                let char = text[i];
-                if (separator === '' && ('\'' === char || '"' === char)) {
-                    separator = char;
-                    continue;
-                }
-                if (char === separator) {
-                    break;
-                }
-            }
-            // end of value
-            let pair = text.substring(0, i + 1).trim();
-            pairs.push(pair);
-            text = text.substring(pair.length).trim();
-            separator = '';
-        }
-        pairs.forEach((pair: string) => {
-            let index = pair.indexOf('=');
-            if (index === -1) {
+            const name: string = text.substring(nameStart, index);
+            if (name === '') {
                 throw new Error('Malformed attributes list');
             }
-            let name = pair.substring(0, index).trim();
-            let value = pair.substring(index + 2, pair.length - 1);
+            while (index < text.length && XMLUtils.isXmlSpace(text.charAt(index))) {
+                index++;
+            }
+            if (index >= text.length || text.charAt(index) !== '=') {
+                throw new Error('Malformed attributes list');
+            }
+            index++; // skip '='
+            while (index < text.length && XMLUtils.isXmlSpace(text.charAt(index))) {
+                index++;
+            }
+            if (index >= text.length) {
+                throw new Error('Malformed attributes list');
+            }
+            const quoteChar: string = text.charAt(index);
+            if (quoteChar !== '"' && quoteChar !== '\'') {
+                throw new Error('Malformed attributes list');
+            }
+            index++; // skip opening quote
+            const valueStart: number = index;
+            while (index < text.length && text.charAt(index) !== quoteChar) {
+                index++;
+            }
+            if (index >= text.length) {
+                throw new Error('Malformed attributes list');
+            }
+            const value: string = text.substring(valueStart, index);
+            index++; // skip closing quote
             map.set(name, value);
-        });
+        }
         return map;
     }
 
