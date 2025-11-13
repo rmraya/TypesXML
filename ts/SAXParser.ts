@@ -445,10 +445,16 @@ export class SAXParser {
                 continue;
             }
             if (this.lookingAt(']]>')) {
+                if (!this.inCDATASection) {
+                    throw new Error('Malformed XML document: "]]>" cannot appear in character data');
+                }
                 this.endCDATA();
                 continue;
             }
             if (this.lookingAt('&')) {
+                if (!this.rootParsed || this.elementStack === 0) {
+                    throw new Error('Malformed XML document: text found outside the document element');
+                }
                 this.parseEntityReference();
                 continue;
             }
@@ -467,6 +473,9 @@ export class SAXParser {
             }
             this.characterRun += char;
             this.pointer += char.length;
+            if (!this.inCDATASection && this.characterRun.endsWith(']]>')) {
+                throw new Error('Malformed XML document: "]]>" cannot appear in character data');
+            }
         }
         if (this.sourceEnded) {
             this.ensureDocumentClosed();
@@ -580,6 +589,11 @@ export class SAXParser {
             }
             rest = rest.trim();
             let attributesMap: Map<string, string> = this.parseAttributes(rest);
+            const grammarForEntities: Grammar | undefined = this.contentHandler?.getGrammar();
+            const dtdGrammarForEntities: DTDGrammar | undefined = grammarForEntities instanceof DTDGrammar ? grammarForEntities : undefined;
+            attributesMap.forEach((value: string) => {
+                this.decodeAttributeEntities(value, dtdGrammarForEntities);
+            });
             attributesMap = this.normalizeDTDAttributes(name, attributesMap);
             let attributes: Array<XMLAttribute> = [];
             attributesMap.forEach((value: string, key: string) => {
@@ -1580,10 +1594,12 @@ export class SAXParser {
             result += plainSegment;
             const semiIndex: number = value.indexOf(';', ampIndex + 1);
             if (semiIndex === -1) {
-                result += value.substring(ampIndex);
-                break;
+                throw new Error('Malformed XML document: unterminated entity reference in attribute value');
             }
             const entityName: string = value.substring(ampIndex + 1, semiIndex);
+            if (entityName.length === 0) {
+                throw new Error('Malformed XML document: empty entity reference in attribute value');
+            }
             if (entityName.startsWith('#x')) {
                 const parsed: number = parseInt(entityName.substring(2), 16);
                 XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#x${entityName.substring(2)}; in attribute value`);
