@@ -96,12 +96,6 @@ export interface Grammar {
     // Entity resolution (for DTD compatibility)
     resolveEntity(name: string): string | undefined;
 
-    // Entity reference tracking (for canonicalization)
-    addEntityReferenceUsage(originalReference: string, expandedText: string): void;
-    getOriginalEntityReference(expandedText: string): string | undefined;
-    consumeEntityReference(expandedText: string): string | undefined;
-    clearEntityReferenceTracking(): void;
-
     // Grammar type identification
     getGrammarType(): GrammarType;
 

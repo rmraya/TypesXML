@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 - 2024 Maxprograms.
+ * Copyright (c) 2023 - 2025 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -10,37 +10,55 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { existsSync, unlinkSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
+import { existsSync } from "fs";
 import { dirname, isAbsolute, resolve } from "path";
+import { Readable } from "stream";
 import { fileURLToPath } from "url";
 import { Catalog } from "./Catalog";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
+import { NeedMoreDataError } from "./NeedMoreDataError";
 import { RelaxNGParser } from "./RelaxNGParser";
+import { StreamReader } from "./StreamReader";
+import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
 import { Grammar, ValidationError, ValidationResult } from "./grammar/Grammar";
 
+export interface ParseSourceOptions {
+    basePath?: string;
+    pseudoFileName?: string;
+    virtualPath?: string;
+}
+
+export interface StreamParseOptions extends ParseSourceOptions {
+    encoding?: BufferEncoding;
+}
+
+export type ParserInputSource = FileReader | StringReader | StreamReader;
+
 export class SAXParser {
 
     contentHandler: ContentHandler | undefined;
-    reader: FileReader | undefined;
+    reader: ParserInputSource | undefined;
     pointer: number;
     buffer: string = '';
     elementStack: number;
     elementNameStack: string[] = [];
-    private childrenNames: Array<string[]> = [];
+    childrenNames: Array<string[]> = [];
     characterRun: string;
     rootParsed: boolean;
     xmlVersion: string;
     currentFile: string | undefined;
     catalog: Catalog | undefined;
     validating: boolean = false;
-    private defaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
+    defaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
     isRelaxNG: boolean = false;
-    static readonly MIN_BUFFER_SIZE: number = 2048;
-    static path = require('path');
+    static readonly DEFAULT_VIRTUAL_FILENAME: string = '__inmemory__.xml';
+    streamingMode: boolean = false;
+    sourceEnded: boolean = false;
+    documentStarted: boolean = false;
+    documentEnded: boolean = false;
 
     constructor() {
         this.characterRun = '';
@@ -50,6 +68,10 @@ export class SAXParser {
         this.pointer = 0;
         this.rootParsed = false;
         this.xmlVersion = '1.0';
+        this.streamingMode = false;
+        this.sourceEnded = false;
+        this.documentStarted = false;
+        this.documentEnded = false;
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -72,40 +94,265 @@ export class SAXParser {
         if (!this.contentHandler) {
             throw new Error('ContentHandler not set');
         }
-        if (!encoding) {
-            encoding = FileReader.detectEncoding(path);
-        }
-        this.currentFile = path;
-        this.defaultAttributes = new Map();
-        this.isRelaxNG = false;
-        this.reader = new FileReader(path, encoding);
-        this.buffer = this.reader.read();
-        this.contentHandler.initialize();
-        this.readDocument();
-        this.reader.closeFile();
+        const normalizedPath: string = isAbsolute(path) ? path : resolve(path);
+        const effectiveEncoding: BufferEncoding = encoding ?? FileReader.detectEncoding(normalizedPath);
+        const reader: FileReader = new FileReader(normalizedPath, effectiveEncoding);
+        this.initializeParsing(reader, normalizedPath);
+        this.processSynchronous();
     }
 
-    parseString(data: string): void {
+    parseString(data: string, options?: ParseSourceOptions): void {
         if (!this.contentHandler) {
             throw new Error('ContentHandler not set');
         }
-        const letters: string = 'abcdefghijklmnopqrstuvxyz';
-        let name: string = '';
-        for (let i: number = 0; i < 8; i++) {
-            const randomNumber: number = Math.floor(Math.random() * 24);
-            let letter: string = letters.charAt(randomNumber);
-            name += letter;
+        const reader: StringReader = new StringReader(data);
+        const virtualPath: string = this.resolveVirtualPath(options);
+        this.initializeParsing(reader, virtualPath);
+        this.processSynchronous();
+    }
+
+    parseStream(stream: Readable, options?: StreamParseOptions): Promise<void> {
+        if (!this.contentHandler) {
+            return Promise.reject(new Error('ContentHandler not set'));
         }
-        name = name + '.xml';
-        let tempFile: string = SAXParser.path.join(tmpdir(), name);
-        writeFileSync(tempFile, data, { encoding: 'utf8' });
-        this.parseFile(tempFile, 'utf8');
-        unlinkSync(tempFile);
+        const encoding: BufferEncoding = options?.encoding ?? 'utf8';
+        const reader: StreamReader = new StreamReader(encoding);
+        const virtualPath: string = this.resolveVirtualPath(options);
+        this.initializeParsing(reader, virtualPath);
+
+        return new Promise<void>((resolvePromise, rejectPromise) => {
+            const cleanup = (): void => {
+                stream.removeListener('data', onData);
+                stream.removeListener('end', onEnd);
+                stream.removeListener('error', onError);
+            };
+
+            const handleProcessing = (finalizing: boolean): void => {
+                try {
+                    this.processStreaming(finalizing);
+                    if (this.documentEnded) {
+                        cleanup();
+                        this.reader?.closeFile();
+                        resolvePromise();
+                    } else if (finalizing) {
+                        cleanup();
+                        this.reader?.closeFile();
+                        rejectPromise(new Error('Malformed XML document: unexpected end of stream'));
+                    }
+                } catch (error) {
+                    if (error instanceof NeedMoreDataError) {
+                        return;
+                    }
+                    cleanup();
+                    this.reader?.closeFile();
+                    rejectPromise(error as Error);
+                }
+            };
+
+            const onData = (chunk: string): void => {
+                reader.enqueue(chunk);
+                handleProcessing(false);
+            };
+
+            const onEnd = (): void => {
+                reader.markFinished();
+                handleProcessing(true);
+            };
+
+            const onError = (error: Error): void => {
+                cleanup();
+                this.reader?.closeFile();
+                rejectPromise(error);
+            };
+
+            stream.setEncoding(encoding);
+            stream.on('data', onData);
+            stream.once('end', onEnd);
+            stream.once('error', onError);
+        });
+    }
+
+    initializeParsing(reader: ParserInputSource, currentFilePath: string): void {
+        this.reader = reader;
+        const fallbackVirtualPath: string = resolve(process.cwd(), SAXParser.DEFAULT_VIRTUAL_FILENAME);
+        this.currentFile = currentFilePath || fallbackVirtualPath;
+        this.defaultAttributes = new Map<string, Map<string, string>>();
+        this.isRelaxNG = false;
+        this.pointer = 0;
+        this.buffer = '';
+        this.elementStack = 0;
+        this.elementNameStack = [];
+        this.childrenNames = [];
+        this.characterRun = '';
+        this.rootParsed = false;
+        this.xmlVersion = '1.0';
+        this.streamingMode = reader instanceof StreamReader;
+        this.sourceEnded = false;
+        this.documentStarted = false;
+        this.documentEnded = false;
+        this.contentHandler?.initialize();
+    }
+
+    processSynchronous(): void {
+        if (!this.reader) {
+            return;
+        }
+        try {
+            while (!this.documentEnded) {
+                this.readDocument();
+                if (!this.documentEnded) {
+                    if (!this.tryReadMore()) {
+                        break;
+                    }
+                }
+            }
+            this.ensureDocumentClosed();
+        } finally {
+            this.reader.closeFile();
+        }
+    }
+
+    processStreaming(finalizing: boolean): void {
+        if (!this.reader) {
+            return;
+        }
+        while (true) {
+            try {
+                this.readDocument();
+            } catch (error) {
+                if (error instanceof NeedMoreDataError) {
+                    return;
+                }
+                throw error;
+            }
+            if (this.documentEnded) {
+                return;
+            }
+            let hasMoreData: boolean;
+            try {
+                hasMoreData = this.tryReadMore();
+            } catch (error) {
+                if (error instanceof NeedMoreDataError) {
+                    return;
+                }
+                throw error;
+            }
+            if (!hasMoreData) {
+                if (finalizing) {
+                    this.ensureDocumentClosed();
+                }
+                return;
+            }
+        }
+    }
+
+    resolveVirtualPath(options?: ParseSourceOptions): string {
+        if (options?.virtualPath) {
+            const virtualPath: string = options.virtualPath;
+            return isAbsolute(virtualPath) ? virtualPath : resolve(virtualPath);
+        }
+        const pseudoFileName: string = options?.pseudoFileName ?? SAXParser.DEFAULT_VIRTUAL_FILENAME;
+        if (options?.basePath) {
+            const normalizedBase: string = isAbsolute(options.basePath) ? options.basePath : resolve(options.basePath);
+            return resolve(normalizedBase, pseudoFileName);
+        }
+        return resolve(process.cwd(), pseudoFileName);
+    }
+
+    tryReadMore(): boolean {
+        if (!this.reader || this.sourceEnded) {
+            return false;
+        }
+        if (this.reader instanceof StreamReader) {
+            if (this.reader.dataAvailable()) {
+                const chunk: string = this.reader.read();
+                if (chunk === '') {
+                    if (this.reader.isFinished()) {
+                        this.sourceEnded = true;
+                    }
+                    return false;
+                }
+                this.buffer += chunk;
+                return true;
+            }
+            if (this.reader.isFinished()) {
+                this.sourceEnded = true;
+                return false;
+            }
+            throw new NeedMoreDataError();
+        }
+        if (this.reader.dataAvailable()) {
+            const chunk: string = this.reader.read();
+            if (chunk === '') {
+                this.sourceEnded = true;
+                return false;
+            }
+            this.buffer += chunk;
+            return true;
+        }
+        const chunk: string = this.reader.read();
+        if (chunk === '') {
+            this.sourceEnded = true;
+            return false;
+        }
+        this.buffer += chunk;
+        return true;
+    }
+
+    ensureDocumentClosed(): void {
+        if (this.documentEnded) {
+            return;
+        }
+        if (!this.sourceEnded) {
+            if (this.streamingMode) {
+                throw new NeedMoreDataError();
+            }
+            throw new Error('Malformed XML document: unexpected end of input');
+        }
+        if (this.elementStack !== 0) {
+            throw new Error('Malformed XML document: unclosed elements');
+        }
+        this.cleanCharacterRun();
+        if (this.rootParsed && !this.documentEnded) {
+            this.contentHandler?.endDocument();
+            this.documentEnded = true;
+        }
+    }
+
+    ensureLookahead(minRemaining: number): void {
+        if (this.buffer.length - this.pointer >= minRemaining) {
+            return;
+        }
+        while (this.buffer.length - this.pointer < minRemaining) {
+            if (!this.tryReadMore()) {
+                break;
+            }
+        }
+        if (this.buffer.length - this.pointer < minRemaining) {
+            if (this.sourceEnded) {
+                return;
+            }
+            if (this.streamingMode) {
+                throw new NeedMoreDataError();
+            }
+        }
     }
 
     readDocument(): void {
-        this.contentHandler?.startDocument();
-        while (this.pointer < this.buffer.length) {
+        if (!this.reader) {
+            return;
+        }
+        if (!this.documentStarted) {
+            this.contentHandler?.startDocument();
+            this.documentStarted = true;
+        }
+        while (true) {
+            if (this.pointer >= this.buffer.length) {
+                if (!this.tryReadMore()) {
+                    break;
+                }
+                continue;
+            }
             if (this.lookingAt('<?xml ') || this.lookingAt('<?xml\t') || this.lookingAt('<?xml\r') || this.lookingAt('<?xml\n')) {
                 this.parseXMLDeclaration();
                 continue;
@@ -142,7 +389,7 @@ export class SAXParser {
                 this.startElement();
                 continue;
             }
-            let char: string = this.buffer.charAt(this.pointer);
+            const char: string = this.buffer.charAt(this.pointer);
             if (!this.rootParsed && !XMLUtils.isXmlSpace(char)) {
                 throw new Error('Malformed XML document: text found in prolog');
             }
@@ -151,16 +398,11 @@ export class SAXParser {
             }
             this.characterRun += char;
             this.pointer++;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
         }
-        if (this.elementStack !== 0) {
-            throw new Error('Malformed XML document: unclosed elements');
-        }
-        this.cleanCharacterRun();
-        if (this.rootParsed) {
-            this.contentHandler?.endDocument();
+        if (this.sourceEnded) {
+            this.ensureDocumentClosed();
+        } else if (this.streamingMode) {
+            throw new NeedMoreDataError();
         }
     }
 
@@ -168,11 +410,20 @@ export class SAXParser {
         this.cleanCharacterRun();
         this.pointer++; // skip '&'
         let name: string = '';
-        while (!this.lookingAt(';')) {
-            name += this.buffer.charAt(this.pointer++);
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed XML document: unterminated entity reference');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
             }
+            if (this.buffer.charAt(this.pointer) === ';') {
+                break;
+            }
+            name += this.buffer.charAt(this.pointer++);
         }
         if (name === 'lt') {
             this.contentHandler?.characters('<');
@@ -202,81 +453,125 @@ export class SAXParser {
 
     startElement() {
         this.cleanCharacterRun();
-        this.pointer++; // skip '<'
-        let name: string = '';
-        while (!XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer)) && !this.lookingAt('>') && !this.lookingAt('/>')) {
-            name += this.buffer.charAt(this.pointer++);
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
-        }
-        if (this.validating) {
-            if (!XMLUtils.isValidXMLName(name)) {
-                throw new Error('Invalid XML name: ' + name);
-            }
-        }
-
-        // Add this element as a child of its parent (if parent exists)
-        if (this.childrenNames.length > 0) {
-            let parentChildren: string[] = this.childrenNames[this.childrenNames.length - 1];
-            parentChildren.push(name);
-        }
-        // Push a new empty array for this element's children
-        this.childrenNames.push([]);
-
-        let rest: string = '';
-        while (!this.lookingAt('>') && !this.lookingAt('/>')) {
-            rest += this.buffer.charAt(this.pointer++);
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
-        }
-        rest = rest.trim();
-        let attributesMap: Map<string, string> = this.parseAttributes(rest);
-        let attributes: Array<XMLAttribute> = [];
-        attributesMap.forEach((value: string, key: string) => {
-            // TODO https://www.w3.org/TR/REC-xml/#AVNormalize
-            let attribute: XMLAttribute = new XMLAttribute(key, value);
-            attributes.push(attribute);
-        });
-        if (this.validating) {
-            attributes.forEach((attr: XMLAttribute) => {
-                if (!XMLUtils.isValidXMLName(attr.getName())) {
-                    throw new Error('Invalid XML attribute name: ' + attr.getName());
+        const tagStartPointer: number = this.pointer;
+        try {
+            this.pointer++; // skip '<'
+            let name: string = '';
+            while (true) {
+                this.ensureLookahead(1);
+                if (this.pointer >= this.buffer.length) {
+                    if (this.sourceEnded) {
+                        throw new Error('Malformed XML document: unterminated start tag');
+                    }
+                    if (this.streamingMode) {
+                        throw new NeedMoreDataError();
+                    }
                 }
+                if (XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer)) || this.lookingAt('>') || this.lookingAt('/>')) {
+                    break;
+                }
+                name += this.buffer.charAt(this.pointer++);
+            }
+            if (this.validating) {
+                if (!XMLUtils.isValidXMLName(name)) {
+                    throw new Error('Invalid XML name: ' + name);
+                }
+            }
+
+            let rest: string = '';
+            while (true) {
+                this.ensureLookahead(1);
+                if (this.pointer >= this.buffer.length) {
+                    if (this.sourceEnded) {
+                        throw new Error('Malformed XML document: unterminated start tag');
+                    }
+                    if (this.streamingMode) {
+                        throw new NeedMoreDataError();
+                    }
+                }
+                const currentChar: string = this.buffer.charAt(this.pointer);
+                if (currentChar === '>' || currentChar === '/') {
+                    break;
+                }
+                rest += currentChar;
+                this.pointer++;
+            }
+            rest = rest.trim();
+            let attributesMap: Map<string, string> = this.parseAttributes(rest);
+            let attributes: Array<XMLAttribute> = [];
+            attributesMap.forEach((value: string, key: string) => {
+                // TODO https://www.w3.org/TR/REC-xml/#AVNormalize
+                let attribute: XMLAttribute = new XMLAttribute(key, value);
+                attributes.push(attribute);
             });
-            const grammar = this.contentHandler?.getGrammar();
-            if (grammar) {
-                let result: ValidationResult = grammar.validateAttributes(name, attributesMap);
-                if (result.isValid === false) {
-                    let errorMessages: string = '';
-                    result.errors.forEach((error: ValidationError) => {
-                        errorMessages += error.message + '\n';
-                    });
-                    throw new Error('Validation failed for element ' + name + ':\n' + errorMessages);
+            if (this.validating) {
+                attributes.forEach((attr: XMLAttribute) => {
+                    if (!XMLUtils.isValidXMLName(attr.getName())) {
+                        throw new Error('Invalid XML attribute name: ' + attr.getName());
+                    }
+                });
+                const grammar = this.contentHandler?.getGrammar();
+                if (grammar) {
+                    let result: ValidationResult = grammar.validateAttributes(name, attributesMap);
+                    if (result.isValid === false) {
+                        let errorMessages: string = '';
+                        result.errors.forEach((error: ValidationError) => {
+                            errorMessages += error.message + '\n';
+                        });
+                        throw new Error('Validation failed for element ' + name + ':\n' + errorMessages);
+                    }
                 }
             }
+            attributes = this.getDefaultAttributes(name, attributes);
+
+            this.ensureLookahead(1);
+            let isSelfClosing: boolean = false;
+            const terminatorChar: string = this.buffer.charAt(this.pointer);
+            if (terminatorChar === '/') {
+                this.ensureLookahead(2);
+                if (this.buffer.charAt(this.pointer + 1) !== '>') {
+                    throw new Error('Malformed XML document: expected "/>" to close start tag for ' + name);
+                }
+                isSelfClosing = true;
+            } else if (terminatorChar === '>') {
+                isSelfClosing = false;
+            } else {
+                throw new Error('Malformed XML document: unexpected character "' + terminatorChar + '" at end of start tag');
+            }
+
+            // Add this element as a child of its parent (if parent exists)
+            if (this.childrenNames.length > 0) {
+                let parentChildren: string[] = this.childrenNames[this.childrenNames.length - 1];
+                parentChildren.push(name);
+            }
+            // Push a new empty array for this element's children
+            this.childrenNames.push([]);
+
+            this.contentHandler?.startElement(name, attributes);
+            this.elementStack++;
+            this.elementNameStack.push(name);
+            if (!this.rootParsed) {
+                this.rootParsed = true;
+            }
+            if (isSelfClosing) {
+                this.cleanCharacterRun();
+                this.validateElement(name);
+                this.contentHandler?.endElement(name);
+                this.elementStack--;
+                this.elementNameStack.pop();
+                this.childrenNames.pop();
+                this.pointer += 2; // skip '/>'
+            } else {
+                this.pointer++; // skip '>'
+            }
+            this.buffer = this.buffer.substring(this.pointer);
+            this.pointer = 0;
+        } catch (error) {
+            if (error instanceof NeedMoreDataError) {
+                this.pointer = tagStartPointer;
+            }
+            throw error;
         }
-        attributes = this.getDefaultAttributes(name, attributes);
-        this.contentHandler?.startElement(name, attributes);
-        this.elementStack++;
-        this.elementNameStack.push(name);
-        if (!this.rootParsed) {
-            this.rootParsed = true;
-        }
-        if (this.lookingAt('/>')) {
-            this.cleanCharacterRun();
-            this.validateElement(name);
-            this.contentHandler?.endElement(name);
-            this.elementStack--;
-            this.elementNameStack.pop();
-            this.childrenNames.pop();
-            this.pointer += 2; // skip '/>'
-        } else {
-            this.pointer++; // skip '>'
-        }
-        this.buffer = this.buffer.substring(this.pointer);
-        this.pointer = 0;
     }
 
     endElement() {
@@ -285,13 +580,37 @@ export class SAXParser {
         let name: string = '';
 
         // Read tag name until whitespace or '>'
-        while (!this.lookingAt('>') && !XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer))) {
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed XML document: unterminated end tag');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            if (this.lookingAt('>') || XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer))) {
+                break;
+            }
             name += this.buffer.charAt(this.pointer);
             this.pointer++;
         }
 
         // Skip optional whitespace before '>'
-        while (XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer))) {
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed XML document: unterminated end tag');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            if (!XMLUtils.isXmlSpace(this.buffer.charAt(this.pointer))) {
+                break;
+            }
             this.pointer++;
         }
 
@@ -380,7 +699,19 @@ export class SAXParser {
         this.cleanCharacterRun();
         let comment: string = '';
         this.pointer += 4; // skip '<!--'
-        while (!this.lookingAt('-->')) {
+        while (true) {
+            this.ensureLookahead(3);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed XML document: unterminated comment');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            if (this.lookingAt('-->')) {
+                break;
+            }
             comment += this.buffer.charAt(this.pointer++);
         }
         this.buffer = this.buffer.substring(this.pointer + 3); // skip '-->'
@@ -394,7 +725,19 @@ export class SAXParser {
         let target: string = '';
         let data: string = '';
         this.pointer += 2; // skip '<?'
-        while (!this.lookingAt('?>')) {
+        while (true) {
+            this.ensureLookahead(2);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed XML document: unterminated processing instruction');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            if (this.lookingAt('?>')) {
+                break;
+            }
             instructionText += this.buffer.charAt(this.pointer++);
         }
         instructionText = instructionText.trim();
@@ -505,36 +848,57 @@ export class SAXParser {
         this.cleanCharacterRun();
         this.pointer += 9; // skip '<!DOCTYPE'
         // skip spaces before root name
-        for (; this.pointer < this.buffer.length; this.pointer++) {
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed DOCTYPE declaration');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
             let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         // read name
         let name: string = '';
-        for (; this.pointer < this.buffer.length; this.pointer++) {
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed DOCTYPE declaration: missing root name');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
             let char: string = this.buffer.charAt(this.pointer);
             if (XMLUtils.isXmlSpace(char)) {
                 break;
             }
             name += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         // skip spaces after root name
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    break;
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         // read external identifiers
         let systemId: string = '';
@@ -549,40 +913,61 @@ export class SAXParser {
         }
         this.contentHandler?.startDTD(name, publicId, systemId);
         // skip spaces after SYSTEM or PUBLIC
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    break;
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         // check internal subset
         let internalSubset: string = '';
         if (this.lookingAt('[')) {
             this.pointer++; // skip '['
-            for (; this.pointer < this.buffer.length; this.pointer++) {
+            while (true) {
+                this.ensureLookahead(1);
+                if (this.pointer >= this.buffer.length) {
+                    if (this.sourceEnded) {
+                        throw new Error('Malformed DOCTYPE declaration: unterminated internal subset');
+                    }
+                    if (this.streamingMode) {
+                        throw new NeedMoreDataError();
+                    }
+                }
                 let char: string = this.buffer[this.pointer];
                 if (']' === char) {
                     break;
                 }
                 internalSubset += char;
-                if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                    this.buffer += this.reader?.read();
-                }
+                this.pointer++;
             }
             this.pointer++; // skip ']'
         }
         // skip spaces after internal subset
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    break;
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
@@ -596,58 +981,94 @@ export class SAXParser {
     parsePublicDeclaration(): string[] {
         this.pointer += 6; // skip 'PUBLIC'
         // skip spaces after PUBLIC
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed PUBLIC declaration');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         let separator: string = '';
         let publicId: string = '';
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
-            if (separator === '' && ('\'' === char || '"' === char)) {
-                separator = char;
-                continue;
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed PUBLIC declaration: unterminated public identifier');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
+            if (separator === '') {
+                if (char === '\'' || char === '"') {
+                    separator = char;
+                    this.pointer++;
+                    continue;
+                }
+                throw new Error('Malformed PUBLIC declaration: missing opening quote');
             }
             if (char === separator) {
-                this.pointer++; // skip separator
+                this.pointer++;
                 break;
             }
             publicId += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         // skip spaces after publicId
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    break;
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         separator = '';
         let systemIdId: string = '';
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
-            if (separator === '' && ('\'' === char || '"' === char)) {
-                separator = char;
-                continue;
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed PUBLIC declaration: unterminated system identifier');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
+            if (separator === '') {
+                if (char === '\'' || char === '"') {
+                    separator = char;
+                    this.pointer++;
+                    continue;
+                }
+                throw new Error('Malformed PUBLIC declaration: missing system identifier quote');
             }
             if (char === separator) {
-                this.pointer++; // skip separator
+                this.pointer++;
                 break;
             }
             systemIdId += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         return [publicId, systemIdId];
     }
@@ -655,31 +1076,49 @@ export class SAXParser {
     parseSystemDeclaration(): string {
         this.pointer += 6; // skip 'SYSTEM'
         // skip spaces after SYSTEM
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed SYSTEM declaration');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
             if (!XMLUtils.isXmlSpace(char)) {
                 break;
             }
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         let separator: string = '';
         let systemId: string = '';
-        for (; this.pointer < this.buffer.length; this.pointer++) {
-            let char = this.buffer[this.pointer];
-            if (separator === '' && ('\'' === char || '"' === char)) {
-                separator = char;
-                continue;
+        while (true) {
+            this.ensureLookahead(1);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed SYSTEM declaration: unterminated system identifier');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            let char: string = this.buffer[this.pointer];
+            if (separator === '') {
+                if (char === '\'' || char === '"') {
+                    separator = char;
+                    this.pointer++;
+                    continue;
+                }
+                throw new Error('Malformed SYSTEM declaration: missing opening quote');
             }
             if (char === separator) {
-                this.pointer++; // skip separator
+                this.pointer++;
                 break;
             }
             systemId += char;
-            if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-                this.buffer += this.reader?.read();
-            }
+            this.pointer++;
         }
         return systemId;
     }
@@ -687,7 +1126,19 @@ export class SAXParser {
     parseXMLDeclaration() {
         let declarationText: string = '';
         this.pointer += 6; // skip '<?xml '
-        while (!this.lookingAt('?>')) {
+        while (true) {
+            this.ensureLookahead(2);
+            if (this.pointer >= this.buffer.length) {
+                if (this.sourceEnded) {
+                    throw new Error('Malformed XML declaration: unterminated declaration');
+                }
+                if (this.streamingMode) {
+                    throw new NeedMoreDataError();
+                }
+            }
+            if (this.lookingAt('?>')) {
+                break;
+            }
             declarationText += this.buffer.charAt(this.pointer++);
         }
         declarationText = declarationText.trim();
@@ -701,9 +1152,14 @@ export class SAXParser {
     }
 
     lookingAt(text: string): boolean {
-        let length: number = text.length;
-        if (this.buffer.length - this.pointer < SAXParser.MIN_BUFFER_SIZE && this.reader?.dataAvailable()) {
-            this.buffer += this.reader?.read();
+        const length: number = text.length;
+        try {
+            this.ensureLookahead(length);
+        } catch (error) {
+            if (error instanceof NeedMoreDataError) {
+                throw error;
+            }
+            throw error;
         }
         if (this.pointer + length > this.buffer.length) {
             return false;

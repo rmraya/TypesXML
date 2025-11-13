@@ -10,9 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-export interface XMLNode {
+export class NeedMoreDataError extends Error {
 
-    getNodeType(): number;
-    toString(): string;
-    equals(node: XMLNode): boolean;
+    constructor() {
+        super('Need more data to continue parsing');
+        Object.setPrototypeOf(this, NeedMoreDataError.prototype);
+    }
 }

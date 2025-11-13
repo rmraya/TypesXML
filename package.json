@@ -1,7 +1,7 @@
 {
   "name": "typesxml",
   "productName": "TypesXML",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Open source XML library written in TypeScript",
   "keywords": [
     "XML",
@@ -31,7 +31,7 @@
     "url": "https://github.com/rmraya/TypesXML.git"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0",
+    "@types/node": "^24.10.1",
     "typescript": "^5.9.3"
   }
 }

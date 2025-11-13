@@ -1,3 +1,15 @@
+/*******************************************************************************
+ * Copyright (c) 2023 - 2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse   License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
+
 import { CData } from "./CData";
 import { Catalog } from "./Catalog";
 import { ContentHandler } from "./ContentHandler";
@@ -11,6 +23,7 @@ import { XMLDocumentType } from "./XMLDocumentType";
 import { XMLElement } from "./XMLElement";
 import { XMLUtils } from "./XMLUtils";
 import { DTDParser } from "./dtd/DTDParser";
+import { DTDGrammar } from "./dtd/DTDGrammar";
 import { Grammar } from "./grammar/Grammar";
 
 export class DOMBuilder implements ContentHandler {
@@ -194,7 +207,29 @@ export class DOMBuilder implements ContentHandler {
     }
 
     skippedEntity(name: string): void {
-        // TODO
-        throw new Error("Method not implemented.");
+        const replacement: string | undefined = this.grammar?.resolveEntity(name);
+        if (replacement && replacement.length > 0) {
+            this.characters(replacement);
+            return;
+        }
+
+        if (this.grammar instanceof DTDGrammar) {
+            const entityDecl = this.grammar.getEntity(name);
+            if (entityDecl && entityDecl.isExternal() && this.dtdParser) {
+                try {
+                    const externalText = this.dtdParser.loadExternalEntity(entityDecl.getPublicId(), entityDecl.getSystemId(), true);
+                    if (externalText.length > 0) {
+                        entityDecl.setValue(externalText);
+                        this.characters(externalText);
+                        return;
+                    }
+                } catch (error) {
+                    throw new Error(`Could not resolve external entity "${name}": ${(error as Error).message}`);
+                }
+            }
+        }
+
+        // Preserve the reference if no replacement text is available
+        this.characters('&' + name + ';');
     }
 }

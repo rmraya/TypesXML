@@ -994,11 +994,25 @@ export class DTDParser {
             textContent = textContent.substring(1);
         }
 
-        // Check for XML declarations in external entities (not allowed)
-        const xmlDeclPattern = /<\?xml\s+/gi;
-        const xmlDeclMatches = textContent.match(xmlDeclPattern);
-        if (xmlDeclMatches && xmlDeclMatches.length > 0) {
-            throw new Error(`External entity "${location}" contains XML declaration(s), which is not allowed in external entities`);
+        // Allow a single leading text declaration per XML 1.0 section 4.3.1, flag any others
+        const firstNonWhitespace = textContent.search(/\S/);
+        if (firstNonWhitespace !== -1 && textContent.startsWith('<?xml', firstNonWhitespace)) {
+            const textDeclEnd = textContent.indexOf('?>', firstNonWhitespace);
+            if (textDeclEnd === -1) {
+                throw new Error(`External entity "${location}" has an unterminated text declaration`);
+            }
+
+            const textDeclaration = textContent.substring(firstNonWhitespace, textDeclEnd + 2);
+            if (!/encoding\s*=\s*(['"]).+?\1/i.test(textDeclaration)) {
+                throw new Error(`External entity "${location}" text declaration must include an encoding pseudo-attribute`);
+            }
+
+            const remainingContent = textContent.substring(textDeclEnd + 2);
+            if (remainingContent.match(/<\?xml\s+/i)) {
+                throw new Error(`External entity "${location}" contains multiple XML declarations`);
+            }
+        } else if (textContent.match(/<\?xml\s+/i)) {
+            throw new Error(`External entity "${location}" contains XML declaration in invalid position`);
         }
 
         // Check for excessive non-printable characters that might indicate binary content
@@ -1029,14 +1043,13 @@ export class DTDParser {
         while (iteration < maxIterations) {
             let changed = false;
 
-            // Find all parameter entity references in current text
-            let entityMatches = result.match(/%[a-zA-Z0-9_.-]+;/g);
-            if (!entityMatches) {
+            const entityMatches = this.findParameterEntityReferences(result);
+            if (entityMatches.length === 0) {
                 break; // No more entities to expand
             }
 
-            for (let entityRef of entityMatches) {
-                let entityName = entityRef.substring(1, entityRef.length - 1); // Remove % and ;
+            for (const match of entityMatches) {
+                const entityName: string = match.name;
 
                 // Skip if we've already expanded this entity to prevent cycles
                 if (expandedEntities.has(entityName)) {
@@ -1045,11 +1058,11 @@ export class DTDParser {
 
                 let entity = this.grammar.getParameterEntity(entityName);
                 if (entity && entity.getValue()) {
-                    let entityValue = entity.getValue();
+                    const entityValue = entity.getValue();
 
                     // Only expand if the value doesn't contain the same entity reference (simple cycle detection)
-                    if (!entityValue.includes(entityRef)) {
-                        result = result.replace(new RegExp(this.escapeRegExp(entityRef), 'g'), entityValue);
+                    if (!entityValue.includes(match.reference)) {
+                        result = result.replace(new RegExp(this.escapeRegExp(match.reference), 'g'), entityValue);
                         expandedEntities.add(entityName);
                         changed = true;
                     }
@@ -1072,6 +1085,27 @@ export class DTDParser {
 
     private escapeRegExp(string: string): string {
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    private findParameterEntityReferences(text: string): Array<{ reference: string, name: string }> {
+        const references: Array<{ reference: string, name: string }> = [];
+        let index: number = 0;
+        while (index < text.length) {
+            const start: number = text.indexOf('%', index);
+            if (start === -1) {
+                break;
+            }
+            const end: number = text.indexOf(';', start + 1);
+            if (end === -1) {
+                break;
+            }
+            const rawName: string = text.substring(start + 1, end).trim();
+            if (rawName.length > 0 && XMLUtils.isValidXMLName(rawName)) {
+                references.push({ reference: `%${rawName};`, name: rawName });
+            }
+            index = end + 1;
+        }
+        return references;
     }
 
     getGrammar(): DTDGrammar {

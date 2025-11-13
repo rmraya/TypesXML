@@ -25,7 +25,6 @@ export class DTDGrammar implements Grammar {
     private attributesMap: Map<string, Map<string, AttDecl>>;
     private elementDeclMap: Map<string, ElementDecl>;
     private notationsMap: Map<string, NotationDecl>;
-    private usedEntityReferences: Map<string, string[]>;
 
     constructor() {
         this.models = new Map();
@@ -33,7 +32,6 @@ export class DTDGrammar implements Grammar {
         this.attributesMap = new Map();
         this.entitiesMap = new Map();
         this.notationsMap = new Map();
-        this.usedEntityReferences = new Map();
         this.addPredefinedEntities();
     }
 
@@ -171,47 +169,6 @@ export class DTDGrammar implements Grammar {
         return this.attributesMap.get(element);
     }
 
-    addEntityReferenceUsage(originalReference: string, expandedText: string) {
-        if (!this.usedEntityReferences.has(expandedText)) {
-            this.usedEntityReferences.set(expandedText, []);
-        }
-        this.usedEntityReferences.get(expandedText)!.push(originalReference);
-    }
-
-    getOriginalEntityReference(expandedText: string): string | undefined {
-        const references = this.usedEntityReferences.get(expandedText);
-        if (!references || references.length === 0) {
-            return undefined;
-        }
-        return references[0];
-    }
-
-    consumeEntityReference(expandedText: string): string | undefined {
-        const references: string[] | undefined = this.usedEntityReferences.get(expandedText);
-        if (!references || references.length === 0) {
-            return undefined;
-        }
-        const reference: string | undefined = references.shift();
-        if (references.length === 0) {
-            this.usedEntityReferences.delete(expandedText);
-        }
-        return reference;
-    }
-
-    getUsedEntityReferences(): Map<string, string> {
-        const result: Map<string, string> = new Map<string, string>();
-        this.usedEntityReferences.forEach((value, key) => {
-            if (value.length > 0) {
-                result.set(key, value[0]);
-            }
-        });
-        return result;
-    }
-
-    clearEntityReferenceTracking() {
-        this.usedEntityReferences.clear();
-    }
-
     validateElement(element: string, children: string[]): ValidationResult {
         const colonIndex = element.indexOf(':');
         if (colonIndex !== -1) {
@@ -340,13 +297,10 @@ export class DTDGrammar implements Grammar {
             }
         }
         // check for entities inside attribute value
-        const entityReferences = attrValue.match(/&([a-zA-Z0-9._:-]+);/g);
-        if (entityReferences) {
-            for (const entityRef of entityReferences) {
-                const entityName = entityRef.slice(1, -1); // Remove the '&' and ';'
-                if (!this.entityExists(entityName)) {
-                    return ValidationResult.error('Entity "' + entityName + '" referenced in attribute "' + attrName + '" is not declared in element "' + element + '"');
-                }
+        const entityReferences = this.extractEntityReferences(attrValue);
+        for (const entityName of entityReferences) {
+            if (!this.entityExists(entityName)) {
+                return ValidationResult.error('Entity "' + entityName + '" referenced in attribute "' + attrName + '" is not declared in element "' + element + '"');
             }
         }
         return ValidationResult.success();
@@ -359,6 +313,27 @@ export class DTDGrammar implements Grammar {
 
     private notationExists(notationName: string): boolean {
         return this.notationsMap.has(notationName);
+    }
+
+    private extractEntityReferences(value: string): string[] {
+        const references: string[] = [];
+        let index: number = 0;
+        while (index < value.length) {
+            const ampIndex: number = value.indexOf('&', index);
+            if (ampIndex === -1) {
+                break;
+            }
+            const semicolonIndex: number = value.indexOf(';', ampIndex + 1);
+            if (semicolonIndex === -1) {
+                break;
+            }
+            const candidate: string = value.substring(ampIndex + 1, semicolonIndex);
+            if (candidate.length > 0 && XMLUtils.isValidXMLName(candidate)) {
+                references.push(candidate);
+            }
+            index = semicolonIndex + 1;
+        }
+        return references;
     }
 
     getElementAttributes(element: string): Map<string, AttributeInfo> {
