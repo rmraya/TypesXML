@@ -704,9 +704,19 @@ export class SAXParser {
             attributes.forEach((attr: XMLAttribute) => {
                 existingAttributes.add(attr.getName());
             });
+            const dtdGrammar: DTDGrammar | undefined = grammar instanceof DTDGrammar ? grammar : undefined;
+            const declarations: Map<string, AttDecl> | undefined = dtdGrammar?.getElementAttributesMap(elementName);
             defaultAttrs.forEach((value: string, key: string) => {
                 if (!existingAttributes.has(key)) {
-                    let attribute: XMLAttribute = new XMLAttribute(key, value);
+                    let normalizedValue: string;
+                    if (dtdGrammar) {
+                        const expanded: string = this.decodeAttributeEntities(value, dtdGrammar);
+                        const decl: AttDecl | undefined = declarations?.get(key);
+                        normalizedValue = this.normalizeAttributeValue(value, expanded, decl);
+                    } else {
+                        normalizedValue = this.normalizeAttributeValue(value, value);
+                    }
+                    let attribute: XMLAttribute = new XMLAttribute(key, normalizedValue);
                     attributes.push(attribute);
                 }
             });
@@ -1324,6 +1334,7 @@ export class SAXParser {
 
     private normalizeDTDAttributes(elementName: string, attributes: Map<string, string>): Map<string, string> {
         const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        // NOTE: When new Grammar implementations (RelaxNG, XML Schema) arrive, re-evaluate this branch to respect their normalization rules.
         if (!(grammar instanceof DTDGrammar)) {
             return attributes;
         }
@@ -1335,18 +1346,51 @@ export class SAXParser {
         attributes.forEach((value: string, name: string) => {
             const expanded: string = this.decodeAttributeEntities(value, grammar);
             const decl = declarations.get(name);
-            if (!decl) {
-                normalized.set(name, expanded);
-                return;
-            }
-            if (decl.getType() === 'CDATA') {
-                normalized.set(name, expanded);
-                return;
-            }
-            const collapsed: string = expanded.replace(/[\t\n\r ]+/g, ' ').trim();
-            normalized.set(name, collapsed);
+            normalized.set(name, this.normalizeAttributeValue(value, expanded, decl));
         });
         return normalized;
+    }
+
+    private normalizeAttributeValue(rawValue: string, expandedValue: string, decl?: AttDecl): string {
+        const hasLineFeedReference: boolean = this.containsNumericCharReference(rawValue, 0x0A);
+        const hasCarriageReturnReference: boolean = this.containsNumericCharReference(rawValue, 0x0D);
+        const hasTabReference: boolean = this.containsNumericCharReference(rawValue, 0x09);
+
+        let result: string = expandedValue.replace(/\r\n/g, '\n');
+
+        if (!decl || decl.getType() === 'CDATA') {
+            if (!hasLineFeedReference) {
+                result = result.replace(/\n/g, ' ');
+            }
+            if (!hasCarriageReturnReference) {
+                result = result.replace(/\r/g, ' ');
+            }
+            if (!hasTabReference) {
+                result = result.replace(/\t/g, ' ');
+            }
+            return result;
+        }
+
+        result = result.replace(/\n/g, ' ').replace(/\r/g, ' ').replace(/\t/g, ' ');
+        return result.replace(/ +/g, ' ').trim();
+    }
+
+    private containsNumericCharReference(rawValue: string, codePoint: number): boolean {
+        const pattern: RegExp = /&#(x[0-9a-fA-F]+|\d+);/g;
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(rawValue)) !== null) {
+            const token: string = match[1];
+            let value: number;
+            if (token[0] === 'x' || token[0] === 'X') {
+                value = parseInt(token.substring(1), 16);
+            } else {
+                value = parseInt(token, 10);
+            }
+            if (value === codePoint) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private decodeAttributeEntities(value: string, grammar: DTDGrammar | undefined): string {
