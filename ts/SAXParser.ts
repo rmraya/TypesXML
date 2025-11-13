@@ -63,6 +63,7 @@ export class SAXParser {
     documentStarted: boolean = false;
     documentEnded: boolean = false;
     inCDATASection: boolean = false;
+    pendingCR: boolean = false;
 
     constructor() {
         this.characterRun = '';
@@ -77,6 +78,7 @@ export class SAXParser {
         this.documentStarted = false;
         this.documentEnded = false;
         this.inCDATASection = false;
+        this.pendingCR = false;
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -196,6 +198,7 @@ export class SAXParser {
         this.documentStarted = false;
         this.documentEnded = false;
         this.inCDATASection = false;
+        this.pendingCR = false;
         this.contentHandler?.initialize();
     }
 
@@ -275,14 +278,16 @@ export class SAXParser {
                 if (chunk === '') {
                     if (this.reader.isFinished()) {
                         this.sourceEnded = true;
+                        this.flushPendingCR();
                     }
                     return false;
                 }
-                this.buffer += chunk;
+                this.appendToBuffer(chunk);
                 return true;
             }
             if (this.reader.isFinished()) {
                 this.sourceEnded = true;
+                this.flushPendingCR();
                 return false;
             }
             throw new NeedMoreDataError();
@@ -291,18 +296,44 @@ export class SAXParser {
             const chunk: string = this.reader.read();
             if (chunk === '') {
                 this.sourceEnded = true;
+                this.flushPendingCR();
                 return false;
             }
-            this.buffer += chunk;
+            this.appendToBuffer(chunk);
             return true;
         }
         const chunk: string = this.reader.read();
         if (chunk === '') {
             this.sourceEnded = true;
+            this.flushPendingCR();
             return false;
         }
-        this.buffer += chunk;
+        this.appendToBuffer(chunk);
         return true;
+    }
+
+    private appendToBuffer(chunk: string): void {
+        if (chunk.length === 0) {
+            return;
+        }
+        let text: string = chunk;
+        if (this.pendingCR) {
+            text = '\r' + text;
+            this.pendingCR = false;
+        }
+        if (text.endsWith('\r')) {
+            this.pendingCR = true;
+            text = text.substring(0, text.length - 1);
+        }
+        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        this.buffer += text;
+    }
+
+    private flushPendingCR(): void {
+        if (this.pendingCR) {
+            this.buffer += '\n';
+            this.pendingCR = false;
+        }
     }
 
     ensureDocumentClosed(): void {
