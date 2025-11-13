@@ -512,7 +512,7 @@ export class SAXParser {
         } else if (resolvedEntity !== undefined) {
             this.pointer++; // skip ';'
             const remaining: string = this.buffer.substring(this.pointer);
-            const expandedReplacement: string = this.expandEntityReplacement(resolvedEntity, grammar);
+            const expandedReplacement: string = this.expandEntityReplacement(resolvedEntity, grammar, 0, new Set<string>([name]));
             this.buffer = expandedReplacement + remaining;
             this.pointer = 0;
             return;
@@ -1550,7 +1550,7 @@ export class SAXParser {
             } else {
                 const replacement: string | undefined = grammar?.resolveEntity(entityName);
                 if (replacement !== undefined) {
-                    result += this.expandEntityReplacement(replacement, grammar);
+                    result += this.expandEntityReplacement(replacement, grammar, 0, new Set<string>([entityName]));
                 } else {
                     result += '&' + entityName + ';';
                 }
@@ -1560,9 +1560,9 @@ export class SAXParser {
         return result;
     }
 
-    private expandEntityReplacement(value: string, grammar: Grammar | undefined, depth: number = 0): string {
-        if (depth > 25) {
-            return value;
+    private expandEntityReplacement(value: string, grammar: Grammar | undefined, depth: number = 0, expansionStack: Set<string> = new Set<string>()): string {
+        if (depth > 50) {
+            throw new Error(`Entity expansion depth exceeded (possible recursion): ${Array.from(expansionStack).join(' -> ')}`);
         }
         let result = '';
         let index = 0;
@@ -1595,7 +1595,13 @@ export class SAXParser {
             } else {
                 const nested = grammar?.resolveEntity(entityName);
                 if (nested !== undefined) {
-                    result += this.expandEntityReplacement(nested, grammar, depth + 1);
+                    if (expansionStack.has(entityName)) {
+                        const chain = Array.from(expansionStack).concat(entityName).join(' -> ');
+                        throw new Error(`Recursive entity reference detected: ${chain}`);
+                    }
+                    const nextStack = new Set<string>(expansionStack);
+                    nextStack.add(entityName);
+                    result += this.expandEntityReplacement(nested, grammar, depth + 1, nextStack);
                 } else {
                     result += '&' + entityName + ';';
                 }

@@ -406,8 +406,7 @@ export class DTDParser {
 
     resolveEntities(fragment: string, depth: number = 0): string {
         if (depth > 50) {
-            console.warn('Parameter entity resolution depth exceeded for fragment of length ' + fragment.length);
-            return fragment;
+            throw new Error('Parameter entity resolution depth exceeded (possible recursion in parameter entities)');
         }
 
         let result: string = '';

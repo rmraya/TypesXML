@@ -142,14 +142,37 @@ export class DTDTestSuite {
             }
         }
 
+        // Not well-formed files - standalone
+
+        if (!existsSync("./tests/xmltest/not-wf/sa")) {
+            throw new Error("DTD Test Suite not well-formed folder not found in ./tests/xmltest/not-wf/sa");
+        }
+        xmlFiles = readdirSync("./tests/xmltest/not-wf/sa").filter((file) => file.endsWith(".xml"));
+
+        let notWFSaCatched: number = 0;
+        let notWFSaMissed: number = 0;
+
+        for (const xmlFile of xmlFiles) {
+            let parser: SAXParser = new SAXParser();
+            let domBuilder: DOMBuilder = new DOMBuilder();
+            parser.setContentHandler(domBuilder);
+            parser.setValidating(true);
+            try {
+                parser.parseFile("./tests/xmltest/not-wf/sa/" + xmlFile);
+                console.log(' -- Not well-formed "sa" file "' + xmlFile + '" not rejected');
+                notWFSaMissed++;
+            } catch (error) {
+                notWFSaCatched++;
+            }
+        }
+
         console.log('\n\n');
         console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa);
         console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa);
         console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa);
         console.log('Invalid files catched: ' + invalidCatched + ', Invalid files missed: ' + invalidMissed);   
+        console.log('Not well-formed "sa" catched: ' + notWFSaCatched + ', Not well-formed "sa" missed: ' + notWFSaMissed);
         console.log('\n\n');
-
-
     }
 }
 new DTDTestSuite();
