@@ -128,7 +128,7 @@ export class XMLCanonicalizer {
     }
 
     private renderProcessingInstruction(pi: ProcessingInstruction): string {
-        const data: string = this.escapeData(pi.getData());
+        const data: string = this.escapeProcessingInstructionData(pi.getData());
         return `<?${pi.getTarget()} ${data}?>`;
     }
 
@@ -140,9 +140,10 @@ export class XMLCanonicalizer {
     }
 
     private escapeData(data: string): string {
+        const normalized: string = data.replace(/\r\n/g, "\n");
         let result: string = "";
-        for (let i: number = 0; i < data.length; i++) {
-            const char: string = data.charAt(i);
+        for (let i: number = 0; i < normalized.length; i++) {
+            const char: string = normalized.charAt(i);
             switch (char) {
                 case "&":
                     result += "&amp;";
@@ -167,6 +168,22 @@ export class XMLCanonicalizer {
                     break;
                 default:
                     result += char;
+            }
+        }
+        return result;
+    }
+
+    private escapeProcessingInstructionData(data: string): string {
+        const normalized: string = data.replace(/\r\n/g, "\n");
+        let result: string = "";
+        for (let i: number = 0; i < normalized.length; i++) {
+            const char: string = normalized.charAt(i);
+            if (char === "&") {
+                result += "&amp;";
+            } else if (char === "\r") {
+                result += "&#13;";
+            } else {
+                result += char;
             }
         }
         return result;
