@@ -31,6 +31,7 @@ export class DTDParser {
     private baseDirectory: string = '';
     private validating: boolean = false;
     private overrideExistingDeclarations: boolean = false;
+    private preexistingEntityKeys: Set<string> = new Set();
 
     constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
@@ -90,6 +91,12 @@ export class DTDParser {
 
     parse(): DTDGrammar {
         this.pointer = 0;
+        this.preexistingEntityKeys = new Set<string>();
+        if (this.overrideExistingDeclarations) {
+            for (const key of this.grammar.getEntitiesMap().keys()) {
+                this.preexistingEntityKeys.add(key);
+            }
+        }
         while (this.pointer < this.source.length) {
             if (this.lookingAt('<!ELEMENT')) {
                 let index: number = this.findDeclarationEnd(this.pointer);
@@ -122,7 +129,14 @@ export class DTDParser {
                 }
                 let entityDeclText: string = this.source.substring(this.pointer, index + '>'.length);
                 let entityDecl: EntityDecl = this.parseEntityDeclaration(entityDeclText);
-                this.grammar.addEntity(entityDecl, this.overrideExistingDeclarations);
+                const entityKey: string = entityDecl.isParameterEntity() ? `%${entityDecl.getName()}` : entityDecl.getName();
+                const alreadyDeclared: boolean = this.grammar.getEntitiesMap().has(entityKey);
+                const existedBeforeParse: boolean = this.preexistingEntityKeys.has(entityKey);
+                if (alreadyDeclared && this.overrideExistingDeclarations && !existedBeforeParse) {
+                    this.pointer += entityDeclText.length;
+                    continue;
+                }
+                this.grammar.addEntity(entityDecl, this.overrideExistingDeclarations && existedBeforeParse);
                 this.pointer += entityDeclText.length;
                 continue;
             }
