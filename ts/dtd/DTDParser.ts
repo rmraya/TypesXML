@@ -15,6 +15,7 @@ import { dirname, sep } from "node:path";
 import { Catalog } from "../Catalog";
 import { FileReader } from "../FileReader";
 import { XMLUtils } from "../XMLUtils";
+import { AttDecl } from "./AttDecl";
 import { AttListDecl } from "./AttListDecl";
 import { DTDGrammar } from "./DTDGrammar";
 import { ElementDecl } from "./ElementDecl";
@@ -32,6 +33,7 @@ export class DTDParser {
     private validating: boolean = false;
     private overrideExistingDeclarations: boolean = false;
     private preexistingEntityKeys: Set<string> = new Set();
+    private preexistingAttributeKeys: Map<string, Set<string>> = new Map();
 
     constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
@@ -92,10 +94,18 @@ export class DTDParser {
     parse(): DTDGrammar {
         this.pointer = 0;
         this.preexistingEntityKeys = new Set<string>();
+        this.preexistingAttributeKeys = new Map<string, Set<string>>();
         if (this.overrideExistingDeclarations) {
             for (const key of this.grammar.getEntitiesMap().keys()) {
                 this.preexistingEntityKeys.add(key);
             }
+            this.grammar.getAttributesMap().forEach((attributes: Map<string, AttDecl>, element: string) => {
+                const attributeNames: Set<string> = new Set<string>();
+                attributes.forEach((_value: AttDecl, name: string) => {
+                    attributeNames.add(name);
+                });
+                this.preexistingAttributeKeys.set(element, attributeNames);
+            });
         }
         while (this.pointer < this.source.length) {
             if (this.lookingAt('<!ELEMENT')) {
@@ -118,7 +128,8 @@ export class DTDParser {
                 let attListText: string = this.source.substring(this.pointer, index + '>'.length);
                 let length = attListText.length;
                 let attList: AttListDecl = this.parseAttributesListDeclaration(attListText);
-                this.grammar.addAttributes(attList.getName(), attList.getAttributes(), this.overrideExistingDeclarations);
+                const preexisting: Set<string> | undefined = this.overrideExistingDeclarations ? this.preexistingAttributeKeys.get(attList.getName()) : undefined;
+                this.grammar.addAttributes(attList.getName(), attList.getAttributes(), this.overrideExistingDeclarations, preexisting);
                 this.pointer += length;
                 continue;
             }
@@ -381,26 +392,63 @@ export class DTDParser {
         }
     }
 
-    resolveEntities(fragment: string): string {
-        while (XMLUtils.hasParameterEntity(fragment)) {
-            let start: number = fragment.indexOf('%');
-            if (start === -1) {
-                break;
-            }
-            let end: number = fragment.indexOf(';', start);
-            if (end === -1) {
-                throw new Error('Malformed parameter entity reference while resolving "' + fragment + '"');
-            }
-            let entityName: string = fragment.substring(start + '%'.length, end).trim();
-            let entity: EntityDecl | undefined = this.grammar.getParameterEntity(entityName);
-            if (entity === undefined) {
-                let context: string = fragment.substring(start, Math.min(fragment.length, start + 80));
-                throw new Error('Unknown entity: ' + entityName + ' in resolveEntities while processing "' + context + '"');
-            }
-            let replacement: string = entity.getValue();
-            fragment = fragment.substring(0, start) + replacement + fragment.substring(end + ';'.length);
+    resolveEntities(fragment: string, depth: number = 0): string {
+        if (depth > 50) {
+            console.warn('Parameter entity resolution depth exceeded for fragment of length ' + fragment.length);
+            return fragment;
         }
-        return fragment;
+
+        let result: string = '';
+        let inQuotes: boolean = false;
+        let quoteChar: string = '';
+        let index: number = 0;
+
+        while (index < fragment.length) {
+            const char: string = fragment.charAt(index);
+            if (inQuotes) {
+                if (char === quoteChar) {
+                    inQuotes = false;
+                    quoteChar = '';
+                }
+                result += char;
+                index++;
+                continue;
+            }
+            if (char === '"' || char === "'") {
+                inQuotes = true;
+                quoteChar = char;
+                result += char;
+                index++;
+                continue;
+            }
+            if (char === '%') {
+                const end: number = fragment.indexOf(';', index + 1);
+                if (end === -1) {
+                    throw new Error('Malformed parameter entity reference while resolving "' + fragment + '"');
+                }
+                const entityName: string = fragment.substring(index + 1, end).trim();
+                if (entityName.length === 0) {
+                    result += fragment.substring(index, end + 1);
+                    index = end + 1;
+                    continue;
+                }
+                const entity: EntityDecl | undefined = this.grammar.getParameterEntity(entityName);
+                if (entity === undefined) {
+                    const context: string = fragment.substring(index, Math.min(fragment.length, index + 80));
+                    throw new Error('Unknown entity: ' + entityName + ' in resolveEntities while processing "' + context + '"');
+                }
+                const replacement: string = entity.getValue();
+                if (replacement !== '') {
+                    result += this.resolveEntities(replacement, depth + 1);
+                }
+                index = end + 1;
+                continue;
+            }
+            result += char;
+            index++;
+        }
+
+        return result;
     }
 
     parseEntityDeclaration(declaration: string): EntityDecl {
@@ -1112,22 +1160,41 @@ export class DTDParser {
 
     private findParameterEntityReferences(text: string): Array<{ reference: string, name: string }> {
         const references: Array<{ reference: string, name: string }> = [];
+        let inQuotes: boolean = false;
+        let quoteChar: string = '';
         let index: number = 0;
+
         while (index < text.length) {
-            const start: number = text.indexOf('%', index);
-            if (start === -1) {
-                break;
+            const char: string = text.charAt(index);
+            if (inQuotes) {
+                if (char === quoteChar) {
+                    inQuotes = false;
+                    quoteChar = '';
+                }
+                index++;
+                continue;
             }
-            const end: number = text.indexOf(';', start + 1);
-            if (end === -1) {
-                break;
+            if (char === '"' || char === "'") {
+                inQuotes = true;
+                quoteChar = char;
+                index++;
+                continue;
             }
-            const rawName: string = text.substring(start + 1, end).trim();
-            if (rawName.length > 0 && XMLUtils.isValidXMLName(rawName)) {
-                references.push({ reference: `%${rawName};`, name: rawName });
+            if (char === '%') {
+                let end: number = text.indexOf(';', index + 1);
+                if (end === -1) {
+                    break;
+                }
+                const rawName: string = text.substring(index + 1, end).trim();
+                if (rawName.length > 0 && XMLUtils.isValidXMLName(rawName)) {
+                    references.push({ reference: `%${rawName};`, name: rawName });
+                }
+                index = end + 1;
+                continue;
             }
-            index = end + 1;
+            index++;
         }
+
         return references;
     }
 

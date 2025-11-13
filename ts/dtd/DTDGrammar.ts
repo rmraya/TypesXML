@@ -62,7 +62,7 @@ export class DTDGrammar implements Grammar {
         }
     }
 
-    addAttributes(element: string, attributes: Map<string, AttDecl>, override: boolean = false) {
+    addAttributes(element: string, attributes: Map<string, AttDecl>, override: boolean = false, preexistingKeys?: Set<string>) {
         let existingAttributes: Map<string, AttDecl> | undefined = this.attributesMap.get(element);
         if (!existingAttributes) {
             existingAttributes = new Map<string, AttDecl>();
@@ -71,7 +71,14 @@ export class DTDGrammar implements Grammar {
 
         if (override) {
             attributes.forEach((value, key) => {
-                existingAttributes!.set(key, value);
+                const existedBeforeParse: boolean = preexistingKeys ? preexistingKeys.has(key) : false;
+                if (existedBeforeParse) {
+                    existingAttributes!.set(key, value);
+                    return;
+                }
+                if (!existingAttributes!.has(key)) {
+                    existingAttributes!.set(key, value);
+                }
             });
         } else {
             attributes.forEach((value, key) => {

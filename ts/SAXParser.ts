@@ -1356,7 +1356,16 @@ export class SAXParser {
         const hasCarriageReturnReference: boolean = this.containsNumericCharReference(rawValue, 0x0D);
         const hasTabReference: boolean = this.containsNumericCharReference(rawValue, 0x09);
 
-        let result: string = expandedValue.replace(/\r\n/g, '\n');
+        let result: string = expandedValue;
+        const hasLiteralLineBreak: boolean = rawValue.indexOf('\n') !== -1 || rawValue.indexOf('\r') !== -1;
+
+        if (hasLiteralLineBreak) {
+            result = result.replace(/\r\n/g, '\n');
+        }
+
+        if (!hasCarriageReturnReference) {
+            result = result.replace(/\r/g, '\n');
+        }
 
         if (!decl || decl.getType() === 'CDATA') {
             if (!hasLineFeedReference) {
