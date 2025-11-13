@@ -37,20 +37,26 @@ export class FileReader {
 
     static detectEncoding(path: string): BufferEncoding {
         const fd = openSync(path, 'r');
-        let buffer: Buffer = Buffer.alloc(3);
-        let bytesRead: number = readSync(fd, buffer, 0, 3, 0);
+        const buffer: Buffer = Buffer.alloc(3);
+        const bytesRead: number = readSync(fd, buffer, 0, 3, 0);
         closeSync(fd);
 
-        if (bytesRead < 3) {
-            throw new Error('Error reading BOM: not enough bytes');
-        }
-        const UTF8: Buffer = Buffer.from([-17, -69, -65]);
-        const UTF16: Buffer = Buffer.from([-2, -1]);
-
-        if (buffer.toString().startsWith(UTF8.toString())) {
+        if (bytesRead === 0) {
             return 'utf8';
         }
-        if (buffer.toString().startsWith(UTF16.toString())) {
+
+        const slice: Buffer = buffer.subarray(0, bytesRead);
+        const UTF8: Buffer = Buffer.from([0xEF, 0xBB, 0xBF]);
+        const UTF16LE: Buffer = Buffer.from([0xFF, 0xFE]);
+        const UTF16BE: Buffer = Buffer.from([0xFE, 0xFF]);
+
+        if (slice.length >= UTF8.length && slice.compare(UTF8, 0, UTF8.length, 0, UTF8.length) === 0) {
+            return 'utf8';
+        }
+        if (slice.length >= UTF16LE.length && slice.compare(UTF16LE, 0, UTF16LE.length, 0, UTF16LE.length) === 0) {
+            return 'utf16le';
+        }
+        if (slice.length >= UTF16BE.length && slice.compare(UTF16BE, 0, UTF16BE.length, 0, UTF16BE.length) === 0) {
             return 'utf16le';
         }
         return 'utf8';
@@ -74,16 +80,11 @@ export class FileReader {
 
     skipBOM(buffer: Buffer, bytesRead: number): string {
         this.firstRead = false;
-        const utf8Bom: string = Buffer.from([-17, -69, -65]).toString();
-        const utf16Bom: string = Buffer.from([-2, -1]).toString();
-        let result: string = buffer.toString(this.encoding, 0, bytesRead);
-        if (result.startsWith(utf8Bom)) {
-            return result.substring(utf8Bom.length);
+        const result: string = buffer.toString(this.encoding, 0, bytesRead);
+        if (result.length > 0 && result.charCodeAt(0) === 0xFEFF) {
+            return result.substring(1);
         }
-        if (result.startsWith(utf16Bom)) {
-            return result.substring(utf16Bom.length);
-        }
-        return buffer.toString(this.encoding, 0, bytesRead);
+        return result;
     }
 
     dataAvailable(): boolean {

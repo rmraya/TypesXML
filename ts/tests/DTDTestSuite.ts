@@ -57,8 +57,6 @@ export class DTDTestSuite {
                 invalidSa++;
             }
         }
-        console.log('\n');
-        console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa + '\n\n');
 
         // Not stand alone files
 
@@ -89,9 +87,7 @@ export class DTDTestSuite {
                 invalidNotSa++;
             }
         }
-        console.log('\n');
-        console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa + '\n\n');
-
+        
         // External data files
 
         xmlFiles = readdirSync("./tests/xmltest/valid/ext-sa").filter((file) => file.endsWith(".xml"));
@@ -121,10 +117,12 @@ export class DTDTestSuite {
                 invalidExtSa++;
             }
         }
-        console.log('\n');
-        console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa + '\n\n');
+        console.log('\n\n');
+        console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa);
+        console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa);
+        console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa);
 
-        
+
         if (!existsSync("./tests/xmltest/invalid")) {
             throw new Error("DTD Test Suite invalid folder not found in ./tests/xmltest/invalid");
         }

@@ -417,23 +417,12 @@ export class DTDParser {
 
         while (index < fragment.length) {
             const char: string = fragment.charAt(index);
-            if (inQuotes) {
-                if (char === quoteChar) {
-                    inQuotes = false;
-                    quoteChar = '';
-                }
-                result += char;
-                index++;
-                continue;
-            }
-            if (char === '"' || char === "'") {
-                inQuotes = true;
-                quoteChar = char;
-                result += char;
-                index++;
-                continue;
-            }
             if (char === '%') {
+                if (inQuotes && depth === 0) {
+                    result += char;
+                    index++;
+                    continue;
+                }
                 const end: number = fragment.indexOf(';', index + 1);
                 if (end === -1) {
                     throw new Error('Malformed parameter entity reference while resolving "' + fragment + '"');
@@ -448,6 +437,10 @@ export class DTDParser {
                 if (entity === undefined) {
                     const context: string = fragment.substring(index, Math.min(fragment.length, index + 80));
                     throw new Error('Unknown entity: ' + entityName + ' in resolveEntities while processing "' + context + '"');
+                }
+                if (entity.isExternal() && !entity.isExternalContentLoaded()) {
+                    const externalText: string = this.loadExternalEntity(entity.getPublicId(), entity.getSystemId(), true);
+                    entity.setValue(externalText);
                 }
                 let replacement: string = entity.getValue();
                 if (replacement !== '') {
@@ -468,6 +461,22 @@ export class DTDParser {
                     result += replacement;
                 }
                 index = end + 1;
+                continue;
+            }
+            if (inQuotes) {
+                result += char;
+                index++;
+                if (char === quoteChar) {
+                    inQuotes = false;
+                    quoteChar = '';
+                }
+                continue;
+            }
+            if (char === '"' || char === "'") {
+                inQuotes = true;
+                quoteChar = char;
+                result += char;
+                index++;
                 continue;
             }
             result += char;
@@ -761,6 +770,9 @@ export class DTDParser {
                     }
                     value += char;
                 }
+                if (XMLUtils.hasParameterEntity(value)) {
+                    value = this.resolveEntities(value);
+                }
                 value = this.normalizeEntityLiteral(value);
                 return new EntityDecl(name, parameterEntity, value, '', '', '');
             }
@@ -1049,6 +1061,9 @@ export class DTDParser {
 
             // Validate that content is valid XML text (not binary)
             this.validateTextContent(content, location);
+
+                // XML 1.0 section 2.11: normalize line endings to LF
+                content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
             // Don't trim - preserve original content including whitespace/newlines
             return content;
