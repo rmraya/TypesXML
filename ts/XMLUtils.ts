@@ -106,6 +106,27 @@ export class XMLUtils {
         return result;
     }
 
+    static isValidXmlChar(version: string, codePoint: number): boolean {
+        return version === '1.1'
+            ? XMLUtils.isValidXml11Char(codePoint)
+            : XMLUtils.isValidXml10Char(codePoint);
+    }
+
+    static ensureValidXmlCodePoint(version: string, codePoint: number, context: string): void {
+        if (!XMLUtils.isValidXmlChar(version, codePoint)) {
+            const hex: string = codePoint.toString(16).toUpperCase().padStart(4, '0');
+            throw new Error('Malformed XML document: forbidden character U+'+ hex + ' in ' + context);
+        }
+    }
+
+    static ensureValidXmlCharacters(version: string, text: string, context: string): void {
+        for (let i = 0; i < text.length; ) {
+            const codePoint: number = text.codePointAt(i)!;
+            XMLUtils.ensureValidXmlCodePoint(version, codePoint, context);
+            i += codePoint > 0xFFFF ? 2 : 1;
+        }
+    }
+
     static isValidXml11Char(c: number): boolean {
         // From XML 1.1 spec valid chars: 
         // [#x1-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]	

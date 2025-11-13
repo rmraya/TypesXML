@@ -399,7 +399,9 @@ export class SAXParser {
             if (this.inCDATASection) {
                 const endIndex: number = this.buffer.indexOf(']]>', this.pointer);
                 if (endIndex === -1) {
-                    this.characterRun += this.buffer.substring(this.pointer);
+                    const chunk: string = this.buffer.substring(this.pointer);
+                    XMLUtils.ensureValidXmlCharacters(this.xmlVersion, chunk, 'CDATA section');
+                    this.characterRun += chunk;
                     this.pointer = this.buffer.length;
                     if (!this.tryReadMore()) {
                         if (this.sourceEnded) {
@@ -411,7 +413,9 @@ export class SAXParser {
                     }
                     continue;
                 }
-                this.characterRun += this.buffer.substring(this.pointer, endIndex);
+                const chunk: string = this.buffer.substring(this.pointer, endIndex);
+                XMLUtils.ensureValidXmlCharacters(this.xmlVersion, chunk, 'CDATA section');
+                this.characterRun += chunk;
                 this.pointer = endIndex;
                 this.endCDATA();
                 continue;
@@ -452,7 +456,9 @@ export class SAXParser {
                 this.startElement();
                 continue;
             }
-            const char: string = this.buffer.charAt(this.pointer);
+            const codePoint: number = this.buffer.codePointAt(this.pointer)!;
+            XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, 'character data');
+            const char: string = String.fromCodePoint(codePoint);
             if (!this.rootParsed && !XMLUtils.isXmlSpace(char)) {
                 throw new Error('Malformed XML document: text found in prolog');
             }
@@ -460,7 +466,7 @@ export class SAXParser {
                 throw new Error('Malformed XML document: text found after root element');
             }
             this.characterRun += char;
-            this.pointer++;
+            this.pointer += char.length;
         }
         if (this.sourceEnded) {
             this.ensureDocumentClosed();
@@ -503,21 +509,24 @@ export class SAXParser {
             this.contentHandler?.characters('"');
         } else if (name.startsWith('#x')) {
             const codePoint: number = parseInt(name.substring(2), 16);
+            XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, `character reference &#x${name.substring(2)};`);
             const char: string = String.fromCodePoint(codePoint);
-            this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
+            this.contentHandler?.characters(char);
         } else if (name.startsWith('#')) {
             const codePoint: number = parseInt(name.substring(1));
+            XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, `character reference &#${name.substring(1)};`);
             const char: string = String.fromCodePoint(codePoint);
-            this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
+            this.contentHandler?.characters(char);
         } else if (resolvedEntity !== undefined) {
             this.pointer++; // skip ';'
             const remaining: string = this.buffer.substring(this.pointer);
             const expandedReplacement: string = this.expandEntityReplacement(resolvedEntity, grammar, 0, new Set<string>([name]));
+            XMLUtils.ensureValidXmlCharacters(this.xmlVersion, expandedReplacement, `expanded entity &${name};`);
             this.buffer = expandedReplacement + remaining;
             this.pointer = 0;
             return;
         } else {
-            this.contentHandler?.skippedEntity(name);
+            throw new Error(`Malformed XML document: undefined general entity &${name};`);
         }
         this.pointer++; // skip ';'
         this.buffer = this.buffer.substring(this.pointer);
@@ -782,6 +791,7 @@ export class SAXParser {
     parseComment(): void {
         this.cleanCharacterRun();
         let comment: string = '';
+        let previousWasHyphen: boolean = false;
         this.pointer += 4; // skip '<!--'
         while (true) {
             this.ensureLookahead(3);
@@ -796,7 +806,22 @@ export class SAXParser {
             if (this.lookingAt('-->')) {
                 break;
             }
-            comment += this.buffer.charAt(this.pointer++);
+            const codePoint: number = this.buffer.codePointAt(this.pointer)!;
+            XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, 'comment');
+            const char: string = String.fromCodePoint(codePoint);
+            if (char === '-') {
+                if (previousWasHyphen) {
+                    throw new Error('Malformed XML document: comment cannot contain "--"');
+                }
+                previousWasHyphen = true;
+            } else {
+                previousWasHyphen = false;
+            }
+            comment += char;
+            this.pointer += char.length;
+        }
+        if (comment.endsWith('-')) {
+            throw new Error('Malformed XML document: comment cannot end with "-"');
         }
         this.buffer = this.buffer.substring(this.pointer + 3); // skip '-->'
         this.pointer = 0;
@@ -822,9 +847,16 @@ export class SAXParser {
             if (this.lookingAt('?>')) {
                 break;
             }
-            instructionText += this.buffer.charAt(this.pointer++);
+            const codePoint: number = this.buffer.codePointAt(this.pointer)!;
+            XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, 'processing instruction');
+            const char: string = String.fromCodePoint(codePoint);
+            instructionText += char;
+            this.pointer += char.length;
         }
         instructionText = instructionText.trim();
+        if (instructionText.length === 0) {
+            throw new Error('Malformed XML document: processing instruction missing target');
+        }
         let i: number = 0;
         // read target
         for (; i < instructionText.length; i++) {
@@ -833,6 +865,9 @@ export class SAXParser {
                 break;
             }
             target += char;
+        }
+        if (target.length === 0) {
+            throw new Error('Malformed XML document: processing instruction missing target');
         }
         // skip spaces
         for (; i < instructionText.length; i++) {
@@ -1365,7 +1400,11 @@ export class SAXParser {
             if (this.lookingAt('?>')) {
                 break;
             }
-            declarationText += this.buffer.charAt(this.pointer++);
+            const codePoint: number = this.buffer.codePointAt(this.pointer)!;
+            XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, 'XML declaration');
+            const char: string = String.fromCodePoint(codePoint);
+            declarationText += char;
+            this.pointer += char.length;
         }
         declarationText = declarationText.trim();
         let attributes: Map<string, string> = this.parseAttributes(declarationText);
@@ -1531,10 +1570,14 @@ export class SAXParser {
         while (index < value.length) {
             const ampIndex: number = value.indexOf('&', index);
             if (ampIndex === -1) {
-                result += value.substring(index);
+                const tail: string = value.substring(index);
+                XMLUtils.ensureValidXmlCharacters(this.xmlVersion, tail, 'attribute value');
+                result += tail;
                 break;
             }
-            result += value.substring(index, ampIndex);
+            const plainSegment: string = value.substring(index, ampIndex);
+            XMLUtils.ensureValidXmlCharacters(this.xmlVersion, plainSegment, 'attribute value');
+            result += plainSegment;
             const semiIndex: number = value.indexOf(';', ampIndex + 1);
             if (semiIndex === -1) {
                 result += value.substring(ampIndex);
@@ -1543,9 +1586,11 @@ export class SAXParser {
             const entityName: string = value.substring(ampIndex + 1, semiIndex);
             if (entityName.startsWith('#x')) {
                 const parsed: number = parseInt(entityName.substring(2), 16);
+                XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#x${entityName.substring(2)}; in attribute value`);
                 result += String.fromCodePoint(parsed);
             } else if (entityName.startsWith('#')) {
                 const parsed: number = parseInt(entityName.substring(1));
+                XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#${entityName.substring(1)}; in attribute value`);
                 result += String.fromCodePoint(parsed);
             } else {
                 const replacement: string | undefined = grammar?.resolveEntity(entityName);
@@ -1557,6 +1602,7 @@ export class SAXParser {
             }
             index = semiIndex + 1;
         }
+        XMLUtils.ensureValidXmlCharacters(this.xmlVersion, result, 'attribute value');
         return result;
     }
 
@@ -1569,10 +1615,14 @@ export class SAXParser {
         while (index < value.length) {
             const ampIndex = value.indexOf('&', index);
             if (ampIndex === -1) {
-                result += value.substring(index);
+                const tail: string = value.substring(index);
+                XMLUtils.ensureValidXmlCharacters(this.xmlVersion, tail, 'entity replacement text');
+                result += tail;
                 break;
             }
-            result += value.substring(index, ampIndex);
+            const plainSegment: string = value.substring(index, ampIndex);
+            XMLUtils.ensureValidXmlCharacters(this.xmlVersion, plainSegment, 'entity replacement text');
+            result += plainSegment;
             const semiIndex = value.indexOf(';', ampIndex + 1);
             if (semiIndex === -1) {
                 result += value.substring(ampIndex);
@@ -1588,9 +1638,11 @@ export class SAXParser {
                 result += '&' + entityName + ';';
             } else if (entityName.startsWith('#x')) {
                 const parsed = parseInt(entityName.substring(2), 16);
+                XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#x${entityName.substring(2)}; in entity replacement`);
                 result += String.fromCodePoint(parsed);
             } else if (entityName.startsWith('#')) {
                 const parsed = parseInt(entityName.substring(1));
+                XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#${entityName.substring(1)}; in entity replacement`);
                 result += String.fromCodePoint(parsed);
             } else {
                 const nested = grammar?.resolveEntity(entityName);
@@ -1608,6 +1660,7 @@ export class SAXParser {
             }
             index = semiIndex + 1;
         }
+        XMLUtils.ensureValidXmlCharacters(this.xmlVersion, result, 'entity replacement text');
         return result;
     }
 
