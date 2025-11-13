@@ -43,4 +43,5 @@ export interface ContentHandler {
     skippedEntity(name: string): void;
 
     getGrammar(): Grammar | undefined;
+    setGrammar(grammar: Grammar | undefined): void;
 }

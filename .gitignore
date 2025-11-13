@@ -5,4 +5,4 @@ dist/
 .scannerwork/
 ts/test.ts
 test.xml
-tests/
+/tests/

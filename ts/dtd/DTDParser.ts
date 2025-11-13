@@ -30,6 +30,7 @@ export class DTDParser {
     private currentFile: string = '';
     private baseDirectory: string = '';
     private validating: boolean = false;
+    private overrideExistingDeclarations: boolean = false;
 
     constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
@@ -40,6 +41,14 @@ export class DTDParser {
         if (baseDirectory) {
             this.baseDirectory = baseDirectory;
         }
+    }
+
+    setGrammar(grammar: DTDGrammar): void {
+        this.grammar = grammar;
+    }
+
+    setOverrideExistingDeclarations(override: boolean): void {
+        this.overrideExistingDeclarations = override;
     }
 
     setValidating(validating: boolean): void {
@@ -90,7 +99,7 @@ export class DTDParser {
                 let elementText: string = this.source.substring(this.pointer, index + '>'.length);
                 let length = elementText.length;
                 let elementDecl: ElementDecl = this.parseElementDeclaration(elementText);
-                this.grammar.addElement(elementDecl);
+                this.grammar.addElement(elementDecl, this.overrideExistingDeclarations);
                 this.pointer += length;
                 continue;
             }
@@ -102,7 +111,7 @@ export class DTDParser {
                 let attListText: string = this.source.substring(this.pointer, index + '>'.length);
                 let length = attListText.length;
                 let attList: AttListDecl = this.parseAttributesListDeclaration(attListText);
-                this.grammar.addAttributes(attList.getName(), attList.getAttributes());
+                this.grammar.addAttributes(attList.getName(), attList.getAttributes(), this.overrideExistingDeclarations);
                 this.pointer += length;
                 continue;
             }
@@ -113,7 +122,7 @@ export class DTDParser {
                 }
                 let entityDeclText: string = this.source.substring(this.pointer, index + '>'.length);
                 let entityDecl: EntityDecl = this.parseEntityDeclaration(entityDeclText);
-                this.grammar.addEntity(entityDecl);
+                this.grammar.addEntity(entityDecl, this.overrideExistingDeclarations);
                 this.pointer += entityDeclText.length;
                 continue;
             }
@@ -127,7 +136,7 @@ export class DTDParser {
                     notationDeclText = this.resolveEntities(notationDeclText);
                 }
                 let notation: NotationDecl = this.parseNotationDeclaration(notationDeclText);
-                this.grammar.addNotation(notation);
+                this.grammar.addNotation(notation, this.overrideExistingDeclarations);
                 this.pointer += notationDeclText.length;
                 continue;
             }
@@ -172,7 +181,7 @@ export class DTDParser {
                             // an entity that contains the entire external file content
                             let externalContent = this.readFileContent(entityLocation);
                             let externalEntity = new EntityDecl(entityName, true, externalContent, '', '', '');
-                            this.grammar.addEntity(externalEntity);
+                            this.grammar.addEntity(externalEntity, this.overrideExistingDeclarations);
                             entity = externalEntity;
                             // Also extract any entity declarations from the external file
                             // for potential future use

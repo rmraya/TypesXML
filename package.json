@@ -13,7 +13,8 @@
     "TypeScript"
   ],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "testDtd": "tsc && node dist/tests/DTDTestSuite.js"
   },
   "author": {
     "name": "Rodolfo M. Raya",

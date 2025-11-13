@@ -55,23 +55,30 @@ export class DTDGrammar implements Grammar {
         return result;
     }
 
-    addElement(elementDecl: ElementDecl) {
-        if (!this.elementDeclMap.has(elementDecl.getName())) {
-            this.elementDeclMap.set(elementDecl.getName(), elementDecl);
+    addElement(elementDecl: ElementDecl, override: boolean = false) {
+        const name: string = elementDecl.getName();
+        if (override || !this.elementDeclMap.has(name)) {
+            this.elementDeclMap.set(name, elementDecl);
         }
     }
 
-    addAttributes(element: string, attributes: Map<string, AttDecl>) {
-        // Merge attributes, giving precedence to first declaration (XML spec requirement)
+    addAttributes(element: string, attributes: Map<string, AttDecl>, override: boolean = false) {
         let existingAttributes: Map<string, AttDecl> | undefined = this.attributesMap.get(element);
-        if (existingAttributes) {
+        if (!existingAttributes) {
+            existingAttributes = new Map<string, AttDecl>();
+            this.attributesMap.set(element, existingAttributes);
+        }
+
+        if (override) {
+            attributes.forEach((value, key) => {
+                existingAttributes!.set(key, value);
+            });
+        } else {
             attributes.forEach((value, key) => {
                 if (!existingAttributes!.has(key)) {
                     existingAttributes!.set(key, value);
                 }
             });
-        } else {
-            this.attributesMap.set(element, attributes);
         }
     }
 
@@ -89,10 +96,10 @@ export class DTDGrammar implements Grammar {
         return text;
     }
 
-    addEntity(entityDecl: EntityDecl) {
+    addEntity(entityDecl: EntityDecl, override: boolean = false) {
         // Parameter entities use %name key to avoid conflicts with general entities
         const key: string = entityDecl.isParameterEntity() ? `%${entityDecl.getName()}` : entityDecl.getName();
-        if (!this.entitiesMap.has(key)) {
+        if (override || !this.entitiesMap.has(key)) {
             this.entitiesMap.set(key, entityDecl);
         }
     }
@@ -105,9 +112,10 @@ export class DTDGrammar implements Grammar {
         return this.entitiesMap.get(`%${entityName}`);
     }
 
-    addNotation(notation: NotationDecl) {
-        if (!this.notationsMap.has(notation.getName())) {
-            this.notationsMap.set(notation.getName(), notation);
+    addNotation(notation: NotationDecl, override: boolean = false) {
+        const name: string = notation.getName();
+        if (override || !this.notationsMap.has(name)) {
+            this.notationsMap.set(name, notation);
         }
     }
 

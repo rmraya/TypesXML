@@ -42,6 +42,17 @@ export class DOMBuilder implements ContentHandler {
         this.inCdData = false;
     }
 
+    setGrammar(grammar: Grammar | undefined): void {
+        this.grammar = grammar;
+        if (grammar instanceof DTDGrammar) {
+            if (!this.dtdParser) {
+                this.dtdParser = new DTDParser(grammar);
+            } else {
+                this.dtdParser.setGrammar(grammar);
+            }
+        }
+    }
+
     setCatalog(catalog: Catalog): void {
         this.catalog = catalog;
     }
@@ -185,15 +196,13 @@ export class DOMBuilder implements ContentHandler {
         let docType: XMLDocumentType = new XMLDocumentType(name, publicId, systemId);
         this.document?.setDocumentType(docType);
         if (this.catalog) {
-            let url = this.catalog.resolveEntity(publicId, systemId);
+            const url = this.catalog.resolveEntity(publicId, systemId);
             if (url) {
                 if (!this.dtdParser) {
                     this.dtdParser = new DTDParser();
                 }
-                let dtdGrammar: Grammar = this.dtdParser.parseDTD(url);
-                if (dtdGrammar) {
-                    this.grammar = dtdGrammar;
-                }
+                const dtdGrammar: DTDGrammar = this.dtdParser.parseDTD(url);
+                this.setGrammar(dtdGrammar);
             }
         }
     }

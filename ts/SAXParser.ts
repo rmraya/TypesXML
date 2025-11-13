@@ -19,6 +19,8 @@ import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { NeedMoreDataError } from "./NeedMoreDataError";
 import { RelaxNGParser } from "./RelaxNGParser";
+import { DTDParser } from "./dtd/DTDParser";
+import { DTDGrammar } from "./dtd/DTDGrammar";
 import { StreamReader } from "./StreamReader";
 import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
@@ -59,6 +61,7 @@ export class SAXParser {
     sourceEnded: boolean = false;
     documentStarted: boolean = false;
     documentEnded: boolean = false;
+    inCDATASection: boolean = false;
 
     constructor() {
         this.characterRun = '';
@@ -72,6 +75,7 @@ export class SAXParser {
         this.sourceEnded = false;
         this.documentStarted = false;
         this.documentEnded = false;
+        this.inCDATASection = false;
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -190,6 +194,7 @@ export class SAXParser {
         this.sourceEnded = false;
         this.documentStarted = false;
         this.documentEnded = false;
+        this.inCDATASection = false;
         this.contentHandler?.initialize();
     }
 
@@ -353,6 +358,26 @@ export class SAXParser {
                 }
                 continue;
             }
+            if (this.inCDATASection) {
+                const endIndex: number = this.buffer.indexOf(']]>', this.pointer);
+                if (endIndex === -1) {
+                    this.characterRun += this.buffer.substring(this.pointer);
+                    this.pointer = this.buffer.length;
+                    if (!this.tryReadMore()) {
+                        if (this.sourceEnded) {
+                            throw new Error('Malformed XML document: unterminated CDATA section');
+                        }
+                        if (this.streamingMode) {
+                            throw new NeedMoreDataError();
+                        }
+                    }
+                    continue;
+                }
+                this.characterRun += this.buffer.substring(this.pointer, endIndex);
+                this.pointer = endIndex;
+                this.endCDATA();
+                continue;
+            }
             if (this.lookingAt('<?xml ') || this.lookingAt('<?xml\t') || this.lookingAt('<?xml\r') || this.lookingAt('<?xml\n')) {
                 this.parseXMLDeclaration();
                 continue;
@@ -425,6 +450,9 @@ export class SAXParser {
             }
             name += this.buffer.charAt(this.pointer++);
         }
+        const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        const resolvedEntity: string | undefined = grammar?.resolveEntity(name);
+
         if (name === 'lt') {
             this.contentHandler?.characters('<');
         } else if (name === 'gt') {
@@ -443,6 +471,13 @@ export class SAXParser {
             let code: number = parseInt(name.substring(1));
             let char: string = String.fromCharCode(code);
             this.contentHandler?.characters(this.xmlVersion === '1.0' ? XMLUtils.validXml10Chars(char) : XMLUtils.validXml11Chars(char));
+        } else if (resolvedEntity !== undefined) {
+            this.pointer++; // skip ';'
+            const remaining: string = this.buffer.substring(this.pointer);
+            const expandedReplacement: string = this.expandEntityReplacement(resolvedEntity, grammar);
+            this.buffer = expandedReplacement + remaining;
+            this.pointer = 0;
+            return;
         } else {
             this.contentHandler?.skippedEntity(name);
         }
@@ -844,6 +879,34 @@ export class SAXParser {
         }
     }
 
+    private processInternalSubset(internalSubset: string): void {
+        if (internalSubset.trim().length === 0) {
+            return;
+        }
+
+        const existingGrammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        const baseDir: string | undefined = this.currentFile ? dirname(this.currentFile) : undefined;
+        const parser: DTDParser = existingGrammar instanceof DTDGrammar ? new DTDParser(existingGrammar, baseDir) : new DTDParser(undefined, baseDir);
+        parser.setValidating(this.validating);
+        if (this.catalog) {
+            parser.setCatalog(this.catalog);
+        }
+        parser.setOverrideExistingDeclarations(true);
+        let updatedGrammar: DTDGrammar | undefined;
+        try {
+            updatedGrammar = parser.parseString(internalSubset);
+        } catch (error) {
+            if (this.validating) {
+                throw error;
+            }
+        } finally {
+            parser.setOverrideExistingDeclarations(false);
+        }
+        if (updatedGrammar) {
+            this.contentHandler?.setGrammar(updatedGrammar);
+        }
+    }
+
     parseDoctype() {
         this.cleanCharacterRun();
         this.pointer += 9; // skip '<!DOCTYPE'
@@ -933,7 +996,10 @@ export class SAXParser {
         let internalSubset: string = '';
         if (this.lookingAt('[')) {
             this.pointer++; // skip '['
-            while (true) {
+            let depth: number = 1;
+            let inQuotes: boolean = false;
+            let quoteChar: string = '';
+            while (depth > 0) {
                 this.ensureLookahead(1);
                 if (this.pointer >= this.buffer.length) {
                     if (this.sourceEnded) {
@@ -943,14 +1009,41 @@ export class SAXParser {
                         throw new NeedMoreDataError();
                     }
                 }
-                let char: string = this.buffer[this.pointer];
-                if (']' === char) {
-                    break;
+                const char: string = this.buffer.charAt(this.pointer);
+                if (inQuotes) {
+                    internalSubset += char;
+                    this.pointer++;
+                    if (char === quoteChar) {
+                        inQuotes = false;
+                        quoteChar = '';
+                    }
+                    continue;
+                }
+                if (char === '"' || char === '\'') {
+                    inQuotes = true;
+                    quoteChar = char;
+                    internalSubset += char;
+                    this.pointer++;
+                    continue;
+                }
+                if (char === '[') {
+                    depth++;
+                    internalSubset += char;
+                    this.pointer++;
+                    continue;
+                }
+                if (char === ']') {
+                    depth--;
+                    this.pointer++;
+                    if (depth === 0) {
+                        break;
+                    }
+                    internalSubset += char;
+                    continue;
                 }
                 internalSubset += char;
                 this.pointer++;
             }
-            this.pointer++; // skip ']'
         }
         // skip spaces after internal subset
         while (true) {
@@ -975,6 +1068,7 @@ export class SAXParser {
         if (internalSubset !== '') {
             this.contentHandler?.internalSubset(internalSubset);
         }
+        this.processInternalSubset(internalSubset);
         this.contentHandler?.endDTD();
     }
 
@@ -1212,11 +1306,65 @@ export class SAXParser {
         return map;
     }
 
+    private expandEntityReplacement(value: string, grammar: Grammar | undefined, depth: number = 0): string {
+        if (depth > 25) {
+            return value;
+        }
+        let result = '';
+        let index = 0;
+        while (index < value.length) {
+            const ampIndex = value.indexOf('&', index);
+            if (ampIndex === -1) {
+                result += value.substring(index);
+                break;
+            }
+            result += value.substring(index, ampIndex);
+            const semiIndex = value.indexOf(';', ampIndex + 1);
+            if (semiIndex === -1) {
+                result += value.substring(ampIndex);
+                break;
+            }
+            const entityName = value.substring(ampIndex + 1, semiIndex);
+            if (entityName.length === 0) {
+                result += '&;';
+                index = semiIndex + 1;
+                continue;
+            }
+            if (entityName === 'lt') {
+                result += '<';
+            } else if (entityName === 'gt') {
+                result += '>';
+            } else if (entityName === 'amp') {
+                result += '&';
+            } else if (entityName === 'apos') {
+                result += '\'';
+            } else if (entityName === 'quot') {
+                result += '"';
+            } else if (entityName.startsWith('#x')) {
+                const parsed = parseInt(entityName.substring(2), 16);
+                result += String.fromCodePoint(parsed);
+            } else if (entityName.startsWith('#')) {
+                const parsed = parseInt(entityName.substring(1));
+                result += String.fromCodePoint(parsed);
+            } else {
+                const nested = grammar?.resolveEntity(entityName);
+                if (nested !== undefined) {
+                    result += this.expandEntityReplacement(nested, grammar, depth + 1);
+                } else {
+                    result += '&' + entityName + ';';
+                }
+            }
+            index = semiIndex + 1;
+        }
+        return result;
+    }
+
     startCDATA() {
         this.cleanCharacterRun();
         this.pointer += 9; // skip '<![CDATA['
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
+        this.inCDATASection = true;
         this.contentHandler?.startCDATA();
     }
 
@@ -1225,6 +1373,7 @@ export class SAXParser {
         this.pointer += 3; // skip ']]>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
+        this.inCDATASection = false;
         this.contentHandler?.endCDATA();
     }
 }
