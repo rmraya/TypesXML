@@ -90,9 +90,41 @@ export class DTDTestSuite {
             }
         }
         console.log('\n');
-        console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa);
+        console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa + '\n\n');
 
+        // External data files
 
+        xmlFiles = readdirSync("./tests/xmltest/valid/ext-sa").filter((file) => file.endsWith(".xml"));
+
+        let validExtSa: number = 0;
+        let invalidExtSa: number = 0;
+
+        for (const xmlFile of xmlFiles) {
+            let parser: SAXParser = new SAXParser();
+            let domBuilder: DOMBuilder = new DOMBuilder();
+            parser.setContentHandler(domBuilder);
+            parser.setValidating(true);
+            try {
+                parser.parseFile("./tests/xmltest/valid/ext-sa/" + xmlFile);
+                const canonicalForm = readFileSync('./tests/xmltest/valid/ext-sa/out/' + xmlFile, "utf-8");
+                const canonicalizer: XMLCanonicalizer = new XMLCanonicalizer();
+                canonicalizer.setDocument(domBuilder.getDocument()!);
+                const generatedCanonicalForm = canonicalizer.toString();
+                if (canonicalForm !== generatedCanonicalForm) {
+                    console.log(' Generated form:\n' + generatedCanonicalForm);
+                    console.log(' Expected form:\n' + canonicalForm);
+                    throw new Error('Canonical form does not match for file ' + xmlFile);
+                }
+                validExtSa++;
+            } catch (error) {
+                console.error('Error parsing file ' + xmlFile + ':', error, '\n');
+                invalidExtSa++;
+            }
+        }
+        console.log('\n');
+        console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa + '\n\n');
+
+        
         if (!existsSync("./tests/xmltest/invalid")) {
             throw new Error("DTD Test Suite invalid folder not found in ./tests/xmltest/invalid");
         }

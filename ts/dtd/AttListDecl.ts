@@ -98,6 +98,10 @@ export class AttListDecl implements XMLNode {
             let c: string = text.charAt(i);
 
             if ((c === '"' || c === "'") && !inQuotes) {
+                if (word.length > 0) {
+                    result.push(word);
+                    word = '';
+                }
                 inQuotes = true;
                 quoteChar = c;
                 word += c;

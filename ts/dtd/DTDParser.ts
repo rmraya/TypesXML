@@ -449,16 +449,23 @@ export class DTDParser {
                     const context: string = fragment.substring(index, Math.min(fragment.length, index + 80));
                     throw new Error('Unknown entity: ' + entityName + ' in resolveEntities while processing "' + context + '"');
                 }
-                const replacement: string = entity.getValue();
-                const beforeChar: string = result.length > 0 ? result.charAt(result.length - 1) : '';
-                const afterChar: string = end + 1 < fragment.length ? fragment.charAt(end + 1) : '';
-                const expandedReplacement: string = replacement !== '' ? this.resolveEntities(replacement, depth + 1) : '';
-                if (this.needsSeparatorBefore(beforeChar, expandedReplacement)) {
-                    result += ' ';
-                }
-                result += expandedReplacement;
-                if (this.needsSeparatorAfter(afterChar, expandedReplacement)) {
-                    result += ' ';
+                let replacement: string = entity.getValue();
+                if (replacement !== '') {
+                    replacement = this.resolveEntities(replacement, depth + 1);
+
+                    const beforeChar: string = result.length > 0 ? result.charAt(result.length - 1) : '';
+                    const afterChar: string = (end + 1) < fragment.length ? fragment.charAt(end + 1) : '';
+                    const originalBeforeChar: string = index > 0 ? fragment.charAt(index - 1) : '';
+                    const originalAfterChar: string = afterChar;
+
+                    if (this.needsSeparatorBefore(beforeChar, replacement, originalBeforeChar)) {
+                        replacement = ' ' + replacement;
+                    }
+                    if (this.needsSeparatorAfter(afterChar, replacement, originalAfterChar)) {
+                        replacement = replacement + ' ';
+                    }
+
+                    result += replacement;
                 }
                 index = end + 1;
                 continue;
@@ -684,7 +691,8 @@ export class DTDParser {
                     }
                     return new EntityDecl(name, parameterEntity, '', systemId, publicId, ndata);
                 }
-                return new EntityDecl(name, parameterEntity, '', systemId, publicId, '');
+                const externalValue: string = this.loadExternalEntity(publicId, systemId, false);
+                return new EntityDecl(name, parameterEntity, externalValue, systemId, publicId, '');
             } else if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
                 i += 'SYSTEM'.length;
                 // skip spaces before system id
@@ -739,8 +747,8 @@ export class DTDParser {
                     // NDATA entities are unparsed and shouldn't have content loaded
                     return new EntityDecl(name, parameterEntity, '', systemId, '', ndata);
                 }
-                // Don't load external entity content during DTD parsing - load lazily when referenced
-                return new EntityDecl(name, parameterEntity, '', systemId, '', '');
+                const externalValue: string = this.loadExternalEntity('', systemId, false);
+                return new EntityDecl(name, parameterEntity, externalValue, systemId, '', '');
             } else {
                 // get entity value
                 let separator: string = declaration.charAt(i);
@@ -1154,12 +1162,14 @@ export class DTDParser {
                     const beforeChar: string = referenceIndex > 0 ? result.charAt(referenceIndex - 1) : '';
                     const afterIndex: number = referenceIndex + match.reference.length;
                     const afterChar: string = afterIndex < result.length ? result.charAt(afterIndex) : '';
+                    const originalBeforeChar: string = beforeChar;
+                    const originalAfterChar: string = afterChar;
 
                     let replacement: string = entityValue;
-                    if (this.needsSeparatorBefore(beforeChar, replacement)) {
+                    if (this.needsSeparatorBefore(beforeChar, replacement, originalBeforeChar)) {
                         replacement = ' ' + replacement;
                     }
-                    if (this.needsSeparatorAfter(afterChar, replacement)) {
+                    if (this.needsSeparatorAfter(afterChar, replacement, originalAfterChar)) {
                         replacement = replacement + ' ';
                     }
 
@@ -1183,11 +1193,17 @@ export class DTDParser {
         return result;
     }
 
-    private needsSeparatorBefore(beforeChar: string, replacement: string): boolean {
+    private needsSeparatorBefore(beforeChar: string, replacement: string, originalBeforeChar: string = ''): boolean {
         if (replacement.length === 0) {
             return false;
         }
         if (beforeChar === '') {
+            return false;
+        }
+        if (beforeChar === '%') {
+            return false;
+        }
+        if (originalBeforeChar === ';' || originalBeforeChar === '%') {
             return false;
         }
         if (XMLUtils.isXmlSpace(beforeChar)) {
@@ -1196,14 +1212,31 @@ export class DTDParser {
         if (this.isMarkupDelimiter(beforeChar)) {
             return false;
         }
-        return !this.startsWithWhitespace(replacement);
+
+        const firstChar: string = replacement.charAt(0);
+        if (firstChar === '%') {
+            return false;
+        }
+        if (XMLUtils.isXmlSpace(firstChar)) {
+            return false;
+        }
+        if (this.isMarkupDelimiter(firstChar)) {
+            return false;
+        }
+        return true;
     }
 
-    private needsSeparatorAfter(afterChar: string, replacement: string): boolean {
+    private needsSeparatorAfter(afterChar: string, replacement: string, originalAfterChar: string = ''): boolean {
         if (replacement.length === 0) {
             return false;
         }
         if (afterChar === '') {
+            return false;
+        }
+        if (afterChar === '%') {
+            return false;
+        }
+        if (originalAfterChar === '%' || originalAfterChar === ';') {
             return false;
         }
         if (XMLUtils.isXmlSpace(afterChar)) {
@@ -1212,15 +1245,18 @@ export class DTDParser {
         if (this.isMarkupDelimiter(afterChar)) {
             return false;
         }
-        return !this.endsWithWhitespace(replacement);
-    }
 
-    private startsWithWhitespace(value: string): boolean {
-        return value.length > 0 && XMLUtils.isXmlSpace(value.charAt(0));
-    }
-
-    private endsWithWhitespace(value: string): boolean {
-        return value.length > 0 && XMLUtils.isXmlSpace(value.charAt(value.length - 1));
+        const lastChar: string = replacement.charAt(replacement.length - 1);
+        if (lastChar === '%') {
+            return false;
+        }
+        if (XMLUtils.isXmlSpace(lastChar)) {
+            return false;
+        }
+        if (this.isMarkupDelimiter(lastChar)) {
+            return false;
+        }
+        return true;
     }
 
     private isMarkupDelimiter(char: string): boolean {
