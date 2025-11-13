@@ -58,7 +58,7 @@ export class DTDTestSuite {
             }
         }
         console.log('\n');
-        console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa);
+        console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa + '\n\n');
 
         // Not stand alone files
 

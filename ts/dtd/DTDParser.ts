@@ -450,8 +450,15 @@ export class DTDParser {
                     throw new Error('Unknown entity: ' + entityName + ' in resolveEntities while processing "' + context + '"');
                 }
                 const replacement: string = entity.getValue();
-                if (replacement !== '') {
-                    result += this.resolveEntities(replacement, depth + 1);
+                const beforeChar: string = result.length > 0 ? result.charAt(result.length - 1) : '';
+                const afterChar: string = end + 1 < fragment.length ? fragment.charAt(end + 1) : '';
+                const expandedReplacement: string = replacement !== '' ? this.resolveEntities(replacement, depth + 1) : '';
+                if (this.needsSeparatorBefore(beforeChar, expandedReplacement)) {
+                    result += ' ';
+                }
+                result += expandedReplacement;
+                if (this.needsSeparatorAfter(afterChar, expandedReplacement)) {
+                    result += ' ';
                 }
                 index = end + 1;
                 continue;
@@ -1118,42 +1125,52 @@ export class DTDParser {
     }
 
     expandParameterEntities(text: string): string {
-        let result = text;
-        let expandedEntities = new Set<string>(); // Track expanded entities to prevent circular references
-        let maxIterations = 50; // Increase limit for complex DTDs
-        let iteration = 0;
+        let result: string = text;
+        const maxIterations: number = 50;
+        let iteration: number = 0;
 
         while (iteration < maxIterations) {
-            let changed = false;
-
             const entityMatches = this.findParameterEntityReferences(result);
             if (entityMatches.length === 0) {
-                break; // No more entities to expand
+                break;
             }
 
-            for (const match of entityMatches) {
-                const entityName: string = match.name;
+            let changed: boolean = false;
 
-                // Skip if we've already expanded this entity to prevent cycles
-                if (expandedEntities.has(entityName)) {
+            for (const match of entityMatches) {
+                const entity = this.grammar.getParameterEntity(match.name);
+                if (!entity) {
                     continue;
                 }
+                const entityValue: string = entity.getValue();
 
-                let entity = this.grammar.getParameterEntity(entityName);
-                if (entity && entity.getValue()) {
-                    const entityValue = entity.getValue();
-
-                    // Only expand if the value doesn't contain the same entity reference (simple cycle detection)
-                    if (!entityValue.includes(match.reference)) {
-                        result = result.replace(new RegExp(this.escapeRegExp(match.reference), 'g'), entityValue);
-                        expandedEntities.add(entityName);
-                        changed = true;
+                let searchIndex: number = 0;
+                while (true) {
+                    const referenceIndex: number = result.indexOf(match.reference, searchIndex);
+                    if (referenceIndex === -1) {
+                        break;
                     }
+
+                    const beforeChar: string = referenceIndex > 0 ? result.charAt(referenceIndex - 1) : '';
+                    const afterIndex: number = referenceIndex + match.reference.length;
+                    const afterChar: string = afterIndex < result.length ? result.charAt(afterIndex) : '';
+
+                    let replacement: string = entityValue;
+                    if (this.needsSeparatorBefore(beforeChar, replacement)) {
+                        replacement = ' ' + replacement;
+                    }
+                    if (this.needsSeparatorAfter(afterChar, replacement)) {
+                        replacement = replacement + ' ';
+                    }
+
+                    result = result.substring(0, referenceIndex) + replacement + result.substring(afterIndex);
+                    searchIndex = referenceIndex + replacement.length;
+                    changed = true;
                 }
             }
 
             if (!changed) {
-                break; // No more expansions possible
+                break;
             }
 
             iteration++;
@@ -1166,8 +1183,51 @@ export class DTDParser {
         return result;
     }
 
-    private escapeRegExp(string: string): string {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    private needsSeparatorBefore(beforeChar: string, replacement: string): boolean {
+        if (replacement.length === 0) {
+            return false;
+        }
+        if (beforeChar === '') {
+            return false;
+        }
+        if (XMLUtils.isXmlSpace(beforeChar)) {
+            return false;
+        }
+        if (this.isMarkupDelimiter(beforeChar)) {
+            return false;
+        }
+        return !this.startsWithWhitespace(replacement);
+    }
+
+    private needsSeparatorAfter(afterChar: string, replacement: string): boolean {
+        if (replacement.length === 0) {
+            return false;
+        }
+        if (afterChar === '') {
+            return false;
+        }
+        if (XMLUtils.isXmlSpace(afterChar)) {
+            return false;
+        }
+        if (this.isMarkupDelimiter(afterChar)) {
+            return false;
+        }
+        return !this.endsWithWhitespace(replacement);
+    }
+
+    private startsWithWhitespace(value: string): boolean {
+        return value.length > 0 && XMLUtils.isXmlSpace(value.charAt(0));
+    }
+
+    private endsWithWhitespace(value: string): boolean {
+        return value.length > 0 && XMLUtils.isXmlSpace(value.charAt(value.length - 1));
+    }
+
+    private isMarkupDelimiter(char: string): boolean {
+        if (char === '') {
+            return false;
+        }
+        return ['<', '>', '[', ']', '(', ')', '"', '\'', '|', '?', '*', '+', '=', ',', ';', ':', '/'].includes(char);
     }
 
     private findParameterEntityReferences(text: string): Array<{ reference: string, name: string }> {
