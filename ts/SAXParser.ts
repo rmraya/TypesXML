@@ -42,6 +42,15 @@ export type ParserInputSource = FileReader | StringReader | StreamReader;
 
 export class SAXParser {
 
+    private static readonly SUPPORTED_ENCODINGS: Map<string, string> = new Map<string, string>([
+        ['UTF-8', 'UTF-8'],
+        ['UTF-16', 'UTF-16'],
+        ['UTF-16LE', 'UTF-16LE'],
+        ['UTF-16BE', 'UTF-16BE']
+    ]);
+
+    private static readonly ENCODING_NAME_PATTERN: RegExp = /^[A-Za-z][A-Za-z0-9._-]*$/;
+
     contentHandler: ContentHandler | undefined;
     reader: ParserInputSource | undefined;
     pointer: number;
@@ -66,6 +75,8 @@ export class SAXParser {
     pendingCR: boolean = false;
     readingFromFile: boolean = false;
     internalSubsetApplied: boolean = false;
+    xmlDeclarationParsed: boolean = false;
+    leadingContentBeforeXmlDeclaration: boolean = false;
 
     constructor() {
         this.characterRun = '';
@@ -83,6 +94,8 @@ export class SAXParser {
         this.pendingCR = false;
         this.readingFromFile = false;
         this.internalSubsetApplied = false;
+        this.xmlDeclarationParsed = false;
+        this.leadingContentBeforeXmlDeclaration = false;
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -205,6 +218,8 @@ export class SAXParser {
         this.pendingCR = false;
         this.readingFromFile = reader instanceof FileReader;
         this.internalSubsetApplied = false;
+        this.xmlDeclarationParsed = false;
+        this.leadingContentBeforeXmlDeclaration = false;
         this.contentHandler?.initialize();
     }
 
@@ -424,6 +439,9 @@ export class SAXParser {
                 continue;
             }
             if (this.lookingAt('<?xml ') || this.lookingAt('<?xml\t') || this.lookingAt('<?xml\r') || this.lookingAt('<?xml\n')) {
+                if (this.rootParsed && this.elementStack > 0) {
+                    throw new Error('Malformed XML declaration: declaration cannot appear inside the document element');
+                }
                 this.parseXMLDeclaration();
                 continue;
             }
@@ -473,6 +491,9 @@ export class SAXParser {
             const char: string = String.fromCodePoint(codePoint);
             if (!this.rootParsed && !XMLUtils.isXmlSpace(char)) {
                 throw new Error('Malformed XML document: text found in prolog');
+            }
+            if (!this.xmlDeclarationParsed && !this.rootParsed && XMLUtils.isXmlSpace(char)) {
+                this.leadingContentBeforeXmlDeclaration = true;
             }
             if (this.rootParsed && this.elementStack === 0 && !XMLUtils.isXmlSpace(char)) {
                 throw new Error('Malformed XML document: text found after root element');
@@ -889,6 +910,9 @@ export class SAXParser {
         if (target.length === 0) {
             throw new Error('Malformed XML document: processing instruction missing target');
         }
+        if (target.toLowerCase() === 'xml') {
+            throw new Error('Malformed XML document: XML declaration must use lowercase "<?xml"');
+        }
         // skip spaces
         for (; i < instructionText.length; i++) {
             let char: string = instructionText[i];
@@ -1154,6 +1178,9 @@ export class SAXParser {
             }
         }
         if (internalSubset !== '') {
+            if (/(<\?xml)(?=[\s?>])/i.test(internalSubset)) {
+                throw new Error('Malformed DOCTYPE declaration: XML declaration is not allowed inside the internal subset');
+            }
             this.processInternalSubset(internalSubset);
         }
         // skip spaces after internal subset
@@ -1405,6 +1432,15 @@ export class SAXParser {
     }
 
     parseXMLDeclaration() {
+        if (this.xmlDeclarationParsed) {
+            throw new Error('Malformed XML declaration: multiple declarations are not allowed');
+        }
+        if (this.rootParsed) {
+            throw new Error('Malformed XML declaration: declaration cannot appear after the root element');
+        }
+        if (this.leadingContentBeforeXmlDeclaration) {
+            throw new Error('Malformed XML declaration: declaration must be the first content in the document');
+        }
         let declarationText: string = '';
         this.pointer += 6; // skip '<?xml '
         while (true) {
@@ -1427,16 +1463,49 @@ export class SAXParser {
             this.pointer += char.length;
         }
         declarationText = declarationText.trim();
-        let attributes: Map<string, string> = this.parseAttributes(declarationText);
+        const attributePairs: Array<{ name: string; value: string }> = this.parseAttributePairs(declarationText);
+        const attributes: Map<string, string> = new Map<string, string>();
+        attributePairs.forEach((pair) => attributes.set(pair.name, pair.value));
         const allowedPseudoAttributes: Set<string> = new Set<string>(['version', 'encoding', 'standalone']);
-        attributes.forEach((_value: string, key: string) => {
+        attributePairs.forEach((pair, index) => {
+            const key: string = pair.name;
             if (!allowedPseudoAttributes.has(key)) {
                 throw new Error('Malformed XML declaration: invalid pseudo-attribute "' + key + '"');
+            }
+            if (key === 'version' && index !== 0) {
+                throw new Error('Malformed XML declaration: "version" pseudo-attribute must appear first');
+            }
+            if (key === 'encoding') {
+                if (index === 0) {
+                    throw new Error('Malformed XML declaration: "encoding" pseudo-attribute must follow "version"');
+                }
+                if (attributePairs[index - 1].name !== 'version') {
+                    throw new Error('Malformed XML declaration: "encoding" pseudo-attribute must immediately follow "version"');
+                }
+            }
+            if (key === 'standalone') {
+                if (index === 0) {
+                    throw new Error('Malformed XML declaration: "standalone" pseudo-attribute must follow "version"');
+                }
+                const previousNames: Set<string> = new Set<string>(attributePairs.slice(0, index).map((entry) => entry.name));
+                if (!previousNames.has('version')) {
+                    throw new Error('Malformed XML declaration: "standalone" pseudo-attribute requires "version"');
+                }
+                if (previousNames.has('encoding') && attributePairs[index - 1].name !== 'encoding') {
+                    throw new Error('Malformed XML declaration: "standalone" pseudo-attribute must follow "encoding" when both are present');
+                }
             }
         });
         const versionValue: string | undefined = attributes.get('version');
         if (!versionValue) {
             throw new Error('Malformed XML declaration: missing required "version" pseudo-attribute');
+        }
+        const encodingValue: string | undefined = attributes.get('encoding');
+        let encoding: string = 'UTF-8';
+        if (encodingValue !== undefined) {
+            const canonicalEncoding: string = this.validateEncodingValue(encodingValue);
+            attributes.set('encoding', canonicalEncoding);
+            encoding = canonicalEncoding;
         }
         const standaloneValue: string | undefined = attributes.get('standalone');
         if (standaloneValue !== undefined && standaloneValue !== 'yes' && standaloneValue !== 'no') {
@@ -1446,8 +1515,9 @@ export class SAXParser {
         this.pointer = 0;
         const version: string = versionValue;
         this.xmlVersion = version;
-        let encoding: string = attributes.get('encoding') || 'UTF-8';
         this.contentHandler?.xmlDeclaration(version, encoding, attributes.get('standalone'));
+        this.xmlDeclarationParsed = true;
+        this.leadingContentBeforeXmlDeclaration = false;
     }
 
     lookingAt(text: string): boolean {
@@ -1471,8 +1541,9 @@ export class SAXParser {
         return true;
     }
 
-    parseAttributes(text: string): Map<string, string> {
-        const map: Map<string, string> = new Map<string, string>();
+    private parseAttributePairs(text: string): Array<{ name: string; value: string }> {
+        const pairs: Array<{ name: string; value: string }> = [];
+        const seen: Set<string> = new Set<string>();
         let index: number = 0;
         while (index < text.length) {
             while (index < text.length && XMLUtils.isXmlSpace(text.charAt(index))) {
@@ -1519,13 +1590,41 @@ export class SAXParser {
                 throw new Error('Malformed attributes list');
             }
             const value: string = text.substring(valueStart, index);
-            if (map.has(name)) {
+            index++; // skip closing quote
+            if (index < text.length) {
+                const separatorChar: string = text.charAt(index);
+                if (!XMLUtils.isXmlSpace(separatorChar) && separatorChar !== '?' && separatorChar !== '/' && separatorChar !== '>') {
+                    throw new Error('Malformed attributes list: attribute "' + name + '" must be followed by whitespace');
+                }
+            }
+            if (seen.has(name)) {
                 throw new Error(`Malformed attributes list: duplicate attribute "${name}"`);
             }
-            index++; // skip closing quote
-            map.set(name, value);
+            seen.add(name);
+            pairs.push({ name, value });
         }
+        return pairs;
+    }
+
+    parseAttributes(text: string): Map<string, string> {
+        const map: Map<string, string> = new Map<string, string>();
+        const pairs: Array<{ name: string; value: string }> = this.parseAttributePairs(text);
+        pairs.forEach((pair) => {
+            map.set(pair.name, pair.value);
+        });
         return map;
+    }
+
+    private validateEncodingValue(rawEncoding: string): string {
+        if (!SAXParser.ENCODING_NAME_PATTERN.test(rawEncoding)) {
+            throw new Error('Malformed XML declaration: invalid encoding name "' + rawEncoding + '"');
+        }
+        const normalized: string = rawEncoding.toUpperCase();
+        const canonical: string | undefined = SAXParser.SUPPORTED_ENCODINGS.get(normalized);
+        if (!canonical) {
+            throw new Error('Malformed XML declaration: unsupported encoding "' + rawEncoding + '"');
+        }
+        return canonical;
     }
 
     private normalizeDTDAttributes(elementName: string, attributes: Map<string, string>): Map<string, string> {

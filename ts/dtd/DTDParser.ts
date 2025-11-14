@@ -35,6 +35,7 @@ export class DTDParser {
     private preexistingEntityKeys: Set<string> = new Set();
     private preexistingAttributeKeys: Map<string, Set<string>> = new Map();
     private unresolvedExternalEntities: Map<string, string> = new Map();
+    private parsingInternalSubset: boolean = false;
 
     constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
@@ -70,26 +71,38 @@ export class DTDParser {
     }
 
     parseFile(file: string): DTDGrammar {
-        this.source = '';
-        let stats: Stats = statSync(file, { bigint: false, throwIfNoEntry: true });
-        this.currentFile = file;
-        let blockSize: number = stats.blksize;
-        let fileHandle = openSync(file, 'r');
-        let buffer = Buffer.alloc(blockSize);
-        let bytesRead: number = readSync(fileHandle, buffer, 0, blockSize, 0);
-        while (bytesRead > 0) {
-            this.source += buffer.toString('utf8', 0, bytesRead);
-            bytesRead = readSync(fileHandle, buffer, 0, blockSize, this.source.length);
+        const previousInternalSubsetFlag: boolean = this.parsingInternalSubset;
+        this.parsingInternalSubset = false;
+        try {
+            this.source = '';
+            let stats: Stats = statSync(file, { bigint: false, throwIfNoEntry: true });
+            this.currentFile = file;
+            let blockSize: number = stats.blksize;
+            let fileHandle = openSync(file, 'r');
+            let buffer = Buffer.alloc(blockSize);
+            let bytesRead: number = readSync(fileHandle, buffer, 0, blockSize, 0);
+            while (bytesRead > 0) {
+                this.source += buffer.toString('utf8', 0, bytesRead);
+                bytesRead = readSync(fileHandle, buffer, 0, blockSize, this.source.length);
+            }
+            closeSync(fileHandle);
+            return this.parse();
+        } finally {
+            this.parsingInternalSubset = previousInternalSubsetFlag;
         }
-        closeSync(fileHandle);
-        return this.parse();
     }
 
     parseString(source: string): DTDGrammar {
-        this.source = source;
-        this.parse();
-        this.grammar.processModels();
-        return this.grammar;
+        const previousInternalSubsetFlag: boolean = this.parsingInternalSubset;
+        this.parsingInternalSubset = true;
+        try {
+            this.source = source;
+            this.parse();
+            this.grammar.processModels();
+            return this.grammar;
+        } finally {
+            this.parsingInternalSubset = previousInternalSubsetFlag;
+        }
     }
 
     parse(): DTDGrammar {
@@ -620,9 +633,14 @@ export class DTDParser {
                     }
                     value += char;
                 }
-                value = this.normalizeEntityLiteral(value);
                 const location: string = this.currentFile || this.baseDirectory || 'DTD';
+                if (this.parsingInternalSubset && this.containsParameterEntityReference(value)) {
+                    const where: string = location ? ` in ${location}` : '';
+                    throw new Error(`Invalid parameter entity "%${name}"${where}: parameter entity references are not allowed in replacement text within the internal subset`);
+                }
+                value = this.normalizeEntityLiteral(value);
                 this.validateParameterEntityValue(value, name, location);
+                this.validateParsedEntityValue(value, name, location, true);
                 return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, value, '', '', ''));
             }
         } else {
@@ -774,9 +792,16 @@ export class DTDParser {
                     value += char;
                 }
                 if (XMLUtils.hasParameterEntity(value)) {
+                    if (this.parsingInternalSubset) {
+                        const locationInfo: string = this.currentFile || this.baseDirectory || 'DTD';
+                        const where: string = locationInfo ? ` in ${locationInfo}` : '';
+                        throw new Error(`Invalid general entity "${name}"${where}: parameter entity references are not allowed in replacement text within the internal subset`);
+                    }
                     value = this.resolveEntities(value);
                 }
                 value = this.normalizeEntityLiteral(value);
+                const location: string = this.currentFile || this.baseDirectory || 'DTD';
+                this.validateParsedEntityValue(value, name, location, false);
                 return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, value, '', '', ''));
             }
         }
@@ -880,7 +905,79 @@ export class DTDParser {
         }
     }
 
+    private validateParsedEntityValue(content: string, entityName: string, location: string, isParameterEntity: boolean): void {
+        if (!this.validating || content.length === 0) {
+            return;
+        }
+        const where: string = location ? ` in ${location}` : '';
+        const entityLabel: string = isParameterEntity ? `%${entityName}` : entityName;
+        const entityType: string = isParameterEntity ? 'parameter entity' : 'general entity';
+        let index: number = 0;
+        while (index < content.length) {
+            const char: string = content.charAt(index);
+            if (char !== '&') {
+                index++;
+                continue;
+            }
+
+            if (index + 1 >= content.length) {
+                throw new Error(`Invalid ${entityType} "${entityLabel}"${where}: unterminated entity reference in replacement text`);
+            }
+
+            const following: string = content.charAt(index + 1);
+            if (following === '#') {
+                let referenceIndex: number = index + 2;
+                if (referenceIndex >= content.length) {
+                    throw new Error(`Invalid ${entityType} "${entityLabel}"${where}: malformed character reference in replacement text`);
+                }
+                const radixChar: string = content.charAt(referenceIndex);
+                let validDigits: RegExp;
+                if (radixChar === 'x' || radixChar === 'X') {
+                    referenceIndex++;
+                    validDigits = /^[0-9a-fA-F]$/;
+                } else {
+                    validDigits = /^[0-9]$/;
+                }
+                let digitCount: number = 0;
+                while (referenceIndex < content.length) {
+                    const current: string = content.charAt(referenceIndex);
+                    if (current === ';') {
+                        break;
+                    }
+                    if (!validDigits.test(current)) {
+                        throw new Error(`Invalid ${entityType} "${entityLabel}"${where}: malformed character reference in replacement text`);
+                    }
+                    digitCount++;
+                    referenceIndex++;
+                }
+                if (digitCount === 0 || referenceIndex >= content.length || content.charAt(referenceIndex) !== ';') {
+                    throw new Error(`Invalid ${entityType} "${entityLabel}"${where}: unterminated character reference in replacement text`);
+                }
+                index = referenceIndex + 1;
+                continue;
+            }
+
+            if (!XMLUtils.isNameStartChar(following)) {
+                throw new Error(`Invalid ${entityType} "${entityLabel}"${where}: unescaped '&' in replacement text`);
+            }
+
+            let refIndex: number = index + 2;
+            while (refIndex < content.length && XMLUtils.isNameChar(content.charAt(refIndex))) {
+                refIndex++;
+            }
+            if (refIndex >= content.length || content.charAt(refIndex) !== ';') {
+                throw new Error(`Invalid ${entityType} "${entityLabel}"${where}: unterminated entity reference in replacement text`);
+            }
+            index = refIndex + 1;
+        }
+    }
+
     parseNotationDeclaration(declaration: string): NotationDecl {
+        if (this.parsingInternalSubset && this.hasParameterEntityReferenceOutsideLiterals(declaration)) {
+            const location: string = this.currentFile || this.baseDirectory || 'DTD';
+            const where: string = location ? ` in ${location}` : '';
+            throw new Error(`Invalid NOTATION declaration${where}: parameter entity references are not allowed inside markup declarations in the internal subset`);
+        }
         let name: string = '';
         let i: number = '<!NOTATION'.length;
         let char: string = declaration.charAt(i);
@@ -980,6 +1077,11 @@ export class DTDParser {
     }
 
     parseAttributesListDeclaration(declaration: string): AttListDecl {
+        if (this.parsingInternalSubset && this.hasParameterEntityReferenceOutsideLiterals(declaration)) {
+            const location: string = this.currentFile || this.baseDirectory || 'DTD';
+            const where: string = location ? ` in ${location}` : '';
+            throw new Error(`Invalid ATTLIST declaration${where}: parameter entity references are not allowed inside markup declarations in the internal subset`);
+        }
         // replace all entities in the declaration
         declaration = this.resolveEntities(declaration);
       
@@ -1022,7 +1124,7 @@ export class DTDParser {
             throw new Error(`Invalid element name in ATTLIST declaration: "${name}"`);
         }
 
-        // Expand parameter entities in attributes text before parsing
+        // Expand parameter entities in attributes text before parsing (external subsets only)
         attributesText = this.expandParameterEntities(attributesText);
 
         let list: AttListDecl = new AttListDecl(name, attributesText)
@@ -1030,6 +1132,11 @@ export class DTDParser {
     }
 
     parseElementDeclaration(declaration: string): ElementDecl {
+        if (this.parsingInternalSubset && this.hasParameterEntityReferenceOutsideLiterals(declaration)) {
+            const location: string = this.currentFile || this.baseDirectory || 'DTD';
+            const where: string = location ? ` in ${location}` : '';
+            throw new Error(`Invalid ELEMENT declaration${where}: parameter entity references are not allowed inside markup declarations in the internal subset`);
+        }
         // replace entities in the declaration
         declaration = this.resolveEntities(declaration);
 
@@ -1162,10 +1269,11 @@ export class DTDParser {
             // Remove optional text declaration so entity replacement text contains only actual content
             content = this.removeTextDeclaration(content);
 
+            const contextName: string = entityName || systemId || publicId || '[external entity]';
             if (isParameterEntity) {
-                const contextName: string = entityName || systemId || publicId || '[external entity]';
                 this.validateParameterEntityValue(content, contextName, location);
             }
+            this.validateParsedEntityValue(content, contextName, location, isParameterEntity);
 
             // Don't trim - preserve original content including whitespace/newlines
             if (entityName) {
@@ -1348,6 +1456,83 @@ export class DTDParser {
         }
 
         return result;
+    }
+
+    private containsParameterEntityReference(text: string): boolean {
+        for (let index = 0; index < text.length; index++) {
+            if (text.charAt(index) !== '%') {
+                continue;
+            }
+            const endIndex: number | null = this.readParameterEntityReference(text, index);
+            if (endIndex !== null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private hasParameterEntityReferenceOutsideLiterals(text: string): boolean {
+        let inSingleQuote: boolean = false;
+        let inDoubleQuote: boolean = false;
+        for (let index = 0; index < text.length; index++) {
+            const char: string = text.charAt(index);
+            if (!inDoubleQuote && char === "'") {
+                inSingleQuote = !inSingleQuote;
+                continue;
+            }
+            if (!inSingleQuote && char === '"') {
+                inDoubleQuote = !inDoubleQuote;
+                continue;
+            }
+            if (inSingleQuote || inDoubleQuote) {
+                continue;
+            }
+
+            if (char === '<' && text.startsWith('<!--', index)) {
+                const end: number = text.indexOf('-->', index + 4);
+                if (end === -1) {
+                    return false;
+                }
+                index = end + 2;
+                continue;
+            }
+
+            if (char === '<' && text.startsWith('<!--', index)) {
+                const end: number = text.indexOf('-->', index + 4);
+                if (end === -1) {
+                    return false;
+                }
+                index = end + 2;
+                continue;
+            }
+
+            if (char === '%') {
+                const endIndex: number | null = this.readParameterEntityReference(text, index);
+                if (endIndex !== null) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private readParameterEntityReference(text: string, percentIndex: number): number | null {
+        const nameStartIndex: number = percentIndex + 1;
+        if (nameStartIndex >= text.length) {
+            return null;
+        }
+        const nameStartChar: string = text.charAt(nameStartIndex);
+        if (!XMLUtils.isNameStartChar(nameStartChar)) {
+            return null;
+        }
+        let nameEndIndex: number = nameStartIndex + 1;
+        while (nameEndIndex < text.length && XMLUtils.isNameChar(text.charAt(nameEndIndex))) {
+            nameEndIndex++;
+        }
+        if (nameEndIndex < text.length && text.charAt(nameEndIndex) === ';') {
+            return nameEndIndex;
+        }
+        return null;
     }
 
     private needsSeparatorBefore(beforeChar: string, replacement: string, originalBeforeChar: string = ''): boolean {

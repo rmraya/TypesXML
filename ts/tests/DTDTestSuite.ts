@@ -53,7 +53,7 @@ export class DTDTestSuite {
                 }
                 validSa++;
             } catch (error) {
-                console.error('Error parsing file ./tests/xmltest/valid/sa/' + xmlFile + ':', error, '\n');
+                console.error('Error parsing file ./tests/xmltest/valid/sa/' + xmlFile + ' - ', error, '\n');
                 invalidSa++;
             }
         }
@@ -83,7 +83,7 @@ export class DTDTestSuite {
                 }
                 validNotSa++;
             } catch (error) {
-                console.error('Error parsing file ./tests/xmltest/valid/not-sa/' + xmlFile + ':', error, '\n');
+                console.error('Error parsing file ./tests/xmltest/valid/not-sa/' + xmlFile + ' - ', error, '\n');
                 invalidNotSa++;
             }
         }
@@ -113,7 +113,7 @@ export class DTDTestSuite {
                 }
                 validExtSa++;
             } catch (error) {
-                console.error('Error parsing file ./tests/xmltest/valid/ext-sa/' + xmlFile + ':', error, '\n');
+                console.error('Error parsing file ./tests/xmltest/valid/ext-sa/' + xmlFile + ' - ', error, '\n');
                 invalidExtSa++;
             }
         }
@@ -171,7 +171,7 @@ export class DTDTestSuite {
         console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa);
         console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa);
         console.log('Invalid files catched: ' + invalidCatched + ', Invalid files missed: ' + invalidMissed);   
-        console.log('Not well-formed "sa" catched: ' + notWFSaCatched + ', Not well-formed "sa" missed: ' + notWFSaMissed);
+        console.log('Not well-formed SA catched: ' + notWFSaCatched + ', Not well-formed SA missed: ' + notWFSaMissed);
         console.log('\n\n');
     }
 }
