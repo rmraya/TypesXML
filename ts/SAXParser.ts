@@ -597,6 +597,8 @@ export class SAXParser {
             }
 
             let rest: string = '';
+            let inQuotes: boolean = false;
+            let quoteChar: string = '';
             while (true) {
                 this.ensureLookahead(1);
                 if (this.pointer >= this.buffer.length) {
@@ -608,7 +610,20 @@ export class SAXParser {
                     }
                 }
                 const currentChar: string = this.buffer.charAt(this.pointer);
-                if (currentChar === '>' || currentChar === '/') {
+                const isQuote: boolean = currentChar === '"' || currentChar === '\'';
+                if (isQuote) {
+                    if (inQuotes && currentChar === quoteChar) {
+                        inQuotes = false;
+                        quoteChar = '';
+                    } else if (!inQuotes) {
+                        inQuotes = true;
+                        quoteChar = currentChar;
+                    }
+                }
+                if (!inQuotes && currentChar === '>') {
+                    break;
+                }
+                if (!inQuotes && currentChar === '/' && this.lookingAt('/>')) {
                     break;
                 }
                 rest += currentChar;
@@ -1548,6 +1563,7 @@ export class SAXParser {
     }
 
     private parseAttributePairs(text: string): Array<{ name: string; value: string }> {
+        const originalText: string = text;
         const pairs: Array<{ name: string; value: string }> = [];
         const seen: Set<string> = new Set<string>();
         let index: number = 0;
@@ -1556,6 +1572,10 @@ export class SAXParser {
                 index++;
             }
             if (index >= text.length) {
+                break;
+            }
+            const terminator: string = text.charAt(index);
+            if (terminator === '?' || terminator === '/' || terminator === '>') {
                 break;
             }
             const nameStart: number = index;
@@ -1568,24 +1588,24 @@ export class SAXParser {
             }
             const name: string = text.substring(nameStart, index);
             if (name === '') {
-                throw new Error('Malformed attributes list');
+                throw new Error('Malformed attributes list in "' + originalText + '"');
             }
             while (index < text.length && XMLUtils.isXmlSpace(text.charAt(index))) {
                 index++;
             }
             if (index >= text.length || text.charAt(index) !== '=') {
-                throw new Error('Malformed attributes list');
+                throw new Error('Malformed attributes list in "' + originalText + '": missing "=" after attribute name "' + name + '"');
             }
             index++; // skip '='
             while (index < text.length && XMLUtils.isXmlSpace(text.charAt(index))) {
                 index++;
             }
             if (index >= text.length) {
-                throw new Error('Malformed attributes list');
+                throw new Error('Malformed attributes list in "' + originalText + '": missing attribute value for "' + name + '"');
             }
             const quoteChar: string = text.charAt(index);
             if (quoteChar !== '"' && quoteChar !== '\'') {
-                throw new Error('Malformed attributes list');
+                throw new Error('Malformed attributes list in "' + originalText + '": attribute "' + name + '" must start with quote');
             }
             index++; // skip opening quote
             const valueStart: number = index;
@@ -1593,18 +1613,23 @@ export class SAXParser {
                 index++;
             }
             if (index >= text.length) {
-                throw new Error('Malformed attributes list');
+                throw new Error('Malformed attributes list in "' + originalText + '": attribute "' + name + '" is missing closing quote');
             }
             const value: string = text.substring(valueStart, index);
+            if (value.indexOf('<') !== -1) {
+                throw new Error('Malformed attributes list in "' + originalText + '": attribute "' + name + '" contains forbidden character "<"');
+            }
             index++; // skip closing quote
             if (index < text.length) {
                 const separatorChar: string = text.charAt(index);
-                if (!XMLUtils.isXmlSpace(separatorChar) && separatorChar !== '?' && separatorChar !== '/' && separatorChar !== '>') {
-                    throw new Error('Malformed attributes list: attribute "' + name + '" must be followed by whitespace');
+                if (separatorChar === '?' || separatorChar === '/' || separatorChar === '>') {
+                    // Terminators handled by caller; leave index as-is so outer logic can exit.
+                } else if (!XMLUtils.isXmlSpace(separatorChar)) {
+                    throw new Error('Malformed attributes list: attribute "' + name + '" must be followed by whitespace in "' + originalText + '"');
                 }
             }
             if (seen.has(name)) {
-                throw new Error(`Malformed attributes list: duplicate attribute "${name}"`);
+                throw new Error(`Malformed attributes list: duplicate attribute "${name}" in "${originalText}"`);
             }
             seen.add(name);
             pairs.push({ name, value });
