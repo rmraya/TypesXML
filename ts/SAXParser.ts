@@ -24,6 +24,7 @@ import { StreamReader } from "./StreamReader";
 import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
+import { XMLSchemaParser } from "./XMLSchemaParser";
 import { AttDecl } from "./dtd/AttDecl";
 import { DTDGrammar } from "./dtd/DTDGrammar";
 import { DTDParser } from "./dtd/DTDParser";
@@ -65,7 +66,13 @@ export class SAXParser {
     currentFile: string | undefined;
     catalog: Catalog | undefined;
     validating: boolean = false;
-    defaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
+    relaxNGDefaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
+    schemaDefaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
+    processedSchemaLocations: Set<string> = new Set<string>();
+    failedSchemaLocations: Set<string> = new Set<string>();
+    namespaceContextStack: Array<Map<string, string>> = [];
+    processedNamespaces: Set<string> = new Set<string>();
+    failedNamespaces: Set<string> = new Set<string>();
     isRelaxNG: boolean = false;
     static readonly DEFAULT_VIRTUAL_FILENAME: string = '__inmemory__.xml';
     streamingMode: boolean = false;
@@ -78,6 +85,7 @@ export class SAXParser {
     internalSubsetApplied: boolean = false;
     xmlDeclarationParsed: boolean = false;
     leadingContentBeforeXmlDeclaration: boolean = false;
+    schemaLoadingEnabled: boolean = true;
 
     constructor() {
         this.characterRun = '';
@@ -97,6 +105,7 @@ export class SAXParser {
         this.internalSubsetApplied = false;
         this.xmlDeclarationParsed = false;
         this.leadingContentBeforeXmlDeclaration = false;
+        this.schemaLoadingEnabled = true;
     }
 
     setContentHandler(contentHandler: ContentHandler): void {
@@ -113,6 +122,10 @@ export class SAXParser {
 
     setValidating(validating: boolean): void {
         this.validating = validating;
+    }
+
+    setSchemaLoadingEnabled(enabled: boolean): void {
+        this.schemaLoadingEnabled = enabled;
     }
 
     parseFile(path: string, encoding?: BufferEncoding): void {
@@ -201,7 +214,13 @@ export class SAXParser {
         this.reader = reader;
         const fallbackVirtualPath: string = resolve(process.cwd(), SAXParser.DEFAULT_VIRTUAL_FILENAME);
         this.currentFile = currentFilePath || fallbackVirtualPath;
-        this.defaultAttributes = new Map<string, Map<string, string>>();
+        this.relaxNGDefaultAttributes = new Map<string, Map<string, string>>();
+        this.schemaDefaultAttributes = new Map<string, Map<string, string>>();
+        this.processedSchemaLocations = new Set<string>();
+        this.failedSchemaLocations = new Set<string>();
+        this.namespaceContextStack = [];
+        this.processedNamespaces = new Set<string>();
+        this.failedNamespaces = new Set<string>();
         this.isRelaxNG = false;
         this.pointer = 0;
         this.buffer = '';
@@ -573,6 +592,7 @@ export class SAXParser {
     startElement() {
         this.cleanCharacterRun();
         const tagStartPointer: number = this.pointer;
+        let namespacePushed: boolean = false;
         try {
             this.pointer++; // skip '<'
             let name: string = '';
@@ -632,6 +652,12 @@ export class SAXParser {
             }
             rest = rest.trim();
             let attributesMap: Map<string, string> = this.parseAttributes(rest);
+            const previousContext: Map<string, string> | undefined = this.namespaceContextStack.length > 0 ? this.namespaceContextStack[this.namespaceContextStack.length - 1] : undefined;
+            const namespaceContext: Map<string, string> = this.buildNamespaceContext(attributesMap, previousContext);
+            this.handleSchemaLocationAttributes(attributesMap, namespaceContext);
+            this.namespaceContextStack.push(namespaceContext);
+            namespacePushed = true;
+            this.handleNamespaceDeclarations(attributesMap, namespaceContext, previousContext);
             const grammarForEntities: Grammar | undefined = this.contentHandler?.getGrammar();
             const dtdGrammarForEntities: DTDGrammar | undefined = grammarForEntities instanceof DTDGrammar ? grammarForEntities : undefined;
             attributesMap.forEach((value: string) => {
@@ -701,6 +727,10 @@ export class SAXParser {
                 this.elementStack--;
                 this.elementNameStack.pop();
                 this.childrenNames.pop();
+                if (namespacePushed && this.namespaceContextStack.length > 0) {
+                    this.namespaceContextStack.pop();
+                    namespacePushed = false;
+                }
                 this.pointer += 2; // skip '/>'
             } else {
                 this.pointer++; // skip '>'
@@ -710,6 +740,9 @@ export class SAXParser {
         } catch (error) {
             if (error instanceof NeedMoreDataError) {
                 this.pointer = tagStartPointer;
+            }
+            if (namespacePushed && this.namespaceContextStack.length > 0) {
+                this.namespaceContextStack.pop();
             }
             throw error;
         }
@@ -777,6 +810,9 @@ export class SAXParser {
         if (this.childrenNames.length > 0) {
             this.childrenNames.pop();
         }
+        if (this.namespaceContextStack.length > 0) {
+            this.namespaceContextStack.pop();
+        }
         this.pointer++; // skip '>'
         this.buffer = this.buffer.substring(this.pointer);
         this.pointer = 0;
@@ -795,23 +831,21 @@ export class SAXParser {
     }
 
     getDefaultAttributes(elementName: string, attributes: Array<XMLAttribute>): Array<XMLAttribute> {
-        let defaultAttrs: Map<string, string> | undefined;
         let grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        let existingAttributes: Set<string> = new Set<string>();
+        attributes.forEach((attr: XMLAttribute) => {
+            existingAttributes.add(attr.getName());
+        });
+
         if (grammar) {
-            defaultAttrs = grammar.getDefaultAttributes(elementName);
-        }
-        if (!defaultAttrs && this.isRelaxNG) {
-            defaultAttrs = this.defaultAttributes.get(elementName);
-        }
-        if (defaultAttrs) {
-            let existingAttributes: Set<string> = new Set<string>();
-            attributes.forEach((attr: XMLAttribute) => {
-                existingAttributes.add(attr.getName());
-            });
-            const dtdGrammar: DTDGrammar | undefined = grammar instanceof DTDGrammar ? grammar : undefined;
-            const declarations: Map<string, AttDecl> | undefined = dtdGrammar?.getElementAttributesMap(elementName);
-            defaultAttrs.forEach((value: string, key: string) => {
-                if (!existingAttributes.has(key)) {
+            const grammarDefaults: Map<string, string> | undefined = grammar.getDefaultAttributes(elementName);
+            if (grammarDefaults) {
+                const dtdGrammar: DTDGrammar | undefined = grammar instanceof DTDGrammar ? grammar : undefined;
+                const declarations: Map<string, AttDecl> | undefined = dtdGrammar?.getElementAttributesMap(elementName);
+                grammarDefaults.forEach((value: string, key: string) => {
+                    if (existingAttributes.has(key)) {
+                        return;
+                    }
                     let normalizedValue: string;
                     if (dtdGrammar) {
                         const expanded: string = this.decodeAttributeEntities(value, dtdGrammar);
@@ -820,12 +854,288 @@ export class SAXParser {
                     } else {
                         normalizedValue = this.normalizeAttributeValue(value, value);
                     }
-                    let attribute: XMLAttribute = new XMLAttribute(key, normalizedValue);
-                    attributes.push(attribute);
+                    attributes.push(new XMLAttribute(key, normalizedValue));
+                    existingAttributes.add(key);
+                });
+            }
+        }
+
+        const appendExternalDefaults = (defaults: Map<string, string> | undefined): void => {
+            if (!defaults) {
+                return;
+            }
+            defaults.forEach((value: string, key: string) => {
+                if (existingAttributes.has(key)) {
+                    return;
                 }
+                const normalizedValue: string = this.normalizeAttributeValue(value, value);
+                attributes.push(new XMLAttribute(key, normalizedValue));
+                existingAttributes.add(key);
             });
+        };
+
+        const nameParts: { prefix?: string; localName: string } = this.splitQualifiedName(elementName);
+        const namespaceUri: string | undefined = this.getNamespaceUriForElement(elementName);
+        if (namespaceUri) {
+            const namespaceKey: string = `${namespaceUri}|${nameParts.localName}`;
+            appendExternalDefaults(this.schemaDefaultAttributes.get(namespaceKey));
+        }
+        appendExternalDefaults(this.schemaDefaultAttributes.get(nameParts.localName));
+        if (nameParts.localName !== elementName) {
+            appendExternalDefaults(this.schemaDefaultAttributes.get(elementName));
+        }
+        if (this.isRelaxNG) {
+            appendExternalDefaults(this.relaxNGDefaultAttributes.get(elementName));
         }
         return attributes;
+    }
+
+    private buildNamespaceContext(attributes: Map<string, string>, previousContext?: Map<string, string>): Map<string, string> {
+        const context: Map<string, string> = previousContext ? new Map<string, string>(previousContext) : new Map<string, string>();
+        attributes.forEach((value: string, key: string) => {
+            if (key === 'xmlns') {
+                context.set('', value);
+            } else if (key.startsWith('xmlns:') && key.length > 6) {
+                const prefix: string = key.substring(6);
+                context.set(prefix, value);
+            }
+        });
+        return context;
+    }
+
+    protected handleNamespaceDeclarations(attributes: Map<string, string>, namespaceContext: Map<string, string>, previousContext?: Map<string, string>): void {
+        attributes.forEach((value: string, key: string) => {
+            if (key === 'xmlns') {
+                const trimmed: string = value.trim();
+                const previousValue: string | undefined = previousContext ? previousContext.get('') : undefined;
+                if (trimmed !== '' && trimmed !== previousValue) {
+                    this.tryLoadSchemaForNamespace(trimmed);
+                }
+                return;
+            }
+            if (!key.startsWith('xmlns:') || key.length <= 6) {
+                return;
+            }
+            const prefix: string = key.substring(6);
+            const trimmed: string = value.trim();
+            const previousValue: string | undefined = previousContext ? previousContext.get(prefix) : undefined;
+            if (trimmed !== '' && trimmed !== previousValue) {
+                this.tryLoadSchemaForNamespace(trimmed);
+            }
+        });
+        // If no new declaration appears on the current element, ensure the default namespace is considered.
+        if (!previousContext && namespaceContext.has('')) {
+            const defaultNamespace: string | undefined = namespaceContext.get('');
+            if (defaultNamespace) {
+                this.tryLoadSchemaForNamespace(defaultNamespace);
+            }
+        }
+    }
+
+    private handleSchemaLocationAttributes(attributes: Map<string, string>, namespaceContext: Map<string, string>): void {
+        const schemaInstancePrefixes: Set<string> = new Set<string>();
+        namespaceContext.forEach((uri: string, prefix: string) => {
+            if (uri === Constants.XML_SCHEMA_INSTANCE_NS_URI) {
+                schemaInstancePrefixes.add(prefix);
+            }
+        });
+        if (schemaInstancePrefixes.size === 0) {
+            return;
+        }
+        attributes.forEach((value: string, key: string) => {
+            if (key === 'xmlns' || key.startsWith('xmlns:')) {
+                return;
+            }
+            const { prefix, localName } = this.splitQualifiedName(key);
+            if (!prefix || !schemaInstancePrefixes.has(prefix)) {
+                return;
+            }
+            if (localName === 'schemaLocation') {
+                const tokens: string[] = value.trim().split(/\s+/).filter((token: string) => token.length > 0);
+                if (tokens.length < 2) {
+                    return;
+                }
+                for (let index: number = 0; index + 1 < tokens.length; index += 2) {
+                    const namespaceUri: string = tokens[index];
+                    const location: string = tokens[index + 1];
+                    this.processSchemaReference(namespaceUri, location);
+                }
+            } else if (localName === 'noNamespaceSchemaLocation') {
+                const location: string = value.trim();
+                if (location !== '') {
+                    this.processSchemaReference('', location);
+                }
+            }
+        });
+    }
+
+    protected tryLoadSchemaForNamespace(namespaceUri: string): void {
+        if (!this.schemaLoadingEnabled) {
+            return;
+        }
+        if (namespaceUri === '') {
+            return;
+        }
+        if (XMLSchemaParser.shouldIgnoreNamespace(namespaceUri)) {
+            this.processedNamespaces.add(namespaceUri);
+            return;
+        }
+        if (this.processedNamespaces.has(namespaceUri) || this.failedNamespaces.has(namespaceUri)) {
+            return;
+        }
+        if (!this.catalog) {
+            return;
+        }
+        const candidates: Array<string | undefined> = [
+            this.catalog.matchURI(namespaceUri),
+            this.catalog.matchSystem(namespaceUri)
+        ];
+        for (let index: number = 0; index < candidates.length; index++) {
+            const candidate: string | undefined = candidates[index];
+            if (!candidate) {
+                continue;
+            }
+            const normalized: string = candidate.startsWith('file://') ? fileURLToPath(candidate) : candidate;
+            if (!existsSync(normalized)) {
+                continue;
+            }
+            if (this.loadSchemaDefaults(normalized, namespaceUri)) {
+                this.processedNamespaces.add(namespaceUri);
+                return;
+            }
+        }
+        this.failedNamespaces.add(namespaceUri);
+    }
+
+    private processSchemaReference(namespaceUri: string, location: string): void {
+        if (!this.schemaLoadingEnabled) {
+            return;
+        }
+        if (location === '') {
+            return;
+        }
+        if (this.processedSchemaLocations.has(location) || this.failedSchemaLocations.has(location)) {
+            return;
+        }
+        const resolvedPath: string | undefined = this.resolveSchemaLocation(namespaceUri, location);
+        if (!resolvedPath) {
+            this.failedSchemaLocations.add(location);
+            return;
+        }
+        if (!this.loadSchemaDefaults(resolvedPath, location)) {
+            this.failedSchemaLocations.add(location);
+        }
+    }
+
+    protected loadSchemaDefaults(resolvedPath: string, identifier: string): boolean {
+        if (this.processedSchemaLocations.has(resolvedPath)) {
+            this.processedSchemaLocations.add(identifier);
+            return true;
+        }
+        try {
+            const parser: XMLSchemaParser = XMLSchemaParser.getInstance(this.catalog);
+            const defaults: Map<string, Map<string, string>> = parser.collectDefaultAttributes(resolvedPath);
+            this.mergeSchemaDefaults(defaults);
+            this.processedSchemaLocations.add(resolvedPath);
+            this.processedSchemaLocations.add(identifier);
+            return true;
+        } catch (error) {
+            if (this.validating) {
+                throw error;
+            }
+            const message: string = error instanceof Error ? error.message : String(error);
+            console.warn(`Warning: Could not load XML Schema defaults from ${resolvedPath}: ${message}`);
+            return false;
+        }
+    }
+
+    private resolveSchemaLocation(namespaceUri: string, location: string): string | undefined {
+        let candidate: string = location;
+        if (candidate.startsWith('file://')) {
+            candidate = fileURLToPath(candidate);
+            if (existsSync(candidate)) {
+                return candidate;
+            }
+        }
+
+        if (isAbsolute(location) && existsSync(location)) {
+            return location;
+        }
+
+        if (!location.startsWith('http://') && !location.startsWith('https://') && !location.startsWith('urn:')) {
+            if (this.currentFile) {
+                const baseDir: string = dirname(this.currentFile);
+                const relativeCandidate: string = resolve(baseDir, location);
+                if (existsSync(relativeCandidate)) {
+                    return relativeCandidate;
+                }
+            }
+            const absoluteCandidate: string = resolve(location);
+            if (existsSync(absoluteCandidate)) {
+                return absoluteCandidate;
+            }
+        }
+
+        if (this.catalog) {
+            const catalogCandidates: Array<string | undefined> = [
+                this.catalog.matchURI(location),
+                this.catalog.matchSystem(location)
+            ];
+            if (namespaceUri) {
+                catalogCandidates.push(this.catalog.matchURI(namespaceUri));
+                catalogCandidates.push(this.catalog.matchSystem(namespaceUri));
+            }
+            for (const catalogCandidate of catalogCandidates) {
+                if (!catalogCandidate) {
+                    continue;
+                }
+                const normalized: string = catalogCandidate.startsWith('file://') ? fileURLToPath(catalogCandidate) : catalogCandidate;
+                if (existsSync(normalized)) {
+                    return normalized;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
+    private mergeSchemaDefaults(defaults: Map<string, Map<string, string>>): void {
+        defaults.forEach((attributeMap: Map<string, string>, elementName: string) => {
+            if (attributeMap.size === 0) {
+                return;
+            }
+            const target: Map<string, string> = this.schemaDefaultAttributes.get(elementName) ?? new Map<string, string>();
+            attributeMap.forEach((value: string, attributeName: string) => {
+                if (!target.has(attributeName)) {
+                    target.set(attributeName, value);
+                }
+            });
+            if (target.size > 0) {
+                this.schemaDefaultAttributes.set(elementName, target);
+            }
+        });
+    }
+
+    private splitQualifiedName(name: string): { prefix?: string; localName: string } {
+        const separatorIndex: number = name.indexOf(':');
+        if (separatorIndex === -1) {
+            return { localName: name };
+        }
+        const prefix: string = name.substring(0, separatorIndex);
+        const localName: string = name.substring(separatorIndex + 1);
+        return { prefix, localName };
+    }
+
+    protected getNamespaceUriForElement(elementName: string): string | undefined {
+        if (this.namespaceContextStack.length === 0) {
+            return undefined;
+        }
+        const context: Map<string, string> = this.namespaceContextStack[this.namespaceContextStack.length - 1];
+        const parts: { prefix?: string; localName: string } = this.splitQualifiedName(elementName);
+        if (parts.prefix === undefined) {
+            return context.get('');
+        }
+        return context.get(parts.prefix);
     }
 
     cleanCharacterRun(): void {
@@ -1008,7 +1318,7 @@ export class SAXParser {
                 return;
             }
             let relaxngParser = new RelaxNGParser(resolvedPath, this.catalog);
-            this.defaultAttributes = relaxngParser.getElements();
+            this.relaxNGDefaultAttributes = relaxngParser.getElements();
             this.isRelaxNG = true;
         } catch (error: unknown) {
             if (error instanceof Error) {

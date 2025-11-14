@@ -33,4 +33,7 @@ export class Constants {
 
     // RelaxNG Namespace URI
     static readonly RELAXNG_NS_URI: string = 'http://relaxng.org/ns/structure/1.0';
+
+    // XML Schema instance namespace URI
+    static readonly XML_SCHEMA_INSTANCE_NS_URI: string = 'http://www.w3.org/2001/XMLSchema-instance';
 }
