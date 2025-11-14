@@ -4,5 +4,7 @@ dist/
 .vscode/
 .scannerwork/
 ts/test.ts
+ts/testRelaxNG.ts
 test.xml
 /tests/
+catalog/

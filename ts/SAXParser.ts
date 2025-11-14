@@ -15,6 +15,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { Catalog } from "./Catalog";
+import { Constants } from "./Constants";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { NeedMoreDataError } from "./NeedMoreDataError";
@@ -942,31 +943,22 @@ export class SAXParser {
         this.pointer = 0;
         this.contentHandler?.processingInstruction(target, data);
 
-        // TODO enable RelaxNG parsing from xml-model processing instruction
-
-        /*
         if (target === 'xml-model') {
-            // Extract default attributes from RelaxNG schemas
-            let atts: Map<string, string> = this.parseAttributes(data);
-            let href: string = '';
-            let schemaType: string = '';
-            for (let [key, value] of atts.entries()) {
-                if (key === 'href') {
-                    href = value;
-                }
-                if (key === 'schematypens') {
-                    schemaType = value;
-                }
-            }
-            if (href !== '' && Constants.RELAXNG_NS_URI === schemaType) {
+            const attributesFromPi: Map<string, string> = this.parseAttributes(data);
+            const href: string | undefined = attributesFromPi.get('href');
+            const schemaType: string | undefined = attributesFromPi.get('schematypens');
+            if (href && schemaType === Constants.RELAXNG_NS_URI) {
                 try {
                     this.parseRelaxNG(href);
-                } catch (e: Error | any) {
-                    // do nothing
+                } catch (error) {
+                    if (this.validating) {
+                        throw error;
+                    }
+                    const message: string = error instanceof Error ? error.message : String(error);
+                    console.warn(`Warning: Could not load RelaxNG defaults from ${href}: ${message}`);
                 }
             }
         }
-        */
     }
 
     parseRelaxNG(href: string) {
@@ -1762,6 +1754,16 @@ export class SAXParser {
                 const parsed: number = Number.parseInt(entityName.substring(1), 10);
                 XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#${entityName.substring(1)}; in attribute value`);
                 result += String.fromCodePoint(parsed);
+            } else if (entityName === 'lt') {
+                result += '<';
+            } else if (entityName === 'gt') {
+                result += '>';
+            } else if (entityName === 'amp') {
+                result += '&';
+            } else if (entityName === 'apos') {
+                result += '\'';
+            } else if (entityName === 'quot') {
+                result += '"';
             } else {
                 const replacement: string | undefined = grammar?.resolveEntity(entityName);
                 if (replacement !== undefined) {
