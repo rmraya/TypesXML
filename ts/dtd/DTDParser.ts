@@ -1159,6 +1159,9 @@ export class DTDParser {
             // XML 1.0 section 2.11: normalize line endings to LF
             content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+            // Remove optional text declaration so entity replacement text contains only actual content
+            content = this.removeTextDeclaration(content);
+
             if (isParameterEntity) {
                 const contextName: string = entityName || systemId || publicId || '[external entity]';
                 this.validateParameterEntityValue(content, contextName, location);
@@ -1242,6 +1245,48 @@ export class DTDParser {
         if (checkLength > 0 && (nonPrintableCount / checkLength) > 0.2) {
             throw new Error(`External entity "${location}" appears to contain binary data and cannot be used as XML text`);
         }
+    }
+
+    private removeTextDeclaration(content: string): string {
+        let index: number = 0;
+        while (index < content.length && XMLUtils.isXmlSpace(content.charAt(index))) {
+            index++;
+        }
+        if (index >= content.length) {
+            return content;
+        }
+        if (!content.startsWith('<?xml', index)) {
+            return content;
+        }
+        const nextChar: string = content.charAt(index + 5);
+        if (!XMLUtils.isXmlSpace(nextChar)) {
+            return content;
+        }
+
+        let pointer: number = index + 5;
+        let quoteChar: string | null = null;
+        while (pointer < content.length) {
+            const current: string = content.charAt(pointer);
+            if (quoteChar) {
+                if (current === quoteChar) {
+                    quoteChar = null;
+                }
+                pointer++;
+                continue;
+            }
+            if (current === '"' || current === '\'') {
+                quoteChar = current;
+                pointer++;
+                continue;
+            }
+            if (pointer + 1 < content.length && content.charAt(pointer) === '?' && content.charAt(pointer + 1) === '>') {
+                const prefix: string = content.substring(0, index);
+                const suffix: string = content.substring(pointer + 2);
+                return prefix + suffix;
+            }
+            pointer++;
+        }
+        return content;
     }
 
     expandParameterEntities(text: string): string {

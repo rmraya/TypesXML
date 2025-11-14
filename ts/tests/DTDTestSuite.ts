@@ -53,7 +53,7 @@ export class DTDTestSuite {
                 }
                 validSa++;
             } catch (error) {
-                console.error('Error parsing file ' + xmlFile + ':', error, '\n');
+                console.error('Error parsing file ./tests/xmltest/valid/sa/' + xmlFile + ':', error, '\n');
                 invalidSa++;
             }
         }
@@ -83,7 +83,7 @@ export class DTDTestSuite {
                 }
                 validNotSa++;
             } catch (error) {
-                console.error('Error parsing file ' + xmlFile + ':', error, '\n');
+                console.error('Error parsing file ./tests/xmltest/valid/not-sa/' + xmlFile + ':', error, '\n');
                 invalidNotSa++;
             }
         }
@@ -113,7 +113,7 @@ export class DTDTestSuite {
                 }
                 validExtSa++;
             } catch (error) {
-                console.error('Error parsing file ' + xmlFile + ':', error, '\n');
+                console.error('Error parsing file ./tests/xmltest/valid/ext-sa/' + xmlFile + ':', error, '\n');
                 invalidExtSa++;
             }
         }
@@ -135,7 +135,7 @@ export class DTDTestSuite {
             parser.setValidating(true);
             try {
                 parser.parseFile("./tests/xmltest/invalid/" + xmlFile);
-                console.log(' -- Invalid file "' + xmlFile + '" not rejected');
+                console.log(' -- Invalid file ./tests/xmltest/invalid/' + xmlFile + ' not rejected');
                 invalidMissed++;
             } catch (error) {
                 invalidCatched++;
@@ -159,7 +159,7 @@ export class DTDTestSuite {
             parser.setValidating(true);
             try {
                 parser.parseFile("./tests/xmltest/not-wf/sa/" + xmlFile);
-                console.log(' -- Not well-formed "sa" file "' + xmlFile + '" not rejected');
+                console.log(' -- Not well-formed SA file ./tests/xmltest/not-wf/sa/' + xmlFile + ' not rejected');
                 notWFSaMissed++;
             } catch (error) {
                 notWFSaCatched++;

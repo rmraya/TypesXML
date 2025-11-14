@@ -1428,9 +1428,23 @@ export class SAXParser {
         }
         declarationText = declarationText.trim();
         let attributes: Map<string, string> = this.parseAttributes(declarationText);
+        const allowedPseudoAttributes: Set<string> = new Set<string>(['version', 'encoding', 'standalone']);
+        attributes.forEach((_value: string, key: string) => {
+            if (!allowedPseudoAttributes.has(key)) {
+                throw new Error('Malformed XML declaration: invalid pseudo-attribute "' + key + '"');
+            }
+        });
+        const versionValue: string | undefined = attributes.get('version');
+        if (!versionValue) {
+            throw new Error('Malformed XML declaration: missing required "version" pseudo-attribute');
+        }
+        const standaloneValue: string | undefined = attributes.get('standalone');
+        if (standaloneValue !== undefined && standaloneValue !== 'yes' && standaloneValue !== 'no') {
+            throw new Error('Malformed XML declaration: invalid value "' + standaloneValue + '" for "standalone"');
+        }
         this.buffer = this.buffer.substring(this.pointer + 2); // skip '?>'
         this.pointer = 0;
-        let version: string = attributes.get('version') || '1.0';
+        const version: string = versionValue;
         this.xmlVersion = version;
         let encoding: string = attributes.get('encoding') || 'UTF-8';
         this.contentHandler?.xmlDeclaration(version, encoding, attributes.get('standalone'));
