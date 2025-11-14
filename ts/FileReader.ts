@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 - 2024 Maxprograms.
+ * Copyright (c) 2023 - 2025 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -10,7 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Stats, closeSync, openSync, readSync, statSync } from "fs";
+import { Stats, closeSync, openSync, readSync, statSync } from "node:fs";
+import { TextDecoder } from "node:util";
 
 export class FileReader {
 
@@ -20,11 +21,14 @@ export class FileReader {
     fileSize: number;
     position: number;
     firstRead: boolean;
+    private decoder?: TextDecoder;
+    private readonly filePath: string;
 
     constructor(path: string, encoding?: BufferEncoding) {
+        this.filePath = path;
         let stats: Stats = statSync(path, { bigint: false, throwIfNoEntry: true });
         this.fileSize = stats.size;
-        this.blockSize = stats.blksize;
+        this.blockSize = stats.blksize && stats.blksize > 0 ? stats.blksize : 8192;
         this.fileHandle = openSync(path, 'r');
         if (encoding) {
             this.encoding = encoding;
@@ -33,24 +37,31 @@ export class FileReader {
         }
         this.position = 0;
         this.firstRead = true;
+        this.initializeDecoder();
     }
 
     static detectEncoding(path: string): BufferEncoding {
         const fd = openSync(path, 'r');
-        let buffer: Buffer = Buffer.alloc(3);
-        let bytesRead: number = readSync(fd, buffer, 0, 3, 0);
+        const buffer: Buffer = Buffer.alloc(3);
+        const bytesRead: number = readSync(fd, buffer, 0, 3, 0);
         closeSync(fd);
 
-        if (bytesRead < 3) {
-            throw new Error('Error reading BOM: not enough bytes');
-        }
-        const UTF8: Buffer = Buffer.from([-17, -69, -65]);
-        const UTF16: Buffer = Buffer.from([-2, -1]);
-
-        if (buffer.toString().startsWith(UTF8.toString())) {
+        if (bytesRead === 0) {
             return 'utf8';
         }
-        if (buffer.toString().startsWith(UTF16.toString())) {
+
+        const slice: Buffer = buffer.subarray(0, bytesRead);
+        const UTF8: Buffer = Buffer.from([0xEF, 0xBB, 0xBF]);
+        const UTF16LE: Buffer = Buffer.from([0xFF, 0xFE]);
+        const UTF16BE: Buffer = Buffer.from([0xFE, 0xFF]);
+
+        if (slice.length >= UTF8.length && slice.compare(UTF8, 0, UTF8.length, 0, UTF8.length) === 0) {
+            return 'utf8';
+        }
+        if (slice.length >= UTF16LE.length && slice.compare(UTF16LE, 0, UTF16LE.length, 0, UTF16LE.length) === 0) {
+            return 'utf16le';
+        }
+        if (slice.length >= UTF16BE.length && slice.compare(UTF16BE, 0, UTF16BE.length, 0, UTF16BE.length) === 0) {
             return 'utf16le';
         }
         return 'utf8';
@@ -62,28 +73,36 @@ export class FileReader {
 
     setEncoding(encoding: BufferEncoding): void {
         this.encoding = encoding;
+        this.initializeDecoder();
+        this.firstRead = true;
     }
 
     read(): string {
-        let buffer: Buffer = Buffer.alloc(this.blockSize, this.encoding);
+        let buffer: Buffer = Buffer.alloc(this.blockSize);
         let amount: number = this.blockSize <= this.fileSize - this.position ? this.blockSize : this.fileSize - this.position;
         let bytesRead: number = readSync(this.fileHandle, buffer, 0, amount, this.position);
         this.position += bytesRead;
-        return this.firstRead ? this.skipBOM(buffer, bytesRead) : buffer.toString(this.encoding, 0, bytesRead);
+        let decoded: string;
+        try {
+            if (this.decoder) {
+                const stream: boolean = this.position < this.fileSize;
+                decoded = this.decoder.decode(buffer.subarray(0, bytesRead), { stream });
+            } else {
+                decoded = buffer.toString(this.encoding, 0, bytesRead);
+            }
+        } catch (error) {
+            const message: string = (error as Error).message || 'invalid byte sequence';
+            throw new Error(`Invalid ${this.encoding} data in "${this.filePath}": ${message}`);
+        }
+        return this.firstRead ? this.handleInitialChunk(decoded) : decoded;
     }
 
-    skipBOM(buffer: Buffer, bytesRead: number): string {
+    handleInitialChunk(text: string): string {
         this.firstRead = false;
-        const utf8Bom: string = Buffer.from([-17, -69, -65]).toString();
-        const utf16Bom: string = Buffer.from([-2, -1]).toString();
-        let result: string = buffer.toString(this.encoding, 0, bytesRead);
-        if (result.startsWith(utf8Bom)) {
-            return result.substring(utf8Bom.length);
+        if (!this.decoder && text.length > 0 && text.codePointAt(0) === 0xFEFF) {
+            return text.substring(1);
         }
-        if (result.startsWith(utf16Bom)) {
-            return result.substring(utf16Bom.length);
-        }
-        return buffer.toString(this.encoding, 0, bytesRead);
+        return text;
     }
 
     dataAvailable(): boolean {
@@ -96,5 +115,15 @@ export class FileReader {
 
     closeFile(): void {
         closeSync(this.fileHandle);
+    }
+
+    private initializeDecoder(): void {
+        if (this.encoding === 'utf8') {
+            this.decoder = new TextDecoder('utf-8', { fatal: true });
+        } else if (this.encoding === 'utf16le') {
+            this.decoder = new TextDecoder('utf-16le', { fatal: true });
+        } else {
+            this.decoder = undefined;
+        }
     }
 }

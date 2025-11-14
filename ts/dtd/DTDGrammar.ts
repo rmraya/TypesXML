@@ -25,7 +25,6 @@ export class DTDGrammar implements Grammar {
     private attributesMap: Map<string, Map<string, AttDecl>>;
     private elementDeclMap: Map<string, ElementDecl>;
     private notationsMap: Map<string, NotationDecl>;
-    private usedEntityReferences: Map<string, string[]>;
 
     constructor() {
         this.models = new Map();
@@ -33,7 +32,6 @@ export class DTDGrammar implements Grammar {
         this.attributesMap = new Map();
         this.entitiesMap = new Map();
         this.notationsMap = new Map();
-        this.usedEntityReferences = new Map();
         this.addPredefinedEntities();
     }
 
@@ -57,23 +55,37 @@ export class DTDGrammar implements Grammar {
         return result;
     }
 
-    addElement(elementDecl: ElementDecl) {
-        if (!this.elementDeclMap.has(elementDecl.getName())) {
-            this.elementDeclMap.set(elementDecl.getName(), elementDecl);
+    addElement(elementDecl: ElementDecl, override: boolean = false) {
+        const name: string = elementDecl.getName();
+        if (override || !this.elementDeclMap.has(name)) {
+            this.elementDeclMap.set(name, elementDecl);
         }
     }
 
-    addAttributes(element: string, attributes: Map<string, AttDecl>) {
-        // Merge attributes, giving precedence to first declaration (XML spec requirement)
+    addAttributes(element: string, attributes: Map<string, AttDecl>, override: boolean = false, preexistingKeys?: Set<string>) {
         let existingAttributes: Map<string, AttDecl> | undefined = this.attributesMap.get(element);
-        if (existingAttributes) {
+        if (!existingAttributes) {
+            existingAttributes = new Map<string, AttDecl>();
+            this.attributesMap.set(element, existingAttributes);
+        }
+
+        if (override) {
             attributes.forEach((value, key) => {
+                const existedBeforeParse: boolean = preexistingKeys ? preexistingKeys.has(key) : false;
+                if (existedBeforeParse) {
+                    existingAttributes!.set(key, value);
+                    return;
+                }
                 if (!existingAttributes!.has(key)) {
                     existingAttributes!.set(key, value);
                 }
             });
         } else {
-            this.attributesMap.set(element, attributes);
+            attributes.forEach((value, key) => {
+                if (!existingAttributes!.has(key)) {
+                    existingAttributes!.set(key, value);
+                }
+            });
         }
     }
 
@@ -86,15 +98,15 @@ export class DTDGrammar implements Grammar {
             if (entity === undefined) {
                 throw new Error('Unknown entity: ' + entityName);
             }
-            text = text.replace('%' + entityName + ';', entity.getValue());
+            text = text.replaceAll('%' + entityName + ';', entity.getValue());
         }
         return text;
     }
 
-    addEntity(entityDecl: EntityDecl) {
+    addEntity(entityDecl: EntityDecl, override: boolean = false) {
         // Parameter entities use %name key to avoid conflicts with general entities
         const key: string = entityDecl.isParameterEntity() ? `%${entityDecl.getName()}` : entityDecl.getName();
-        if (!this.entitiesMap.has(key)) {
+        if (override || !this.entitiesMap.has(key)) {
             this.entitiesMap.set(key, entityDecl);
         }
     }
@@ -107,9 +119,10 @@ export class DTDGrammar implements Grammar {
         return this.entitiesMap.get(`%${entityName}`);
     }
 
-    addNotation(notation: NotationDecl) {
-        if (!this.notationsMap.has(notation.getName())) {
-            this.notationsMap.set(notation.getName(), notation);
+    addNotation(notation: NotationDecl, override: boolean = false) {
+        const name: string = notation.getName();
+        if (override || !this.notationsMap.has(name)) {
+            this.notationsMap.set(name, notation);
         }
     }
 
@@ -169,47 +182,6 @@ export class DTDGrammar implements Grammar {
 
     getElementAttributesMap(element: string): Map<string, AttDecl> | undefined {
         return this.attributesMap.get(element);
-    }
-
-    addEntityReferenceUsage(originalReference: string, expandedText: string) {
-        if (!this.usedEntityReferences.has(expandedText)) {
-            this.usedEntityReferences.set(expandedText, []);
-        }
-        this.usedEntityReferences.get(expandedText)!.push(originalReference);
-    }
-
-    getOriginalEntityReference(expandedText: string): string | undefined {
-        const references = this.usedEntityReferences.get(expandedText);
-        if (!references || references.length === 0) {
-            return undefined;
-        }
-        return references[0];
-    }
-
-    consumeEntityReference(expandedText: string): string | undefined {
-        const references: string[] | undefined = this.usedEntityReferences.get(expandedText);
-        if (!references || references.length === 0) {
-            return undefined;
-        }
-        const reference: string | undefined = references.shift();
-        if (references.length === 0) {
-            this.usedEntityReferences.delete(expandedText);
-        }
-        return reference;
-    }
-
-    getUsedEntityReferences(): Map<string, string> {
-        const result: Map<string, string> = new Map<string, string>();
-        this.usedEntityReferences.forEach((value, key) => {
-            if (value.length > 0) {
-                result.set(key, value[0]);
-            }
-        });
-        return result;
-    }
-
-    clearEntityReferenceTracking() {
-        this.usedEntityReferences.clear();
     }
 
     validateElement(element: string, children: string[]): ValidationResult {
@@ -340,13 +312,10 @@ export class DTDGrammar implements Grammar {
             }
         }
         // check for entities inside attribute value
-        const entityReferences = attrValue.match(/&([a-zA-Z0-9._:-]+);/g);
-        if (entityReferences) {
-            for (const entityRef of entityReferences) {
-                const entityName = entityRef.slice(1, -1); // Remove the '&' and ';'
-                if (!this.entityExists(entityName)) {
-                    return ValidationResult.error('Entity "' + entityName + '" referenced in attribute "' + attrName + '" is not declared in element "' + element + '"');
-                }
+        const entityReferences = this.extractEntityReferences(attrValue);
+        for (const entityName of entityReferences) {
+            if (!this.entityExists(entityName)) {
+                return ValidationResult.error('Entity "' + entityName + '" referenced in attribute "' + attrName + '" is not declared in element "' + element + '"');
             }
         }
         return ValidationResult.success();
@@ -359,6 +328,27 @@ export class DTDGrammar implements Grammar {
 
     private notationExists(notationName: string): boolean {
         return this.notationsMap.has(notationName);
+    }
+
+    private extractEntityReferences(value: string): string[] {
+        const references: string[] = [];
+        let index: number = 0;
+        while (index < value.length) {
+            const ampIndex: number = value.indexOf('&', index);
+            if (ampIndex === -1) {
+                break;
+            }
+            const semicolonIndex: number = value.indexOf(';', ampIndex + 1);
+            if (semicolonIndex === -1) {
+                break;
+            }
+            const candidate: string = value.substring(ampIndex + 1, semicolonIndex);
+            if (candidate.length > 0 && XMLUtils.isValidXMLName(candidate)) {
+                references.push(candidate);
+            }
+            index = semicolonIndex + 1;
+        }
+        return references;
     }
 
     getElementAttributes(element: string): Map<string, AttributeInfo> {
@@ -403,7 +393,14 @@ export class DTDGrammar implements Grammar {
 
     resolveEntity(name: string): string | undefined {
         const entity: EntityDecl | undefined = this.getEntity(name);
-        return entity ? entity.getValue() : undefined;
+        if (!entity) {
+            return undefined;
+        }
+        const unresolvedError: string | null = entity.getUnresolvedError();
+        if (unresolvedError) {
+            throw new Error(unresolvedError);
+        }
+        return entity.getValue();
     }
 
     getGrammarType(): GrammarType {

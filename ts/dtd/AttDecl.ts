@@ -87,25 +87,25 @@ export class AttDecl implements XMLNode {
             return true; // CDATA can contain any character data
         }
         if (this.attType === 'ID') {
-            return this.isValidName(value); // Must be a valid XML name
+            return XMLUtils.isValidXMLName(value); // Must be a valid XML name
         }
         if (this.attType === 'IDREF') {
-            return this.isValidName(value); // Must be a valid XML name
+            return XMLUtils.isValidXMLName(value); // Must be a valid XML name
         }
         if (this.attType === 'IDREFS') {
-            return value.split(/\s+/).every(ref => this.isValidName(ref));
+            return value.split(/\s+/).every(ref => XMLUtils.isValidXMLName(ref));
         }
         if (this.attType === 'NMTOKEN') {
-            return this.isValidNmtoken(value);
+            return XMLUtils.isValidNMTOKEN(value);
         }
         if (this.attType === 'NMTOKENS') {
-            return value.split(/\s+/).every(token => this.isValidNmtoken(token));
+            return value.split(/\s+/).every(token => XMLUtils.isValidNMTOKEN(token));
         }
         if (this.attType === 'ENTITY') {
-            return this.isValidName(value); // Must reference a valid entity name
+            return XMLUtils.isValidXMLName(value); // Must reference a valid entity name
         }
         if (this.attType === 'ENTITIES') {
-            return value.split(/\s+/).every(entity => this.isValidName(entity));
+            return value.split(/\s+/).every(entity => XMLUtils.isValidXMLName(entity));
         }
         if (this.attType.startsWith('(')) {
             // Enumeration - check if value is in the list populated during construction
@@ -147,7 +147,7 @@ export class AttDecl implements XMLNode {
         }
 
         for (const name of names) {
-            if (!this.isValidName(name)) {
+            if (!XMLUtils.isValidXMLName(name)) {
                 throw new Error(`Invalid NOTATION name "${name}" in attribute type: ${type}`);
             }
         }
@@ -170,40 +170,6 @@ export class AttDecl implements XMLNode {
 
         return values;
     }
-
-    private isValidName(name: string): boolean {
-        // XML name must start with letter or underscore, followed by name characters
-        const nameStart = /[A-Za-z_:]/;
-        const nameChar = /[A-Za-z0-9._:-]/;
-
-        if (name.length === 0 || !nameStart.test(name.charAt(0))) {
-            return false;
-        }
-
-        for (let i = 1; i < name.length; i++) {
-            if (!nameChar.test(name.charAt(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private isValidNmtoken(token: string): boolean {
-        // NMTOKEN can contain name characters but doesn't need to start with letter
-        const nameChar = /[A-Za-z0-9._:-]/;
-
-        if (token.length === 0) {
-            return false;
-        }
-
-        for (let i = 0; i < token.length; i++) {
-            if (!nameChar.test(token.charAt(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     getEnumeration(): string[] {
         return this.enumeration;
     }

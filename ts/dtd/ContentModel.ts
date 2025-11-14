@@ -72,11 +72,21 @@ export class ContentModel {
 
     parseSpec(modelString: string): ContentModel {
         // Normalize whitespace so multi-line mixed content declarations parse correctly
-        let contentString: string = modelString.replace(/\s+/g, "");
+        let contentString: string = modelString.replaceAll(/\s+/g, "");
+        const invalidWhitespace: RegExpMatchArray | null = modelString.match(/\S\s+([*+?])/);
+        if (invalidWhitespace) {
+            const operator: string = invalidWhitespace[1];
+            throw new Error('Invalid content model: whitespace not allowed before "' + operator + '"');
+        }
         try {
             this.validateParentheses(contentString);
         } catch (e: unknown) {
             throw e;
+        }
+
+        const pcdataIndex: number = contentString.indexOf(ContentModelType.PCDATA);
+        if (pcdataIndex !== -1 && !contentString.startsWith('(#PCDATA')) {
+            throw new Error('Invalid mixed content model: #PCDATA must be the first token');
         }
         let particles: Array<ContentParticle> = new Array<ContentParticle>();
         let type: typeof ContentModelType[keyof typeof ContentModelType] = ContentModelType.CHILDREN;

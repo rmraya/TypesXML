@@ -1,3 +1,15 @@
+/*******************************************************************************
+ * Copyright (c) 2023 - 2025 Maxprograms.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse   License 1.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-v10.html
+ *
+ * Contributors:
+ *     Maxprograms - initial API and implementation
+ *******************************************************************************/
+
 import { CData } from "./CData";
 import { Catalog } from "./Catalog";
 import { ContentHandler } from "./ContentHandler";
@@ -11,6 +23,7 @@ import { XMLDocumentType } from "./XMLDocumentType";
 import { XMLElement } from "./XMLElement";
 import { XMLUtils } from "./XMLUtils";
 import { DTDParser } from "./dtd/DTDParser";
+import { DTDGrammar } from "./dtd/DTDGrammar";
 import { Grammar } from "./grammar/Grammar";
 
 export class DOMBuilder implements ContentHandler {
@@ -27,6 +40,17 @@ export class DOMBuilder implements ContentHandler {
         this.document = new XMLDocument();
         this.stack = new Array();
         this.inCdData = false;
+    }
+
+    setGrammar(grammar: Grammar | undefined): void {
+        this.grammar = grammar;
+        if (grammar instanceof DTDGrammar) {
+            if (!this.dtdParser) {
+                this.dtdParser = new DTDParser(grammar);
+            } else {
+                this.dtdParser.setGrammar(grammar);
+            }
+        }
     }
 
     setCatalog(catalog: Catalog): void {
@@ -172,15 +196,13 @@ export class DOMBuilder implements ContentHandler {
         let docType: XMLDocumentType = new XMLDocumentType(name, publicId, systemId);
         this.document?.setDocumentType(docType);
         if (this.catalog) {
-            let url = this.catalog.resolveEntity(publicId, systemId);
+            const url = this.catalog.resolveEntity(publicId, systemId);
             if (url) {
                 if (!this.dtdParser) {
                     this.dtdParser = new DTDParser();
                 }
-                let dtdGrammar: Grammar = this.dtdParser.parseDTD(url);
-                if (dtdGrammar) {
-                    this.grammar = dtdGrammar;
-                }
+                const dtdGrammar: DTDGrammar = this.dtdParser.parseDTD(url);
+                this.setGrammar(dtdGrammar);
             }
         }
     }
@@ -194,7 +216,29 @@ export class DOMBuilder implements ContentHandler {
     }
 
     skippedEntity(name: string): void {
-        // TODO
-        throw new Error("Method not implemented.");
+        const replacement: string | undefined = this.grammar?.resolveEntity(name);
+        if (replacement && replacement.length > 0) {
+            this.characters(replacement);
+            return;
+        }
+
+        if (this.grammar instanceof DTDGrammar) {
+            const entityDecl = this.grammar.getEntity(name);
+            if (entityDecl && entityDecl.isExternal() && this.dtdParser) {
+                try {
+                    const externalText = this.dtdParser.loadExternalEntity(entityDecl.getPublicId(), entityDecl.getSystemId(), true);
+                    if (externalText.length > 0) {
+                        entityDecl.setValue(externalText);
+                        this.characters(externalText);
+                        return;
+                    }
+                } catch (error) {
+                    throw new Error(`Could not resolve external entity "${name}": ${(error as Error).message}`);
+                }
+            }
+        }
+
+        // Preserve the reference if no replacement text is available
+        this.characters('&' + name + ';');
     }
 }

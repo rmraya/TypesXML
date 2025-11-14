@@ -15,6 +15,8 @@ export type DTDToken = {
     value: string
 }
 
+import { XMLUtils } from "../XMLUtils";
+
 export class DTDContentModelTokenizer {
 
     private input: string;
@@ -42,13 +44,11 @@ export class DTDContentModelTokenizer {
                 this.pos += 7;
                 continue;
             }
-            // Element name or QName
-            const nameStart = /[:A-Z_a-z]/;
-            const nameChar = /[-.0-9:A-Z_a-z]/;
-            if (this.pos < this.input.length && nameStart.test(this.input[this.pos])) {
+            // Element name or QName with full XML Name support
+            if (this.pos < this.input.length && XMLUtils.isNameStartChar(this.input[this.pos])) {
                 const start: number = this.pos;
                 this.pos++;
-                while (this.pos < this.input.length && nameChar.test(this.input[this.pos])) {
+                while (this.pos < this.input.length && XMLUtils.isNameChar(this.input[this.pos])) {
                     this.pos++;
                 }
                 const name: string = this.input.substring(start, this.pos);

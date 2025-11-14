@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 - 2024 Maxprograms.
+ * Copyright (c) 2023 - 2025 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { appendFileSync, writeFileSync } from "fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLDocument } from "./XMLDocument";
 import { XMLNode } from "./XMLNode";

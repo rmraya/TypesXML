@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2023 - 2024 Maxprograms.
+ * Copyright (c) 2023 - 2025 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -21,8 +21,10 @@ export { Indenter } from "./Indenter";
 export { ProcessingInstruction } from "./ProcessingInstruction";
 export { RelaxNGParser } from "./RelaxNGParser";
 export { SAXParser } from "./SAXParser";
+export type { ParseSourceOptions, StreamParseOptions } from "./SAXParser";
 export { TextNode } from "./TextNode";
 export { XMLAttribute } from "./XMLAttribute";
+export { XMLCanonicalizer } from "./XMLCanonicalizer";
 export { XMLComment } from "./XMLComment";
 export { XMLDeclaration } from "./XMLDeclaration";
 export { XMLDocument } from "./XMLDocument";
