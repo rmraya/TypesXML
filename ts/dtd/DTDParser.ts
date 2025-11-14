@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Stats, closeSync, openSync, readSync, statSync } from "fs";
+import { Stats, closeSync, openSync, readSync, statSync } from "node:fs";
 import { dirname, sep } from "node:path";
 import { Catalog } from "../Catalog";
 import { FileReader } from "../FileReader";
@@ -843,8 +843,8 @@ export class DTDParser {
 
     private normalizeEntityLiteral(value: string): string {
         // XML 1.0 section 2.11: normalize CRLF and CR to LF within entity values.
-        let normalized: string = value.replace(/\r\n/g, '\n');
-        normalized = normalized.replace(/\r/g, '\n');
+        let normalized: string = value.replaceAll('\r\n', '\n');
+        normalized = normalized.replaceAll('\r', '\n');
         return normalized;
     }
 
@@ -1089,7 +1089,7 @@ export class DTDParser {
                     continue;
                 }
                 const hexDigits: string = content.substring(index + 3, semi);
-                const value: number = parseInt(hexDigits, 16);
+                const value: number = Number.parseInt(hexDigits, 16);
                 if (!Number.isNaN(value)) {
                     result += String.fromCodePoint(value);
                 }
@@ -1104,7 +1104,7 @@ export class DTDParser {
                     continue;
                 }
                 const digits: string = content.substring(index + 2, semi);
-                const value: number = parseInt(digits, 10);
+                const value: number = Number.parseInt(digits, 10);
                 if (!Number.isNaN(value)) {
                     result += String.fromCodePoint(value);
                 }
@@ -1438,7 +1438,7 @@ export class DTDParser {
             this.validateTextContent(content, location);
 
             // XML 1.0 section 2.11: normalize line endings to LF
-            content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            content = content.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 
             // Remove optional text declaration so entity replacement text contains only actual content
             content = this.removeTextDeclaration(content);
@@ -1485,7 +1485,7 @@ export class DTDParser {
 
         // Skip BOM if present (UTF-8: \uFEFF or UTF-16: \uFEFF)
         let textContent = content;
-        if (textContent.charCodeAt(0) === 0xFEFF) {
+        if (textContent.codePointAt(0) === 0xFEFF) {
             textContent = textContent.substring(1);
         }
 
@@ -1514,7 +1514,7 @@ export class DTDParser {
         let nonPrintableCount = 0;
         const checkLength = Math.min(textContent.length, 1000);
         for (let i = 0; i < checkLength; i++) {
-            const code = textContent.charCodeAt(i);
+            const code: number = textContent.codePointAt(i) ?? -1;
             // Allow common XML characters: tab(9), newline(10), carriage return(13), and printable ASCII
             // Also allow Unicode characters above 127
             if (code < 9 || (code > 13 && code < 32) || code === 127) {
@@ -1719,17 +1719,22 @@ export class DTDParser {
     private hasParameterEntityReferenceOutsideLiterals(text: string): boolean {
         let inSingleQuote: boolean = false;
         let inDoubleQuote: boolean = false;
-        for (let index = 0; index < text.length; index++) {
+        let index: number = 0;
+
+        while (index < text.length) {
             const char: string = text.charAt(index);
             if (!inDoubleQuote && char === "'") {
                 inSingleQuote = !inSingleQuote;
+                index++;
                 continue;
             }
             if (!inSingleQuote && char === '"') {
                 inDoubleQuote = !inDoubleQuote;
+                index++;
                 continue;
             }
             if (inSingleQuote || inDoubleQuote) {
+                index++;
                 continue;
             }
 
@@ -1738,16 +1743,7 @@ export class DTDParser {
                 if (end === -1) {
                     return false;
                 }
-                index = end + 2;
-                continue;
-            }
-
-            if (char === '<' && text.startsWith('<!--', index)) {
-                const end: number = text.indexOf('-->', index + 4);
-                if (end === -1) {
-                    return false;
-                }
-                index = end + 2;
+                index = end + '-->'.length;
                 continue;
             }
 
@@ -1757,6 +1753,8 @@ export class DTDParser {
                     return true;
                 }
             }
+
+            index++;
         }
         return false;
     }

@@ -98,7 +98,7 @@ export class DTDGrammar implements Grammar {
             if (entity === undefined) {
                 throw new Error('Unknown entity: ' + entityName);
             }
-            text = text.replace('%' + entityName + ';', entity.getValue());
+            text = text.replaceAll('%' + entityName + ';', entity.getValue());
         }
         return text;
     }

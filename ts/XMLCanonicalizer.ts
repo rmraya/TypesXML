@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Readable } from "stream";
+import { Readable } from "node:stream";
 import { CData } from "./CData";
 import { DOMBuilder } from "./DOMBuilder";
 import { ProcessingInstruction } from "./ProcessingInstruction";
@@ -140,7 +140,7 @@ export class XMLCanonicalizer {
     }
 
     private escapeData(data: string): string {
-        const normalized: string = data.replace(/\r\n/g, "\n");
+        const normalized: string = data.replaceAll('\r\n', "\n");
         let result: string = "";
         for (let i: number = 0; i < normalized.length; i++) {
             const char: string = normalized.charAt(i);
@@ -174,7 +174,7 @@ export class XMLCanonicalizer {
     }
 
     private escapeProcessingInstructionData(data: string): string {
-        const normalized: string = data.replace(/\r\n/g, "\n");
+        const normalized: string = data.replaceAll('\r\n', "\n");
         let result: string = "";
         for (let i: number = 0; i < normalized.length; i++) {
             const char: string = normalized.charAt(i);

@@ -10,8 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { existsSync } from "fs";
-import { basename, dirname, isAbsolute, resolve } from "path";
+import { existsSync } from "node:fs";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { DOMBuilder } from "./DOMBuilder";
 import { SAXParser } from "./SAXParser";
 import { XMLAttribute } from "./XMLAttribute";

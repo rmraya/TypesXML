@@ -10,8 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Stats, closeSync, openSync, readSync, statSync } from "fs";
-import { TextDecoder } from "util";
+import { Stats, closeSync, openSync, readSync, statSync } from "node:fs";
+import { TextDecoder } from "node:util";
 
 export class FileReader {
 
@@ -99,7 +99,7 @@ export class FileReader {
 
     handleInitialChunk(text: string): string {
         this.firstRead = false;
-        if (!this.decoder && text.length > 0 && text.charCodeAt(0) === 0xFEFF) {
+        if (!this.decoder && text.length > 0 && text.codePointAt(0) === 0xFEFF) {
             return text.substring(1);
         }
         return text;

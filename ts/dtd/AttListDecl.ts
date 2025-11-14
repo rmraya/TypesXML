@@ -69,7 +69,7 @@ export class AttListDecl implements XMLNode {
             let defaultDecl: string = '';
             let defaultValue: string = '';
 
-            while (state.index < parts.length) {
+            if (state.index < parts.length) {
                 const nextPart: string = parts[state.index];
 
                 if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
@@ -78,10 +78,7 @@ export class AttListDecl implements XMLNode {
                     scanIndex = keywordPos + nextPart.length;
                     defaultDecl = nextPart;
                     state.index++;
-                    break;
-                }
-
-                if (nextPart === '#FIXED') {
+                } else if (nextPart === '#FIXED') {
                     const fixedPos: number = this.findTokenPosition(text, nextPart, scanIndex);
                     this.ensureSeparated(text, scanIndex, fixedPos, attType, nextPart);
                     scanIndex = fixedPos + nextPart.length;
@@ -97,25 +94,16 @@ export class AttListDecl implements XMLNode {
                     this.ensureSeparated(text, scanIndex, valuePos, nextPart, valueToken);
                     defaultValue = this.isQuotedValue(valueToken) ? this.trimQuotes(valueToken) : valueToken;
                     scanIndex = valuePos + valueToken.length;
-                    break;
-                }
-
-                if (nextPart && this.isQuotedValue(nextPart)) {
+                } else if (nextPart && this.isQuotedValue(nextPart)) {
                     const valuePos: number = this.findTokenPosition(text, nextPart, scanIndex);
                     this.ensureSeparated(text, scanIndex, valuePos, attType, nextPart);
                     defaultDecl = nextPart;
                     defaultValue = this.trimQuotes(nextPart);
                     scanIndex = valuePos + nextPart.length;
                     state.index++;
-                    break;
-                }
-
-                if (nextPart && !XMLUtils.isValidXMLName(nextPart)) {
+                } else if (nextPart && !XMLUtils.isValidXMLName(nextPart)) {
                     throw new Error(`Invalid attribute declaration: unexpected token "${nextPart}" after attribute type "${attType}"`);
                 }
-
-                // The next part corresponds to a new attribute definition
-                break;
             }
 
             const att: AttDecl = new AttDecl(name, attType, defaultDecl, defaultValue);
@@ -214,10 +202,10 @@ export class AttListDecl implements XMLNode {
     }
 
     private normalizeEnumeration(value: string): string {
-        let normalized = value.replace(/\s+/g, ' ');
-        normalized = normalized.replace(/\s*\|\s*/g, '|');
-        normalized = normalized.replace(/\(\s*/g, '(');
-        normalized = normalized.replace(/\s*\)/g, ')');
+        let normalized = value.replaceAll(/\s+/g, ' ');
+        normalized = normalized.replaceAll(/\s*\|\s*/g, '|');
+        normalized = normalized.replaceAll(/\(\s*/g, '(');
+        normalized = normalized.replaceAll(/\s*\)/g, ')');
         return normalized.trim();
     }
 

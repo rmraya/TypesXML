@@ -72,7 +72,7 @@ export class ContentModel {
 
     parseSpec(modelString: string): ContentModel {
         // Normalize whitespace so multi-line mixed content declarations parse correctly
-        let contentString: string = modelString.replace(/\s+/g, "");
+        let contentString: string = modelString.replaceAll(/\s+/g, "");
         const invalidWhitespace: RegExpMatchArray | null = modelString.match(/\S\s+([*+?])/);
         if (invalidWhitespace) {
             const operator: string = invalidWhitespace[1];

@@ -10,22 +10,22 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { existsSync } from "fs";
-import { dirname, isAbsolute, resolve } from "path";
-import { Readable } from "stream";
-import { fileURLToPath } from "url";
+import { existsSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { Readable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import { Catalog } from "./Catalog";
 import { ContentHandler } from "./ContentHandler";
 import { FileReader } from "./FileReader";
 import { NeedMoreDataError } from "./NeedMoreDataError";
 import { RelaxNGParser } from "./RelaxNGParser";
-import { DTDParser } from "./dtd/DTDParser";
-import { DTDGrammar } from "./dtd/DTDGrammar";
-import { AttDecl } from "./dtd/AttDecl";
 import { StreamReader } from "./StreamReader";
 import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
+import { AttDecl } from "./dtd/AttDecl";
+import { DTDGrammar } from "./dtd/DTDGrammar";
+import { DTDParser } from "./dtd/DTDParser";
 import { Grammar, ValidationError, ValidationResult } from "./grammar/Grammar";
 
 export interface ParseSourceOptions {
@@ -346,7 +346,7 @@ export class SAXParser {
             this.pendingCR = true;
             text = text.substring(0, text.length - 1);
         }
-        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        text = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
         this.buffer += text;
     }
 
@@ -544,12 +544,12 @@ export class SAXParser {
         } else if (name === 'quot') {
             this.contentHandler?.characters('"');
         } else if (name.startsWith('#x')) {
-            const codePoint: number = parseInt(name.substring(2), 16);
+            const codePoint: number = Number.parseInt(name.substring(2), 16);
             XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, `character reference &#x${name.substring(2)};`);
             const char: string = String.fromCodePoint(codePoint);
             this.contentHandler?.characters(char);
         } else if (name.startsWith('#')) {
-            const codePoint: number = parseInt(name.substring(1));
+            const codePoint: number = Number.parseInt(name.substring(1), 10);
             XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, codePoint, `character reference &#${name.substring(1)};`);
             const char: string = String.fromCodePoint(codePoint);
             this.contentHandler?.characters(char);
@@ -1003,8 +1003,11 @@ export class SAXParser {
             let relaxngParser = new RelaxNGParser(resolvedPath, this.catalog);
             this.defaultAttributes = relaxngParser.getElements();
             this.isRelaxNG = true;
-        } catch (error: Error | any) {
-            throw new Error(`Error accessing RelaxNG schema at ${href}: ${error.message}`);
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                throw new Error(`Error accessing RelaxNG schema at ${href}: ${error.message}`, { cause: error });
+            }
+            throw new Error(`Error accessing RelaxNG schema at ${href}: ${String(error)}`);
         }
     }
 
@@ -1659,28 +1662,28 @@ export class SAXParser {
         const hasLiteralLineBreak: boolean = rawValue.indexOf('\n') !== -1 || rawValue.indexOf('\r') !== -1;
 
         if (hasLiteralLineBreak) {
-            result = result.replace(/\r\n/g, '\n');
+            result = result.replaceAll('\r\n', '\n');
         }
 
         if (!hasCarriageReturnReference) {
-            result = result.replace(/\r/g, '\n');
+            result = result.replaceAll('\r', '\n');
         }
 
         if (!decl || decl.getType() === 'CDATA') {
             if (!hasLineFeedReference) {
-                result = result.replace(/\n/g, ' ');
+                result = result.replaceAll('\n', ' ');
             }
             if (!hasCarriageReturnReference) {
-                result = result.replace(/\r/g, ' ');
+                result = result.replaceAll('\r', ' ');
             }
             if (!hasTabReference) {
-                result = result.replace(/\t/g, ' ');
+                result = result.replaceAll('\t', ' ');
             }
             return result;
         }
 
-        result = result.replace(/\n/g, ' ').replace(/\r/g, ' ').replace(/\t/g, ' ');
-        return result.replace(/ +/g, ' ').trim();
+        result = result.replaceAll('\n', ' ').replaceAll('\r', ' ').replaceAll('\t', ' ');
+        return result.replaceAll(/ +/g, ' ').trim();
     }
 
     private containsNumericCharReference(rawValue: string, codePoint: number): boolean {
@@ -1690,9 +1693,9 @@ export class SAXParser {
             const token: string = match[1];
             let value: number;
             if (token[0] === 'x' || token[0] === 'X') {
-                value = parseInt(token.substring(1), 16);
+                value = Number.parseInt(token.substring(1), 16);
             } else {
-                value = parseInt(token, 10);
+                value = Number.parseInt(token, 10);
             }
             if (value === codePoint) {
                 return true;
@@ -1727,11 +1730,11 @@ export class SAXParser {
                 throw new Error('Malformed XML document: empty entity reference in attribute value');
             }
             if (entityName.startsWith('#x')) {
-                const parsed: number = parseInt(entityName.substring(2), 16);
+                const parsed: number = Number.parseInt(entityName.substring(2), 16);
                 XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#x${entityName.substring(2)}; in attribute value`);
                 result += String.fromCodePoint(parsed);
             } else if (entityName.startsWith('#')) {
-                const parsed: number = parseInt(entityName.substring(1));
+                const parsed: number = Number.parseInt(entityName.substring(1), 10);
                 XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#${entityName.substring(1)}; in attribute value`);
                 result += String.fromCodePoint(parsed);
             } else {
@@ -1779,11 +1782,11 @@ export class SAXParser {
             if (entityName === 'lt' || entityName === 'gt' || entityName === 'amp' || entityName === 'apos' || entityName === 'quot') {
                 result += '&' + entityName + ';';
             } else if (entityName.startsWith('#x')) {
-                const parsed = parseInt(entityName.substring(2), 16);
+                const parsed = Number.parseInt(entityName.substring(2), 16);
                 XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#x${entityName.substring(2)}; in entity replacement`);
                 result += String.fromCodePoint(parsed);
             } else if (entityName.startsWith('#')) {
-                const parsed = parseInt(entityName.substring(1));
+                const parsed = Number.parseInt(entityName.substring(1), 10);
                 XMLUtils.ensureValidXmlCodePoint(this.xmlVersion, parsed, `character reference &#${entityName.substring(1)}; in entity replacement`);
                 result += String.fromCodePoint(parsed);
             } else {

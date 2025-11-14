@@ -30,7 +30,7 @@ export class XMLUtils {
     }
 
     static isXmlSpace(char: string): boolean {
-        return this.SPACES.indexOf(char) > -1;
+        return this.SPACES.includes(char);
     }
 
     static hasParameterEntity(text: string) {
@@ -52,7 +52,7 @@ export class XMLUtils {
     }
 
     static normalizeSpaces(text: string): string {
-        return String(text).replace(/\s+/g, ' ');
+        return String(text).replaceAll(/\s+/g, ' ');
     }
 
     static replaceAll(text: string, search: string, replacement: string): string {
@@ -64,7 +64,7 @@ export class XMLUtils {
         let length: number = text.length;
         for (let i: number = 0; i < length; i++) {
             let c: string = text.charAt(i);
-            if ('[]{}()^$?*+.'.indexOf(c) > -1) {
+            if ('[]{}()^$?*+.'.includes(c)) {
                 result += '\\';
             }
             result += c;
@@ -74,7 +74,7 @@ export class XMLUtils {
 
     static validXml10Chars(text: string): string {
         let result: string = '';
-        for (let i: number = 0; i < text.length; ) {
+        for (let i: number = 0; i < text.length;) {
             const codePoint: number = text.codePointAt(i)!;
             if (XMLUtils.isValidXml10Char(codePoint)) {
                 result += String.fromCodePoint(codePoint);
@@ -96,7 +96,7 @@ export class XMLUtils {
 
     static validXml11Chars(text: string): string {
         let result: string = '';
-        for (let i = 0; i < text.length; ) {
+        for (let i = 0; i < text.length;) {
             const codePoint: number = text.codePointAt(i)!;
             if (XMLUtils.isValidXml11Char(codePoint)) {
                 result += String.fromCodePoint(codePoint);
@@ -115,12 +115,12 @@ export class XMLUtils {
     static ensureValidXmlCodePoint(version: string, codePoint: number, context: string): void {
         if (!XMLUtils.isValidXmlChar(version, codePoint)) {
             const hex: string = codePoint.toString(16).toUpperCase().padStart(4, '0');
-            throw new Error('Malformed XML document: forbidden character U+'+ hex + ' in ' + context);
+            throw new Error('Malformed XML document: forbidden character U+' + hex + ' in ' + context);
         }
     }
 
     static ensureValidXmlCharacters(version: string, text: string, context: string): void {
-        for (let i = 0; i < text.length; ) {
+        for (let i = 0; i < text.length;) {
             const codePoint: number = text.codePointAt(i)!;
             XMLUtils.ensureValidXmlCodePoint(version, codePoint, context);
             i += codePoint > 0xFFFF ? 2 : 1;
@@ -173,8 +173,11 @@ export class XMLUtils {
 
     static isNameStartChar(char: string): boolean {
         // XML 1.0 spec: NameStartChar
-        const code = char.charCodeAt(0);
-        
+        const code = char.codePointAt(0);
+        if (code === undefined) {
+            return false;
+        }
+
         return (
             char === ':' ||
             char === '_' ||
@@ -197,13 +200,16 @@ export class XMLUtils {
 
     static isNameChar(char: string): boolean {
         // XML 1.0 spec: NameChar includes NameStartChar plus additional characters
-        const code = char.charCodeAt(0);
-        
+        const code = char.codePointAt(0);
+        if (code === undefined) {
+            return false;
+        }
+
         // First check if it's a valid NameStartChar
         if (XMLUtils.isNameStartChar(char)) {
             return true;
         }
-        
+
         // Additional characters allowed in names (but not at the start)
         return (
             char === '-' ||
@@ -244,8 +250,11 @@ export class XMLUtils {
 
     static isNCNameStartChar(char: string): boolean {
         // Same as NameStartChar but without colon
-        const code = char.charCodeAt(0);
-        
+        const code = char.codePointAt(0);
+        if (code === undefined) {
+            return false;
+        }
+
         return (
             char === '_' ||
             (code >= 0x41 && code <= 0x5A) ||     // [A-Z]

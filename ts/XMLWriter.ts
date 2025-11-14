@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { appendFileSync, writeFileSync } from "fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { XMLDeclaration } from "./XMLDeclaration";
 import { XMLDocument } from "./XMLDocument";
 import { XMLNode } from "./XMLNode";

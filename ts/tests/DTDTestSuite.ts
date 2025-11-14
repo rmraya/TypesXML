@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { DOMBuilder } from "../DOMBuilder";
 import { SAXParser } from "../SAXParser";
 import { XMLCanonicalizer } from "../XMLCanonicalizer";
@@ -227,4 +227,9 @@ export class DTDTestSuite {
         console.log('\n\n');
     }
 }
-new DTDTestSuite();
+
+try {
+    new DTDTestSuite();
+} catch (error) {
+    console.error("Error running DTDTestSuite:", error);
+}
