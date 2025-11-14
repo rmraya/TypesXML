@@ -619,7 +619,8 @@ export class SAXParser {
             const grammarForEntities: Grammar | undefined = this.contentHandler?.getGrammar();
             const dtdGrammarForEntities: DTDGrammar | undefined = grammarForEntities instanceof DTDGrammar ? grammarForEntities : undefined;
             attributesMap.forEach((value: string) => {
-                this.decodeAttributeEntities(value, dtdGrammarForEntities);
+                const decoded: string = this.decodeAttributeEntities(value, dtdGrammarForEntities);
+                XMLUtils.ensureValidXmlCharacters(this.xmlVersion, decoded, 'attribute value');
             });
             attributesMap = this.normalizeDTDAttributes(name, attributesMap);
             let attributes: Array<XMLAttribute> = [];
@@ -1019,6 +1020,7 @@ export class SAXParser {
         const baseDir: string | undefined = this.currentFile ? dirname(this.currentFile) : undefined;
         const parser: DTDParser = existingGrammar instanceof DTDGrammar ? new DTDParser(existingGrammar, baseDir) : new DTDParser(undefined, baseDir);
         parser.setValidating(this.validating);
+        parser.setXmlVersion(this.xmlVersion);
         if (this.catalog) {
             parser.setCatalog(this.catalog);
         }
@@ -1232,6 +1234,7 @@ export class SAXParser {
         const baseDir: string | undefined = this.readingFromFile && this.currentFile ? dirname(this.currentFile) : undefined;
         const parser: DTDParser = existingGrammar instanceof DTDGrammar ? new DTDParser(existingGrammar, baseDir) : new DTDParser(undefined, baseDir);
         parser.setValidating(this.validating);
+        parser.setXmlVersion(this.xmlVersion);
         if (this.catalog) {
             parser.setCatalog(this.catalog);
         }
@@ -1640,6 +1643,7 @@ export class SAXParser {
         const normalized: Map<string, string> = new Map<string, string>();
         attributes.forEach((value: string, name: string) => {
             const expanded: string = this.decodeAttributeEntities(value, grammar);
+            XMLUtils.ensureValidXmlCharacters(this.xmlVersion, expanded, 'attribute value');
             const decl = declarations.get(name);
             normalized.set(name, this.normalizeAttributeValue(value, expanded, decl));
         });

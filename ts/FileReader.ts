@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { Stats, closeSync, openSync, readSync, statSync } from "fs";
+import { TextDecoder } from "util";
 
 export class FileReader {
 
@@ -20,11 +21,14 @@ export class FileReader {
     fileSize: number;
     position: number;
     firstRead: boolean;
+    private decoder?: TextDecoder;
+    private readonly filePath: string;
 
     constructor(path: string, encoding?: BufferEncoding) {
+        this.filePath = path;
         let stats: Stats = statSync(path, { bigint: false, throwIfNoEntry: true });
         this.fileSize = stats.size;
-        this.blockSize = stats.blksize;
+        this.blockSize = stats.blksize && stats.blksize > 0 ? stats.blksize : 8192;
         this.fileHandle = openSync(path, 'r');
         if (encoding) {
             this.encoding = encoding;
@@ -33,6 +37,7 @@ export class FileReader {
         }
         this.position = 0;
         this.firstRead = true;
+        this.initializeDecoder();
     }
 
     static detectEncoding(path: string): BufferEncoding {
@@ -68,23 +73,36 @@ export class FileReader {
 
     setEncoding(encoding: BufferEncoding): void {
         this.encoding = encoding;
+        this.initializeDecoder();
+        this.firstRead = true;
     }
 
     read(): string {
-        let buffer: Buffer = Buffer.alloc(this.blockSize, this.encoding);
+        let buffer: Buffer = Buffer.alloc(this.blockSize);
         let amount: number = this.blockSize <= this.fileSize - this.position ? this.blockSize : this.fileSize - this.position;
         let bytesRead: number = readSync(this.fileHandle, buffer, 0, amount, this.position);
         this.position += bytesRead;
-        return this.firstRead ? this.skipBOM(buffer, bytesRead) : buffer.toString(this.encoding, 0, bytesRead);
+        let decoded: string;
+        try {
+            if (this.decoder) {
+                const stream: boolean = this.position < this.fileSize;
+                decoded = this.decoder.decode(buffer.subarray(0, bytesRead), { stream });
+            } else {
+                decoded = buffer.toString(this.encoding, 0, bytesRead);
+            }
+        } catch (error) {
+            const message: string = (error as Error).message || 'invalid byte sequence';
+            throw new Error(`Invalid ${this.encoding} data in "${this.filePath}": ${message}`);
+        }
+        return this.firstRead ? this.handleInitialChunk(decoded) : decoded;
     }
 
-    skipBOM(buffer: Buffer, bytesRead: number): string {
+    handleInitialChunk(text: string): string {
         this.firstRead = false;
-        const result: string = buffer.toString(this.encoding, 0, bytesRead);
-        if (result.length > 0 && result.charCodeAt(0) === 0xFEFF) {
-            return result.substring(1);
+        if (!this.decoder && text.length > 0 && text.charCodeAt(0) === 0xFEFF) {
+            return text.substring(1);
         }
-        return result;
+        return text;
     }
 
     dataAvailable(): boolean {
@@ -97,5 +115,15 @@ export class FileReader {
 
     closeFile(): void {
         closeSync(this.fileHandle);
+    }
+
+    private initializeDecoder(): void {
+        if (this.encoding === 'utf8') {
+            this.decoder = new TextDecoder('utf-8', { fatal: true });
+        } else if (this.encoding === 'utf16le') {
+            this.decoder = new TextDecoder('utf-16le', { fatal: true });
+        } else {
+            this.decoder = undefined;
+        }
     }
 }
