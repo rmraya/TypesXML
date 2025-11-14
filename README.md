@@ -1,42 +1,53 @@
 # TypesXML
 
-Open source XML library written in TypeScript with DOM and SAX support.
+[![npm version](https://img.shields.io/npm/v/typesxml)](https://www.npmjs.com/package/typesxml)
+[![npm license](https://img.shields.io/npm/l/typesxml)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/implementation-native%20TypeScript-3178c6)](https://www.typescriptlang.org/)
 
-✅ Fully passes the complete W3C XML Conformance Test Suite (valid, invalid, not-wf, and external entity cases).
+TypesXML is a native TypeScript XML processing toolkit—there are no bindings to C/C++ libraries or other native layers. It ships first-class DOM and SAX pipelines, validates full DTD grammars, and resolves entities through OASIS XML Catalogs. The library passes the entire W3C XML Conformance Test Suite (valid, invalid, not-wf, and external entity scenarios).
 
-- Full DTD parsing and validation.
-- Full support for OASIS XML Catalogs.
+## Features
+
+- DOM builder (`DOMBuilder`) that produces an in-memory tree and preserves lexical information needed by canonicalization.
+- Streaming SAX parser with pull-based file, string, and Node.js stream entry points.
+- Complete DTD parser/validator with conditional sections, parameter entities, and Relax NG default attribute support.
+- OASIS XML Catalog resolver for public/system identifiers and alternate entity sources.
+- Canonical XML renderer compatible with the W3C XML Test Suite rules.
+- Strict character validation for XML 1.0/1.1 and optional validating mode.
+- Pure TypeScript implementation with type definitions included—ideal for bundlers and ESM/CJS projects.
 
 ## SAX Parser
 
-TypesXML implements a SAX parser that exposes these methods from the `ContentHandler` interface:
+`SAXParser` drives any `ContentHandler` implementation. A handler receives structured callbacks during parsing:
 
-- initialize(): void;
-- setCatalog(catalog: Catalog): void;
-- startDocument(): void;
-- endDocument(): void;
-- xmlDeclaration(version: string, encoding: string, standalone: string): void;
-- startElement(name: string, atts: Array\<XMLAttribute>): void;
-- endElement(name: string): void;
-- internalSubset(declaration: string): void;
-- characters(ch: string): void;
-- ignorableWhitespace(ch: string): void;
-- comment(ch: string): void;
-- processingInstruction(target: string, data: string): void;
-- startCDATA(): void;
-- endCDATA(): void;
-- startDTD(name: string, publicId: string, systemId: string): void;
-- endDTD(): void;
-- skippedEntity(name: string): void;
+```ts
+interface ContentHandler {
+    initialize(): void;
+    setCatalog(catalog: Catalog): void;
+    startDocument(): void;
+    endDocument(): void;
+    xmlDeclaration(version: string, encoding: string, standalone: string): void;
+    startElement(name: string, atts: XMLAttribute[]): void;
+    endElement(name: string): void;
+    internalSubset(declaration: string): void;
+    characters(text: string): void;
+    ignorableWhitespace(text: string): void;
+    comment(text: string): void;
+    processingInstruction(target: string, data: string): void;
+    startCDATA(): void;
+    endCDATA(): void;
+    startDTD(name: string, publicId: string, systemId: string): void;
+    endDTD(): void;
+    skippedEntity(name: string): void;
+}
+```
 
-## DOM support
+The built-in `DOMBuilder` implements this interface to provide DOM support out of the box.
 
-Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tree from an XML document.
+## Roadmap
 
-## On the Roadmap
-
-- Support for XML Schemas
-- Support for RelaxNG
+- XML Schema 1.0 validation
+- XPath/XSLT integration helpers
 
 ## Installation
 
@@ -44,61 +55,45 @@ Class `DOMBuilder` implements the `ContentHandler` interface and builds a DOM tr
 npm install typesxml
 ```
 
-## Example
+## Usage
 
-```TypeScript
-import { ContentHandler } from "./ContentHandler";
-import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser } from "./SAXParser";
-import { XMLDocument } from "./XMLDocument";
-import { XMLElement } from "./XMLElement";
+```ts
+import { DOMBuilder, SAXParser } from "typesxml";
 
-export class Test {
+const handler = new DOMBuilder();
+const parser = new SAXParser();
+parser.setContentHandler(handler);
 
-    constructor() {
-        try {
-            let contentHandler: ContentHandler = new DOMBuilder();
-            let xmlParser = new SAXParser();
-            xmlParser.setContentHandler(contentHandler);
+// Parse from a file
+parser.parseFile("example.xml");
+const document = handler.getDocument();
+console.log(document.toString());
 
-            // build the document from a file
-            xmlParser.parseFile("test.xml");
-            let doc: XMLDocument = (contentHandler as DOMBuilder).getDocument();
-            let root: XMLElement = doc.getRoot();
-            console.log(doc.toString());
+// Parse from a string
+parser.parseString("<root><child/></root>");
 
-            //  build the document again, this time from a string
-            xmlParser.parseString(doc.toString());
-            let newDoc : XMLDocument = (contentHandler as DOMBuilder).getDocument();
-            console.log(newDoc.toString());
-
-        } catch (error: any) {
-            if (error instanceof Error) {
-                console.log(error.message);
-            } else {
-                console.log(error);
-            }
-        }
-    }
-}
-
-new Test();
+// Parse from a stream
+// await parser.parseStream(fs.createReadStream("example.xml"));
 ```
 
-## Running the W3C XML Test Suite
+To enable XML Catalog resolution or validation, configure the parser before invoking `parse*` methods:
 
-To exercise TypesXML against the full W3C XML Conformance Test Suite:
+```ts
+parser.setCatalog(myCatalog);
+parser.setValidating(true);
+```
 
-1. Download the latest archive from the [W3C XML Test Suite page](https://www.w3.org/XML/Test/)
-    (for example, `xmlts20080827.zip`).
-2. Extract the contents of the archive into the repository at `./tests/xmltest` so that the
-    directory contains the `valid`, `invalid`, and `not-wf` folders from the suite.
-3. Install project dependencies if you have not already done so: `npm install`.
-4. Run the DTD regression command:
+## W3C XML Test Suite
 
-    ```bash
-    npm run testDtd
-    ```
+The repository includes a harness that runs against the official W3C XML Conformance Test Suite. To execute it locally:
 
-The script compiles the TypeScript sources and executes the harness in
-`ts/tests/DTDTestSuite.ts`, reporting any conformance failures.
+1. Download the latest archive from the [W3C XML Test Suite](https://www.w3.org/XML/Test/) (e.g., `xmlts20080827.zip`).
+2. Extract the archive into `./tests/xmltest` so the `valid`, `invalid`, and `not-wf` folders sit under that path.
+3. Install dependencies if needed: `npm install`.
+4. Run the suite:
+
+   ```bash
+   npm run testDtd
+   ```
+
+The script compiles the TypeScript sources and executes `ts/tests/DTDTestSuite.ts`, reporting any conformance failures.
