@@ -22,6 +22,7 @@ export class EntityDecl implements XMLNode {
     private publicId: string;
     private ndata: string;
     private externalContentLoaded: boolean = false; // Track if external content has been loaded
+    private unresolvedExternalError: string | null = null;
 
     constructor(name: string, parameterEntity: boolean, value: string, systemId: string, publicId: string, ndata: string) {
         // parameterEntities are only used in DTDs
@@ -46,10 +47,19 @@ export class EntityDecl implements XMLNode {
         if (this.systemId || this.publicId) {
             this.externalContentLoaded = true;
         }
+        this.unresolvedExternalError = null;
     }
 
     isExternalContentLoaded(): boolean {
         return this.externalContentLoaded;
+    }
+
+    markUnresolved(errorMessage: string): void {
+        this.unresolvedExternalError = errorMessage;
+    }
+
+    getUnresolvedError(): string | null {
+        return this.unresolvedExternalError;
     }
 
     isParameterEntity(): boolean {

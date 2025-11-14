@@ -39,6 +39,7 @@ export class AttListDecl implements XMLNode {
     parseAttributes(text: string) {
         const parts: string[] = this.split(text);
         const state = { index: 0 };
+        let scanIndex: number = 0;
 
         while (state.index < parts.length) {
             const name: string = parts[state.index++];
@@ -50,37 +51,71 @@ export class AttListDecl implements XMLNode {
                 throw new Error(`Invalid attribute name in ATTLIST declaration: "${name}"`);
             }
 
+            const namePos: number = this.findTokenPosition(text, name, scanIndex);
+            scanIndex = namePos + name.length;
+
             if (state.index >= parts.length) {
                 throw new Error(`Missing attribute type for attribute "${name}"`);
             }
 
-            let attType: string = this.readAttributeType(parts, state);
+            const attType: string = this.readAttributeType(parts, state);
+            if (!this.isValidAttributeType(attType)) {
+                throw new Error(`Invalid attribute type in ATTLIST declaration: "${attType}"`);
+            }
+
+            const typePos: number = this.findTokenPosition(text, attType, scanIndex);
+            scanIndex = typePos + attType.length;
+
             let defaultDecl: string = '';
             let defaultValue: string = '';
 
-            if (state.index < parts.length) {
-                const nextPart = parts[state.index];
+            while (state.index < parts.length) {
+                const nextPart: string = parts[state.index];
+
                 if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
+                    const keywordPos: number = this.findTokenPosition(text, nextPart, scanIndex);
+                    this.ensureSeparated(text, scanIndex, keywordPos, attType, nextPart);
+                    scanIndex = keywordPos + nextPart.length;
                     defaultDecl = nextPart;
                     state.index++;
-                } else if (nextPart === '#FIXED') {
+                    break;
+                }
+
+                if (nextPart === '#FIXED') {
+                    const fixedPos: number = this.findTokenPosition(text, nextPart, scanIndex);
+                    this.ensureSeparated(text, scanIndex, fixedPos, attType, nextPart);
+                    scanIndex = fixedPos + nextPart.length;
                     defaultDecl = nextPart;
                     state.index++;
-                    if (state.index < parts.length) {
-                        const valueToken = parts[state.index++];
-                        if (this.isQuotedValue(valueToken)) {
-                            defaultValue = this.trimQuotes(valueToken);
-                        } else {
-                            defaultValue = valueToken;
-                        }
+
+                    if (state.index >= parts.length) {
+                        throw new Error(`Invalid attribute declaration: missing value for #FIXED attribute "${name}"`);
                     }
-                } else if (nextPart && this.isQuotedValue(nextPart)) {
+
+                    const valueToken: string = parts[state.index++];
+                    const valuePos: number = this.findTokenPosition(text, valueToken, scanIndex);
+                    this.ensureSeparated(text, scanIndex, valuePos, nextPart, valueToken);
+                    defaultValue = this.isQuotedValue(valueToken) ? this.trimQuotes(valueToken) : valueToken;
+                    scanIndex = valuePos + valueToken.length;
+                    break;
+                }
+
+                if (nextPart && this.isQuotedValue(nextPart)) {
+                    const valuePos: number = this.findTokenPosition(text, nextPart, scanIndex);
+                    this.ensureSeparated(text, scanIndex, valuePos, attType, nextPart);
                     defaultDecl = nextPart;
                     defaultValue = this.trimQuotes(nextPart);
+                    scanIndex = valuePos + nextPart.length;
                     state.index++;
-                } else if (nextPart) {
-                    throw new Error(`Invalid attribute declaration: default value "${nextPart}" must be quoted`);
+                    break;
                 }
+
+                if (nextPart && !XMLUtils.isValidXMLName(nextPart)) {
+                    throw new Error(`Invalid attribute declaration: unexpected token "${nextPart}" after attribute type "${attType}"`);
+                }
+
+                // The next part corresponds to a new attribute definition
+                break;
             }
 
             const att: AttDecl = new AttDecl(name, attType, defaultDecl, defaultValue);
@@ -192,6 +227,47 @@ export class AttListDecl implements XMLNode {
 
     private trimQuotes(value: string): string {
         return this.isQuotedValue(value) ? value.substring(1, value.length - 1) : value;
+    }
+
+    private isValidAttributeType(attType: string): boolean {
+        if (AttListDecl.attTypes.includes(attType)) {
+            return true;
+        }
+        if (attType.startsWith('NOTATION ')) {
+            const notation: string = attType.substring('NOTATION '.length).trim();
+            return notation.startsWith('(') && notation.endsWith(')');
+        }
+        if (attType.startsWith('(') && attType.endsWith(')')) {
+            return true;
+        }
+        return false;
+    }
+
+    private findTokenPosition(text: string, token: string, startIndex: number): number {
+        const position: number = text.indexOf(token, startIndex);
+        if (position === -1) {
+            throw new Error(`Invalid attribute declaration: unable to locate token "${token}"`);
+        }
+        return position;
+    }
+
+    private ensureSeparated(text: string, startIndex: number, tokenPosition: number, previousToken: string, currentToken: string): void {
+        if (tokenPosition < startIndex) {
+            throw new Error(`Invalid attribute declaration: unexpected ordering between "${previousToken}" and "${currentToken}"`);
+        }
+        const between: string = text.substring(startIndex, tokenPosition);
+        if (!this.containsWhitespace(between)) {
+            throw new Error(`Invalid attribute declaration: missing whitespace between "${previousToken}" and "${currentToken}"`);
+        }
+    }
+
+    private containsWhitespace(segment: string): boolean {
+        for (const char of segment) {
+            if (XMLUtils.isXmlSpace(char)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     getNodeType(): number {

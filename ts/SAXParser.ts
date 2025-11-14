@@ -356,6 +356,9 @@ export class SAXParser {
             throw new Error('Malformed XML document: unclosed elements');
         }
         this.cleanCharacterRun();
+        if (!this.rootParsed) {
+            throw new Error('Malformed XML document: missing document element');
+        }
         if (this.rootParsed && !this.documentEnded) {
             this.contentHandler?.endDocument();
             this.documentEnded = true;
@@ -459,6 +462,9 @@ export class SAXParser {
                 continue;
             }
             if (this.lookingAt('<')) {
+                if (this.rootParsed && this.elementStack === 0) {
+                    throw new Error('Malformed XML document: multiple root elements');
+                }
                 this.startElement();
                 continue;
             }
@@ -1499,6 +1505,9 @@ export class SAXParser {
                 throw new Error('Malformed attributes list');
             }
             const value: string = text.substring(valueStart, index);
+            if (map.has(name)) {
+                throw new Error(`Malformed attributes list: duplicate attribute "${name}"`);
+            }
             index++; // skip closing quote
             map.set(name, value);
         }
@@ -1613,7 +1622,7 @@ export class SAXParser {
                 if (replacement !== undefined) {
                     result += this.expandEntityReplacement(replacement, grammar, 0, new Set<string>([entityName]));
                 } else {
-                    result += '&' + entityName + ';';
+                    throw new Error(`Malformed XML document: undefined general entity &${entityName}; in attribute value`);
                 }
             }
             index = semiIndex + 1;

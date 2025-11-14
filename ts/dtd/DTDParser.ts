@@ -34,6 +34,7 @@ export class DTDParser {
     private overrideExistingDeclarations: boolean = false;
     private preexistingEntityKeys: Set<string> = new Set();
     private preexistingAttributeKeys: Map<string, Set<string>> = new Map();
+    private unresolvedExternalEntities: Map<string, string> = new Map();
 
     constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
@@ -95,6 +96,7 @@ export class DTDParser {
         this.pointer = 0;
         this.preexistingEntityKeys = new Set<string>();
         this.preexistingAttributeKeys = new Map<string, Set<string>>();
+        this.unresolvedExternalEntities.clear();
         if (this.overrideExistingDeclarations) {
             for (const key of this.grammar.getEntitiesMap().keys()) {
                 this.preexistingEntityKeys.add(key);
@@ -580,7 +582,7 @@ export class DTDParser {
                     systemId = this.resolveEntities(systemId);
                 }
                 // Don't load external entity content during DTD parsing - load lazily when referenced
-                return new EntityDecl(name, parameterEntity, '', systemId, publicId, '');
+                return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, '', systemId, publicId, ''));
             } else if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
                 // skip spaces before system id
                 i += 'SYSTEM'.length;
@@ -605,7 +607,7 @@ export class DTDParser {
                     systemId = this.resolveEntities(systemId);
                 }
                 // Don't load external entity content during DTD parsing - load lazily when referenced
-                return new EntityDecl(name, parameterEntity, '', systemId, '', '');
+                return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, '', systemId, '', ''));
             } else {
                 // get entity value
                 let separator: string = declaration.charAt(i);
@@ -621,7 +623,7 @@ export class DTDParser {
                 value = this.normalizeEntityLiteral(value);
                 const location: string = this.currentFile || this.baseDirectory || 'DTD';
                 this.validateParameterEntityValue(value, name, location);
-                return new EntityDecl(name, parameterEntity, value, '', '', '');
+                return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, value, '', '', ''));
             }
         } else {
             // Not a parameterEntity. Similar, but may declare NDATA
@@ -699,10 +701,10 @@ export class DTDParser {
                     if (XMLUtils.hasParameterEntity(ndata)) {
                         ndata = this.resolveEntities(ndata);
                     }
-                    return new EntityDecl(name, parameterEntity, '', systemId, publicId, ndata);
+                    return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, '', systemId, publicId, ndata));
                 }
                 const externalValue: string = this.loadExternalEntity(publicId, systemId, false, name, parameterEntity);
-                return new EntityDecl(name, parameterEntity, externalValue, systemId, publicId, '');
+                return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, externalValue, systemId, publicId, ''));
             } else if (XMLUtils.lookingAt('SYSTEM', declaration, i)) {
                 i += 'SYSTEM'.length;
                 // skip spaces before system id
@@ -755,10 +757,10 @@ export class DTDParser {
                         ndata = this.resolveEntities(ndata);
                     }
                     // NDATA entities are unparsed and shouldn't have content loaded
-                    return new EntityDecl(name, parameterEntity, '', systemId, '', ndata);
+                    return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, '', systemId, '', ndata));
                 }
                 const externalValue: string = this.loadExternalEntity('', systemId, false, name, parameterEntity);
-                return new EntityDecl(name, parameterEntity, externalValue, systemId, '', '');
+                return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, externalValue, systemId, '', ''));
             } else {
                 // get entity value
                 let separator: string = declaration.charAt(i);
@@ -775,9 +777,18 @@ export class DTDParser {
                     value = this.resolveEntities(value);
                 }
                 value = this.normalizeEntityLiteral(value);
-                return new EntityDecl(name, parameterEntity, value, '', '', '');
+                return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, value, '', '', ''));
             }
         }
+    }
+
+    private attachUnresolvedError(name: string, entityDecl: EntityDecl): EntityDecl {
+        const unresolvedError: string | undefined = this.unresolvedExternalEntities.get(name);
+        if (unresolvedError) {
+            entityDecl.markUnresolved(unresolvedError);
+            this.unresolvedExternalEntities.delete(name);
+        }
+        return entityDecl;
     }
 
     private normalizeEntityLiteral(value: string): string {
@@ -1154,22 +1165,21 @@ export class DTDParser {
             }
 
             // Don't trim - preserve original content including whitespace/newlines
+            if (entityName) {
+                this.unresolvedExternalEntities.delete(entityName);
+            }
             return content;
         } catch (error) {
-            // Don't load during DTD parsing if base directory not set yet
-            if (this.baseDirectory === '' && this.currentFile === '') {
-                return '';
+            const identifier: string = publicId || systemId;
+            const isRemote: boolean = identifier.startsWith('http://') || identifier.startsWith('https://');
+            const errorMessage: string = `Could not load external entity "${identifier}": ${(error as Error).message}`;
+            if (isReferenced || (this.validating && !isRemote)) {
+                throw new Error(errorMessage);
             }
-
-            // XML specification behavior depends on context:
-            // - Referenced external entities (used in document) must be loadable (fatal error)
-            // - Unreferenced external entities (DTD declarations only) can be missing (warning)
-            if (isReferenced) {
-                throw new Error(`Could not load external entity "${publicId || systemId}": ${(error as Error).message}`);
-            } else {
-                // DTD processing - be more lenient for unreferenced entities
-                return '';
+            if (entityName) {
+                this.unresolvedExternalEntities.set(entityName, errorMessage);
             }
+            return '';
         } finally {
             // Ensure file handle is always closed to prevent EMFILE errors
             if (reader) {
@@ -1321,6 +1331,9 @@ export class DTDParser {
         }
         if (XMLUtils.isXmlSpace(firstChar)) {
             return false;
+        }
+        if (firstChar === '"' || firstChar === "'") {
+            return true;
         }
         if (this.isMarkupDelimiter(firstChar)) {
             return false;

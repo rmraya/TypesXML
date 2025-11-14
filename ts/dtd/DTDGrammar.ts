@@ -393,7 +393,14 @@ export class DTDGrammar implements Grammar {
 
     resolveEntity(name: string): string | undefined {
         const entity: EntityDecl | undefined = this.getEntity(name);
-        return entity ? entity.getValue() : undefined;
+        if (!entity) {
+            return undefined;
+        }
+        const unresolvedError: string | null = entity.getUnresolvedError();
+        if (unresolvedError) {
+            throw new Error(unresolvedError);
+        }
+        return entity.getValue();
     }
 
     getGrammarType(): GrammarType {
