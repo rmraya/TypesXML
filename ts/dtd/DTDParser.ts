@@ -37,6 +37,7 @@ export class DTDParser {
     private unresolvedExternalEntities: Map<string, string> = new Map();
     private parsingInternalSubset: boolean = false;
     private xmlVersion: string = '1.0';
+    private openConditionalSections: number = 0;
 
     constructor(grammar?: DTDGrammar, baseDirectory?: string) {
         if (grammar) {
@@ -76,6 +77,10 @@ export class DTDParser {
     parseDTD(file: string): DTDGrammar {
         this.parseFile(file);
         this.grammar.processModels();
+        if (this.openConditionalSections !== 0) {
+            throw new Error("Malformed conditional section: missing closing ']]>'");
+        }
+
         return this.grammar;
     }
 
@@ -119,6 +124,7 @@ export class DTDParser {
         this.preexistingEntityKeys = new Set<string>();
         this.preexistingAttributeKeys = new Map<string, Set<string>>();
         this.unresolvedExternalEntities.clear();
+        this.openConditionalSections = 0;
         if (this.overrideExistingDeclarations) {
             for (const key of this.grammar.getEntitiesMap().keys()) {
                 this.preexistingEntityKeys.add(key);
@@ -358,6 +364,10 @@ export class DTDParser {
     }
 
     endConditionalSection() {
+        if (this.openConditionalSections === 0) {
+            throw new Error("Malformed conditional section: unexpected closing ']]>' without matching '<!['");
+        }
+        this.openConditionalSections--;
         // jump over ]]>
         this.pointer += ']]>'.length;
     }
@@ -404,6 +414,7 @@ export class DTDParser {
                 }
             }
             this.pointer++;
+            this.openConditionalSections++;
         } else if ('IGNORE' === keyword) {
             this.skipIgnoreSection();
         } else {
@@ -427,6 +438,7 @@ export class DTDParser {
                 this.pointer++;
             }
         }
+        throw new Error("Malformed conditional section: conditional IGNORE section not closed with ']]>'");
     }
 
     resolveEntities(fragment: string, depth: number = 0): string {
@@ -645,6 +657,7 @@ export class DTDParser {
                     value += char;
                 }
                 const location: string = this.currentFile || this.baseDirectory || 'DTD';
+                this.ensureParameterReferenceSyntax(value, 'parameter entity', `%${name}`, location);
                 if (this.parsingInternalSubset && this.containsParameterEntityReference(value)) {
                     const where: string = location ? ` in ${location}` : '';
                     throw new Error(`Invalid parameter entity "%${name}"${where}: parameter entity references are not allowed in replacement text within the internal subset`);
@@ -802,6 +815,8 @@ export class DTDParser {
                     }
                     value += char;
                 }
+                const location: string = this.currentFile || this.baseDirectory || 'DTD';
+                this.ensureParameterReferenceSyntax(value, 'general entity', name, location);
                 if (XMLUtils.hasParameterEntity(value)) {
                     if (this.parsingInternalSubset) {
                         const locationInfo: string = this.currentFile || this.baseDirectory || 'DTD';
@@ -811,7 +826,6 @@ export class DTDParser {
                     value = this.resolveEntities(value);
                 }
                 value = this.normalizeEntityLiteral(value);
-                const location: string = this.currentFile || this.baseDirectory || 'DTD';
                 this.validateParsedEntityValue(value, name, location, false);
                 return this.attachUnresolvedError(name, new EntityDecl(name, parameterEntity, value, '', '', ''));
             }
@@ -913,6 +927,25 @@ export class DTDParser {
         }
         if (parenDepth !== 0) {
             throw new Error(`Invalid parameter entity "%${entityName}"${where}: parentheses are not balanced`);
+        }
+    }
+
+    private ensureParameterReferenceSyntax(text: string, entityType: string, entityLabel: string, location: string): void {
+        if (!this.validating || text.length === 0) {
+            return;
+        }
+        const where: string = location ? ` in ${location}` : '';
+        let index: number = 0;
+        while (index < text.length) {
+            if (text.charAt(index) !== '%') {
+                index++;
+                continue;
+            }
+            const refEnd: number | null = this.readParameterEntityReference(text, index);
+            if (refEnd === null) {
+                throw new Error(`Invalid ${entityType} "${entityLabel}"${where}: malformed parameter entity reference in replacement text`);
+            }
+            index = refEnd + 1;
         }
     }
 

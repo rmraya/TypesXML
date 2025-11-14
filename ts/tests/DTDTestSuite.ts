@@ -166,12 +166,64 @@ export class DTDTestSuite {
             }
         }
 
+        // Not well-formed files - not standalone
+
+        if (!existsSync("./tests/xmltest/not-wf/not-sa")) {
+            throw new Error("DTD Test Suite not well-formed folder not found in ./tests/xmltest/not-wf/not-sa");
+        }
+        xmlFiles = readdirSync("./tests/xmltest/not-wf/not-sa").filter((file) => file.endsWith(".xml"));
+
+        let notWFNotSaCatched: number = 0;
+        let notWFNotSaMissed: number = 0;
+
+        for (const xmlFile of xmlFiles) {
+            let parser: SAXParser = new SAXParser();
+            let domBuilder: DOMBuilder = new DOMBuilder();
+            parser.setContentHandler(domBuilder);
+            parser.setValidating(true);
+            try {
+                parser.parseFile("./tests/xmltest/not-wf/not-sa/" + xmlFile);
+                console.log(' -- Not well-formed NOT-SA file ./tests/xmltest/not-wf/not-sa/' + xmlFile + ' not rejected');
+                notWFNotSaMissed++;
+            } catch (error) {
+                notWFNotSaCatched++;
+            }
+        }
+
+
+
+        // Not well-formed files - external entities
+
+        if (!existsSync("./tests/xmltest/not-wf/ext-sa")) {
+            throw new Error("DTD Test Suite not well-formed folder not found in ./tests/xmltest/not-wf/ext-sa");
+        }
+        xmlFiles = readdirSync("./tests/xmltest/not-wf/ext-sa").filter((file) => file.endsWith(".xml"));
+
+        let notWFExtSaCatched: number = 0;
+        let notWFExtSaMissed: number = 0;
+
+        for (const xmlFile of xmlFiles) {
+            let parser: SAXParser = new SAXParser();
+            let domBuilder: DOMBuilder = new DOMBuilder();
+            parser.setContentHandler(domBuilder);
+            parser.setValidating(true);
+            try {
+                parser.parseFile("./tests/xmltest/not-wf/ext-sa/" + xmlFile);
+                console.log(' -- Not well-formed EXT-SA file ./tests/xmltest/not-wf/ext-sa/' + xmlFile + ' not rejected');
+                notWFExtSaMissed++;
+            } catch (error) {
+                notWFExtSaCatched++;
+            }
+        }
+
         console.log('\n\n');
         console.log('Valid SA files: ' + validSa + ', Invalid SA files: ' + invalidSa);
         console.log('Valid NOT-SA files: ' + validNotSa + ', Invalid NOT-SA files: ' + invalidNotSa);
         console.log('Valid EXT-SA files: ' + validExtSa + ', Invalid EXT-SA files: ' + invalidExtSa);
-        console.log('Invalid files catched: ' + invalidCatched + ', Invalid files missed: ' + invalidMissed);   
+        console.log('Invalid files catched: ' + invalidCatched + ', Invalid files missed: ' + invalidMissed);
         console.log('Not well-formed SA catched: ' + notWFSaCatched + ', Not well-formed SA missed: ' + notWFSaMissed);
+        console.log('Not well-formed NOT-SA catched: ' + notWFNotSaCatched + ', Not well-formed NOT-SA missed: ' + notWFNotSaMissed);
+        console.log('Not well-formed EXT-SA catched: ' + notWFExtSaCatched + ', Not well-formed EXT-SA missed: ' + notWFExtSaMissed);
         console.log('\n\n');
     }
 }
