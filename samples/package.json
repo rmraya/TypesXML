@@ -1,0 +1,22 @@
+{
+  "name": "typesxml-samples",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runnable examples for the TypesXML tutorial.",
+  "type": "module",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.json",
+    "parse-file": "npm run build --silent && node dist/parse-file.js",
+    "catalog-validated": "npm run build --silent && node dist/catalog-validated.js",
+    "stream-parse": "npm run build --silent && node dist/stream-parse.js",
+    "custom-handler": "npm run build --silent && node dist/custom-handler.js",
+    "relaxng-defaults": "npm run build --silent && node dist/relaxng-defaults.js"
+  },
+  "dependencies": {
+    "typesxml": "^1.14.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

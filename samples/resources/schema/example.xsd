@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/samples/schema"
+           xmlns="http://example.com/samples/schema"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+    <xs:element name="library">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="book" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="title" type="xs:string" />
+                            <xs:element name="author" type="xs:string" />
+                        </xs:sequence>
+                        <xs:attribute name="isbn" type="xs:string" use="required" />
+                        <xs:attribute name="status" type="xs:string" default="published" />
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+            <xs:attribute name="region" type="xs:string" default="global" />
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

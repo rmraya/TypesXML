@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0">
+    <start>
+        <element name="library">
+            <optional>
+                <attribute name="region" a:defaultValue="global">
+                    <text />
+                </attribute>
+            </optional>
+            <zeroOrMore>
+                <element name="book">
+                    <attribute name="isbn">
+                        <text />
+                    </attribute>
+                    <optional>
+                        <attribute name="status" a:defaultValue="draft">
+                            <text />
+                        </attribute>
+                    </optional>
+                    <element name="title">
+                        <text />
+                    </element>
+                    <element name="author">
+                        <text />
+                    </element>
+                </element>
+            </zeroOrMore>
+        </element>
+    </start>
+</grammar>

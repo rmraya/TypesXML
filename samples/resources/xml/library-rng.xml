@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="http://example.com/samples/rng/library" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<library>
+    <book isbn="9780134685991">
+        <title>Effective Java</title>
+        <author>Joshua Bloch</author>
+    </book>
+    <book isbn="9781492056355" status="preview">
+        <title>Learning TypeScript</title>
+        <author>Boris Cherny</author>
+    </book>
+</library>

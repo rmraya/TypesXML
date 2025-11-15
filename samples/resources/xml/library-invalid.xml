@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE library SYSTEM "http://example.com/samples/dtd/library">
+<library>
+    <book>
+        <title>Missing Attributes</title>
+        <author>N. A.</author>
+    </book>
+</library>

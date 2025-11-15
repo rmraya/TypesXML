@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Schema resolution is provided by samples/resources/catalog/catalog.xml -->
+<library xmlns="http://example.com/samples/schema"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://example.com/samples/schema http://example.com/samples/schema">
+    <book isbn="9780134685991">
+        <title>Effective Java</title>
+        <author>Joshua Bloch</author>
+    </book>
+    <book isbn="9781492056355">
+        <title>Learning TypeScript</title>
+        <author>Boris Cherny</author>
+    </book>
+</library>
