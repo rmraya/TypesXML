@@ -4,7 +4,7 @@
 [![npm license](https://img.shields.io/npm/l/typesxml)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/implementation-native%20TypeScript-3178c6)](https://www.typescriptlang.org/)
 
-TypesXML is a native TypeScript XML processing toolkit—there are no bindings to C/C++ libraries or other native layers. It ships first-class DOM and SAX pipelines, validates full DTD grammars, resolves entities through OASIS XML Catalogs, and passes 100% of the W3C XML Conformance Test Suite for DTD-driven documents.
+TypesXML is a native TypeScript XML library and processing toolkit — there are no bindings to C/C++ libraries or other native layers. It ships first-class DOM and SAX pipelines, validates full DTD grammars, resolves entities through OASIS XML Catalogs, and passes 100% of the W3C XML Conformance Test Suite for DTD-driven documents.
 
 ## Features
 
