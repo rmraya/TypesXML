@@ -108,11 +108,11 @@ parser.parseFile("samples/resources/xml/library.xml"); // Use "resources/..." in
 `Catalog` requires an absolute file system path. The snippet above anchors the lookup to the sample’s directory via `import.meta.url`, but any approach that produces an absolute path (for example `resolve(process.cwd(), "catalog/catalog.xml")`) works in your own projects.
 ```
 
-The parser now resolves DTDs through the catalog and can locate Relax NG or XML Schema documents to harvest default attributes, avoiding repetitive HTTP requests and ensuring consistent versions.
+The parser now resolves DTDs through the catalog and can locate RelaxNG or XML Schema documents to harvest default attributes, avoiding repetitive HTTP requests and ensuring consistent versions.
 
 ## 5. Enabling Validating Mode
 
-Validation checks the document against its DTD and raises an error when a rule is violated. It does not influence default attribute retrieval—Relax NG and XML Schema grammars are loaded for defaults whenever they are referenced. The samples folder includes `resources/dtd/sample.dtd` plus matching XML instances so you can see both success and failure cases.
+Validation checks the document against its DTD and raises an error when a rule is violated. It does not influence default attribute retrieval — RelaxNG and XML Schema grammars are loaded for defaults whenever they are referenced. The samples folder includes `resources/dtd/sample.dtd` plus matching XML instances so you can see both success and failure cases.
 
 ```ts
 const parser = new SAXParser();
@@ -239,7 +239,7 @@ Only implement the callbacks you care about—unimplemented methods can remain e
 
 ## 9. Merging Default Attributes from Grammars
 
-TypesXML collects default attribute values declared in any grammar it can load (DTD, Relax NG, or XML Schema) and merges them into SAX events. That means elements automatically receive attributes such as `translate="yes"` or `class="- map/map"` without you manually copying values. DTD defaults participate in the same way as schema-driven defaults.
+TypesXML collects default attribute values declared in any grammar it can load (DTD, RelaxNG, or XML Schema) and merges them into SAX events. That means elements automatically receive attributes such as `translate="yes"` or `class="- map/map"` without you manually copying values. DTD defaults participate in the same way as schema-driven defaults.
 
 To benefit from this feature:
 
@@ -248,7 +248,7 @@ To benefit from this feature:
 
 You will then see the defaults in DOM output and SAX callbacks.
 
-The sample command `npm run relaxng-defaults` demonstrates this with a Relax NG grammar resolved through the catalog: the parser pulls default attributes from `library-rng.xml` even though validation remains disabled.
+The sample command `npm run relaxng-defaults` demonstrates this with a RelaxNG grammar resolved through the catalog: the parser pulls default attributes from `library-rng.xml` even though validation remains disabled.
 
 ## 10. Error Handling and Diagnostics
 
@@ -266,7 +266,7 @@ These collections help you confirm which schemas were loaded and where defaults 
 
 - Combine `SAXParser` with your application’s data model by creating specialised handlers.
 - Use `DOMBuilder` for modification-heavy workflows, then serialise with `XMLDocument#toString()`.
-- Explore the source in `ts/` for advanced utilities such as indentation helpers, writers, and Relax NG support.
+- Explore the source in `ts/` for advanced utilities such as indentation helpers, writers, and RelaxNG support.
 - Download the `samples/` folder, run `npm install`, and execute `npm run parse-file` to test everything with Node immediately.
 - Browse the runnable snippets under `samples/` for end-to-end code you can adapt.
 

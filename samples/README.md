@@ -21,13 +21,13 @@ Each file is self-contained and documented inline. After installing you can exec
 
 Example data lives under `resources/`. `xml/library.xml` references a schema published at `http://example.com/samples/schema`, which is resolved locally through the catalog in `resources/catalog/catalog.xml`. The scripts compute absolute paths to these files at runtime, matching the requirement of the `Catalog` API.
 
-A DTD-backed pair—`xml/library-valid.xml` and `xml/library-invalid.xml`—demonstrates DTD validation using `resources/dtd/sample.dtd`. The Relax NG grammar in `resources/rng/library.rng` is referenced by `xml/library-rng.xml` to showcase default attribute merging without validation mode.
+A DTD-backed pair—`xml/library-valid.xml` and `xml/library-invalid.xml`—demonstrates DTD validation using `resources/dtd/sample.dtd`. The RelaxNG grammar in `resources/rng/library.rng` is referenced by `xml/library-rng.xml` to showcase default attribute merging without validation mode.
 
 ## Sample Index
 
 - `parse-file.ts` – Parse a local XML file, traverse the DOM, and report attribute values.
 - `catalog-validated.ts` – Load an OASIS catalog, enable DTD validation, and show merged default attributes.
-- `relaxng-defaults.ts` – Resolve a Relax NG grammar via catalog lookup and observe default attributes merged into the DOM.
+- `relaxng-defaults.ts` – Resolve a RelaxNG grammar via catalog lookup and observe default attributes merged into the DOM.
 - `stream-parse.ts` – Fetch an XML document over HTTPS and process it as a stream.
 - `custom-handler.ts` – Implement a bespoke `ContentHandler` that logs SAX events.
 
@@ -38,7 +38,7 @@ To explore the most common scenarios directly:
 - `npm run parse-file` – build the samples and print a quick DOM traversal of the catalog-backed library.
 - `npm run stream-parse` – build the samples and fetch a remote XML document over HTTPS, printing the raw payload.
 - `npm run custom-handler` – build the samples and stream SAX events through the logging handler.
-- `npm run relaxng-defaults` – build the samples and parse `library-rng.xml`, showing Relax NG defaults applied even without validation.
+- `npm run relaxng-defaults` – build the samples and parse `library-rng.xml`, showing RelaxNG defaults applied even without validation.
 
 For the validation sample:
 

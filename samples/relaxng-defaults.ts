@@ -16,7 +16,7 @@ async function main(): Promise<void> {
     parser.setCatalog(catalog);
     parser.setContentHandler(handler);
 
-    console.log("Parsing library-rng.xml with Relax NG defaults...");
+    console.log("Parsing library-rng.xml with RelaxNG defaults...");
     parser.parseFile(xmlPath);
 
     const document = handler.getDocument();
@@ -26,7 +26,7 @@ async function main(): Promise<void> {
     }
 
     console.log("Root element:", root.getName());
-    console.log("Region attribute (Relax NG default):", root.getAttribute("region")?.getValue());
+    console.log("Region attribute (RelaxNG default):", root.getAttribute("region")?.getValue());
 
     root.getChildren().forEach((child) => {
         const isbn = child.getAttribute("isbn")?.getValue();
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
         console.log(`  Book ISBN=${isbn} status=${status} title=${title}`);
     });
 
-    console.log("Missing attributes filled via Relax NG default annotations.");
+    console.log("Missing attributes filled via RelaxNG default annotations.");
 }
 
 main().catch((error) => {

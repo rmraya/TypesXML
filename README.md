@@ -11,7 +11,7 @@ TypesXML is a native TypeScript XML processing toolkit—there are no bindings t
 - DOM builder (`DOMBuilder`) that produces an in-memory tree and preserves lexical information needed by canonicalization.
 - Streaming SAX parser with pull-based file, string, and Node.js stream entry points.
 - Complete DTD parser/validator with conditional sections and parameter entities.
-- Default attribute extraction from any reachable grammar (DTD, Relax NG, or XML Schema); defaults merge during SAX parsing independent of validation mode.
+- Default attribute extraction from any reachable grammar (DTD, RelaxNG, or XML Schema); defaults merge during SAX parsing independent of validation mode.
 - OASIS XML Catalog resolver for public/system identifiers and alternate entity sources.
 - Passes 100% of the test cases in the official W3C XML Conformance Test Suite for DTD grammars (valid, invalid, not-wf, external entity cases).
 - Canonical XML renderer compatible with the W3C XML Test Suite rules.
