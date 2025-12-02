@@ -60,3 +60,34 @@ export type { ContentParticle } from "./dtd/contentParticle";
 // Grammar classes
 export { AttributeInfo, AttributeUse, GrammarType, ValidationContext, ValidationError, ValidationResult, ValidationWarning } from "./grammar/Grammar";
 export type { Grammar } from "./grammar/Grammar";
+
+// JSON conversion helpers
+export { JsonTokenizer } from "./json/JsonTokenizer";
+export { JsonNodeReader } from "./json/JsonNodeReader";
+export type { JsonNodeEvent, JsonAttributeDescriptor } from "./json/JsonNodeReader";
+export { JsonToXmlHandler } from "./json/JsonToXmlHandler";
+export { JsonEventCollector } from "./json/JsonEventCollector";
+export { JsonEventStreamWriter } from "./json/JsonEventStreamWriter";
+export { XmlEventStreamWriter } from "./json/XmlEventStreamWriter";
+export {
+	xmlStringToJsonEvents,
+	xmlFileToJsonEvents,
+	xmlStreamToJsonEvents,
+	xmlStringToJsonStream,
+	xmlFileToJsonStream,
+	xmlStreamToJsonStream,
+	xmlDocumentToJsonEvents,
+	jsonEventsToXmlDocument,
+	jsonStringToXmlDocument,
+	jsonFileToXmlDocument,
+	jsonStreamToXmlDocument,
+	jsonStringToXmlStream,
+	jsonFileToXmlStream,
+	jsonStreamToXmlStream,
+	jsonStringToXmlFile,
+	jsonFileToXmlFile,
+	jsonStreamToXmlFile,
+	jsonStringToContentHandler,
+	jsonFileToContentHandler,
+	jsonStreamToContentHandler
+} from "./json/JsonConversion";

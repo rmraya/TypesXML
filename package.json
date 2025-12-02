@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "testDtd": "tsc && node dist/tests/DTDTestSuite.js"
+    "testDtd": "tsc && node dist/tests/DTDTestSuite.js",
+    "testJson": "tsc && node dist/tests/JsonConversionTest.js"
   },
   "author": {
     "name": "Rodolfo M. Raya",
