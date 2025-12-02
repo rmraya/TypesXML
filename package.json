@@ -10,7 +10,8 @@
     "SAX",
     "DTD",
     "Default attributes",
-    "TypeScript"
+    "TypeScript",
+    "JSON"
   ],
   "scripts": {
     "build": "tsc",
