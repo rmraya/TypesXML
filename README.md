@@ -17,6 +17,7 @@ TypesXML is a native TypeScript XML library and processing toolkit — there are
 - Canonical XML renderer compatible with the W3C XML Test Suite rules.
 - Strict character validation for XML 1.0/1.1 and optional DTD-validating mode.
 - Pure TypeScript implementation with type definitions included—ideal for bundlers and ESM/CJS projects.
+- XML↔JSON conversion APIs with both lightweight and lossless modes for simple payloads or fully faithful round-trips.
 
 ## SAX Parser
 
@@ -83,6 +84,7 @@ parser.setValidating(true); // Turns on DTD validation only.
 ## Documentation & Samples
 
 - Read the step-by-step [TypesXML tutorial](docs/tutorial.md) for guided workflows.
+- Use the [JSON and XML Conversion Guide](docs/jsonTutorial.md) to translate between XML documents and JSON objects, with guidance on when to enable the metadata-preserving round-trip mode.
 - Explore the runnable examples under [`samples/`](samples/README.md) to see the code in action.
 
 ## W3C XML Test Suite

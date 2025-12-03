@@ -62,32 +62,54 @@ export { AttributeInfo, AttributeUse, GrammarType, ValidationContext, Validation
 export type { Grammar } from "./grammar/Grammar";
 
 // JSON conversion helpers
-export { JsonTokenizer } from "./json/JsonTokenizer";
-export { JsonNodeReader } from "./json/JsonNodeReader";
-export type { JsonNodeEvent, JsonAttributeDescriptor } from "./json/JsonNodeReader";
-export { JsonToXmlHandler } from "./json/JsonToXmlHandler";
-export { JsonEventCollector } from "./json/JsonEventCollector";
-export { JsonEventStreamWriter } from "./json/JsonEventStreamWriter";
-export { XmlEventStreamWriter } from "./json/XmlEventStreamWriter";
+export type {
+	JsonPrimitive,
+	JsonValue,
+	JsonElementObject,
+	JsonProcessingInstruction,
+	JsonElementContentNode,
+	JsonElementContentTextNode,
+	JsonElementContentCDataNode,
+	JsonElementContentCommentNode,
+	JsonElementContentProcessingInstructionNode,
+	JsonElementContentElementNode,
+	JsonConversionMode,
+	XmlDocumentToJsonOptions,
+	XmlDocumentToJsonSimpleOptions,
+	XmlDocumentToJsonRoundTripOptions,
+	XmlToJsonOptions,
+	XmlToJsonSimpleOptions,
+	XmlToJsonRoundTripOptions,
+	XmlFileToJsonOptions,
+	XmlFileToJsonSimpleOptions,
+	XmlFileToJsonRoundTripOptions,
+	XmlStreamToJsonOptions,
+	XmlStreamToJsonSimpleOptions,
+	XmlStreamToJsonRoundTripOptions,
+	XmlJsonDeclaration,
+	XmlJsonDoctype,
+	JsonCommentNode,
+	JsonProcessingInstructionNode,
+	JsonMiscNode,
+	JsonTextNode,
+	JsonPrologNode,
+	XmlJsonDocument
+} from "./json/JsonConversion";
 export {
-	xmlStringToJsonEvents,
-	xmlFileToJsonEvents,
-	xmlStreamToJsonEvents,
-	xmlStringToJsonStream,
-	xmlFileToJsonStream,
-	xmlStreamToJsonStream,
-	xmlDocumentToJsonEvents,
-	jsonEventsToXmlDocument,
+	xmlStringToJsonObject,
+	xmlFileToJsonObject,
+	xmlStreamToJsonObject,
+	xmlDocumentToJsonObject,
+	xmlStringToJsonFile,
+	xmlFileToJsonFile,
+	xmlStreamToJsonFile,
+	xmlDocumentToJsonFile,
+	jsonObjectToXmlDocument,
 	jsonStringToXmlDocument,
 	jsonFileToXmlDocument,
 	jsonStreamToXmlDocument,
-	jsonStringToXmlStream,
-	jsonFileToXmlStream,
-	jsonStreamToXmlStream,
+	jsonObjectToXmlFile,
 	jsonStringToXmlFile,
 	jsonFileToXmlFile,
-	jsonStreamToXmlFile,
-	jsonStringToContentHandler,
-	jsonFileToContentHandler,
-	jsonStreamToContentHandler
+	jsonStreamToXmlFile
 } from "./json/JsonConversion";
