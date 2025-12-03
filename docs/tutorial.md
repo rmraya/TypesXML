@@ -1,6 +1,6 @@
 # TypesXML Tutorial
 
-This tutorial walks through the most common workflows for the TypesXML toolkit. Each section builds on the previous one so you can quickly wire the parser into a TypeScript or Node.js project.
+This tutorial walks through the most common workflows for the TypesXML toolkit. Each section builds on the previous one so you can quickly wire the parser into a TypeScript or Node.js project. If you need to move between XML and JSON, pair this guide with the dedicated [JSON and XML Conversion Guide](jsonTutorial.md).
 
 For a feature overview see the [project README](../README.md), and download the runnable snippets described here from the [`samples/` guide](../samples/README.md).
 

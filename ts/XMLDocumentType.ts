@@ -70,8 +70,11 @@ export class XMLDocumentType implements XMLNode {
     }
 
     equals(node: XMLNode): boolean {
-        if (node instanceof DocumentType) {
-            return this.publicId === node.publicId && this.systemId === node.systemId;
+        if (node instanceof XMLDocumentType) {
+            const samePublicId: boolean = this.publicId === node.publicId;
+            const sameSystemId: boolean = this.systemId === node.systemId;
+            const sameInternalSubset: boolean = this.internalSubset === node.internalSubset;
+            return samePublicId && sameSystemId && sameInternalSubset;
         }
         return false;
     }

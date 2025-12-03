@@ -60,3 +60,56 @@ export type { ContentParticle } from "./dtd/contentParticle";
 // Grammar classes
 export { AttributeInfo, AttributeUse, GrammarType, ValidationContext, ValidationError, ValidationResult, ValidationWarning } from "./grammar/Grammar";
 export type { Grammar } from "./grammar/Grammar";
+
+// JSON conversion helpers
+export type {
+	JsonPrimitive,
+	JsonValue,
+	JsonElementObject,
+	JsonProcessingInstruction,
+	JsonElementContentNode,
+	JsonElementContentTextNode,
+	JsonElementContentCDataNode,
+	JsonElementContentCommentNode,
+	JsonElementContentProcessingInstructionNode,
+	JsonElementContentElementNode,
+	JsonConversionMode,
+	XmlDocumentToJsonOptions,
+	XmlDocumentToJsonSimpleOptions,
+	XmlDocumentToJsonRoundTripOptions,
+	XmlToJsonOptions,
+	XmlToJsonSimpleOptions,
+	XmlToJsonRoundTripOptions,
+	XmlFileToJsonOptions,
+	XmlFileToJsonSimpleOptions,
+	XmlFileToJsonRoundTripOptions,
+	XmlStreamToJsonOptions,
+	XmlStreamToJsonSimpleOptions,
+	XmlStreamToJsonRoundTripOptions,
+	XmlJsonDeclaration,
+	XmlJsonDoctype,
+	JsonCommentNode,
+	JsonProcessingInstructionNode,
+	JsonMiscNode,
+	JsonTextNode,
+	JsonPrologNode,
+	XmlJsonDocument
+} from "./json/JsonConversion";
+export {
+	xmlStringToJsonObject,
+	xmlFileToJsonObject,
+	xmlStreamToJsonObject,
+	xmlDocumentToJsonObject,
+	xmlStringToJsonFile,
+	xmlFileToJsonFile,
+	xmlStreamToJsonFile,
+	xmlDocumentToJsonFile,
+	jsonObjectToXmlDocument,
+	jsonStringToXmlDocument,
+	jsonFileToXmlDocument,
+	jsonStreamToXmlDocument,
+	jsonObjectToXmlFile,
+	jsonStringToXmlFile,
+	jsonFileToXmlFile,
+	jsonStreamToXmlFile
+} from "./json/JsonConversion";
