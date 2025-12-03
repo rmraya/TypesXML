@@ -11,10 +11,11 @@
     "catalog-validated": "npm run build --silent && node dist/catalog-validated.js",
     "stream-parse": "npm run build --silent && node dist/stream-parse.js",
     "custom-handler": "npm run build --silent && node dist/custom-handler.js",
-    "relaxng-defaults": "npm run build --silent && node dist/relaxng-defaults.js"
+    "relaxng-defaults": "npm run build --silent && node dist/relaxng-defaults.js",
+    "json-conversion": "npm run build --silent && node dist/json-conversion.js"
   },
   "dependencies": {
-    "typesxml": "^1.14.0"
+    "typesxml": "^1.15.0"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
