@@ -3,8 +3,7 @@ node_modules/
 dist/
 .vscode/
 .scannerwork/
-ts/test.ts
-ts/testRelaxNG.ts
+ts/test*.ts
 test.xml
 /tests/
 catalog/

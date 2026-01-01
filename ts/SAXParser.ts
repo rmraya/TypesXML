@@ -24,7 +24,7 @@ import { StreamReader } from "./StreamReader";
 import { StringReader } from "./StringReader";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLUtils } from "./XMLUtils";
-import { XMLSchemaParser } from "./XMLSchemaParser";
+import { XMLSchemaParser, type AttributeDefault } from "./XMLSchemaParser";
 import { AttDecl } from "./dtd/AttDecl";
 import { DTDGrammar } from "./dtd/DTDGrammar";
 import { DTDParser } from "./dtd/DTDParser";
@@ -41,6 +41,8 @@ export interface StreamParseOptions extends ParseSourceOptions {
 }
 
 export type ParserInputSource = FileReader | StringReader | StreamReader;
+
+type SchemaAttributeDefault = AttributeDefault;
 
 export class SAXParser {
 
@@ -68,6 +70,7 @@ export class SAXParser {
     validating: boolean = false;
     relaxNGDefaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
     schemaDefaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
+    private schemaDefaultAttributeDetails: Map<string, Map<string, SchemaAttributeDefault>> = new Map<string, Map<string, SchemaAttributeDefault>>();
     processedSchemaLocations: Set<string> = new Set<string>();
     failedSchemaLocations: Set<string> = new Set<string>();
     namespaceContextStack: Array<Map<string, string>> = [];
@@ -216,6 +219,7 @@ export class SAXParser {
         this.currentFile = currentFilePath || fallbackVirtualPath;
         this.relaxNGDefaultAttributes = new Map<string, Map<string, string>>();
         this.schemaDefaultAttributes = new Map<string, Map<string, string>>();
+        this.schemaDefaultAttributeDetails = new Map<string, Map<string, SchemaAttributeDefault>>();
         this.processedSchemaLocations = new Set<string>();
         this.failedSchemaLocations = new Set<string>();
         this.namespaceContextStack = [];
@@ -831,10 +835,20 @@ export class SAXParser {
     }
 
     getDefaultAttributes(elementName: string, attributes: Array<XMLAttribute>): Array<XMLAttribute> {
-        let grammar: Grammar | undefined = this.contentHandler?.getGrammar();
-        let existingAttributes: Set<string> = new Set<string>();
+        const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        const namespaceContext: Map<string, string> = this.namespaceContextStack.length > 0 ? this.namespaceContextStack[this.namespaceContextStack.length - 1] : new Map<string, string>();
+        const existingAttributeNames: Set<string> = new Set<string>();
+        const existingAttributeKeys: Set<string> = new Set<string>();
         attributes.forEach((attr: XMLAttribute) => {
-            existingAttributes.add(attr.getName());
+            const attributeName: string = attr.getName();
+            existingAttributeNames.add(attributeName);
+            const attributeParts: { prefix?: string; localName: string } = this.splitQualifiedName(attributeName);
+            let attributeNamespaceUri: string | undefined = undefined;
+            if (attributeParts.prefix) {
+                attributeNamespaceUri = namespaceContext.get(attributeParts.prefix);
+            }
+            const attributeKey: string = this.buildSchemaAttributeKey(attributeParts.localName, attributeNamespaceUri);
+            existingAttributeKeys.add(attributeKey);
         });
 
         if (grammar) {
@@ -843,7 +857,9 @@ export class SAXParser {
                 const dtdGrammar: DTDGrammar | undefined = grammar instanceof DTDGrammar ? grammar : undefined;
                 const declarations: Map<string, AttDecl> | undefined = dtdGrammar?.getElementAttributesMap(elementName);
                 grammarDefaults.forEach((value: string, key: string) => {
-                    if (existingAttributes.has(key)) {
+                    const grammarParts: { prefix?: string; localName: string } = this.splitQualifiedName(key);
+                    const attributeKey: string = this.buildSchemaAttributeKey(grammarParts.localName, undefined);
+                    if (existingAttributeKeys.has(attributeKey) || existingAttributeNames.has(key)) {
                         return;
                     }
                     let normalizedValue: string;
@@ -855,39 +871,116 @@ export class SAXParser {
                         normalizedValue = this.normalizeAttributeValue(value, value);
                     }
                     attributes.push(new XMLAttribute(key, normalizedValue));
-                    existingAttributes.add(key);
+                    existingAttributeNames.add(key);
+                    existingAttributeKeys.add(attributeKey);
                 });
             }
         }
 
-        const appendExternalDefaults = (defaults: Map<string, string> | undefined): void => {
-            if (!defaults) {
-                return;
-            }
-            defaults.forEach((value: string, key: string) => {
-                if (existingAttributes.has(key)) {
-                    return;
-                }
-                const normalizedValue: string = this.normalizeAttributeValue(value, value);
-                attributes.push(new XMLAttribute(key, normalizedValue));
-                existingAttributes.add(key);
-            });
-        };
-
         const nameParts: { prefix?: string; localName: string } = this.splitQualifiedName(elementName);
         const namespaceUri: string | undefined = this.getNamespaceUriForElement(elementName);
         if (namespaceUri) {
-            const namespaceKey: string = `${namespaceUri}|${nameParts.localName}`;
-            appendExternalDefaults(this.schemaDefaultAttributes.get(namespaceKey));
+            const namespaceKey: string = namespaceUri + "|" + nameParts.localName;
+            this.appendSchemaDefaultsForElement(this.schemaDefaultAttributeDetails.get(namespaceKey), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
         }
-        appendExternalDefaults(this.schemaDefaultAttributes.get(nameParts.localName));
+        this.appendSchemaDefaultsForElement(this.schemaDefaultAttributeDetails.get(nameParts.localName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
         if (nameParts.localName !== elementName) {
-            appendExternalDefaults(this.schemaDefaultAttributes.get(elementName));
+            this.appendSchemaDefaultsForElement(this.schemaDefaultAttributeDetails.get(elementName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
         }
         if (this.isRelaxNG) {
-            appendExternalDefaults(this.relaxNGDefaultAttributes.get(elementName));
+            this.appendRelaxNGDefaultsForElement(this.relaxNGDefaultAttributes.get(elementName), attributes, existingAttributeNames, existingAttributeKeys);
         }
         return attributes;
+    }
+
+    private appendSchemaDefaultsForElement(defaults: Map<string, SchemaAttributeDefault> | undefined, attributes: Array<XMLAttribute>, existingAttributeNames: Set<string>, existingAttributeKeys: Set<string>, namespaceUri: string | undefined, elementNameParts: { prefix?: string; localName: string }, namespaceContext: Map<string, string>): void {
+        if (!defaults) {
+            return;
+        }
+        defaults.forEach((info: SchemaAttributeDefault) => {
+            const attributeKey: string = this.buildSchemaAttributeKey(info.localName, info.namespace);
+            if (existingAttributeKeys.has(attributeKey)) {
+                return;
+            }
+            const attributeName: string = this.resolveSchemaAttributeQualifiedName(info, namespaceUri, elementNameParts, namespaceContext);
+            if (existingAttributeNames.has(attributeName)) {
+                return;
+            }
+            const normalizedValue: string = this.normalizeAttributeValue(info.value, info.value);
+            attributes.push(new XMLAttribute(attributeName, normalizedValue));
+            existingAttributeNames.add(attributeName);
+            existingAttributeKeys.add(attributeKey);
+        });
+    }
+
+    private appendRelaxNGDefaultsForElement(defaults: Map<string, string> | undefined, attributes: Array<XMLAttribute>, existingAttributeNames: Set<string>, existingAttributeKeys: Set<string>): void {
+        if (!defaults) {
+            return;
+        }
+        defaults.forEach((value: string, key: string) => {
+            if (existingAttributeNames.has(key)) {
+                return;
+            }
+            const parts: { prefix?: string; localName: string } = this.splitQualifiedName(key);
+            const attributeKey: string = this.buildSchemaAttributeKey(parts.localName, undefined);
+            if (existingAttributeKeys.has(attributeKey)) {
+                return;
+            }
+            const normalizedValue: string = this.normalizeAttributeValue(value, value);
+            attributes.push(new XMLAttribute(key, normalizedValue));
+            existingAttributeNames.add(key);
+            existingAttributeKeys.add(attributeKey);
+        });
+    }
+
+    private resolveSchemaAttributeQualifiedName(info: SchemaAttributeDefault, namespaceUri: string | undefined, elementNameParts: { prefix?: string; localName: string }, namespaceContext: Map<string, string>): string {
+        const lexicalName: string = info.lexicalName;
+        const attributeNamespace: string | undefined = info.namespace;
+        const parts: { prefix?: string; localName: string } = this.splitQualifiedName(lexicalName);
+        if (parts.prefix) {
+            const mappedNamespace: string | undefined = namespaceContext.get(parts.prefix);
+            if (!attributeNamespace && mappedNamespace) {
+                return lexicalName;
+            }
+            if (attributeNamespace && mappedNamespace === attributeNamespace) {
+                return lexicalName;
+            }
+            if (attributeNamespace) {
+                const prefix: string | undefined = this.findNamespacePrefix(attributeNamespace, namespaceContext);
+                if (prefix) {
+                    return prefix + ":" + info.localName;
+                }
+            }
+            return info.localName;
+        }
+        if (attributeNamespace) {
+            const prefix: string | undefined = this.findNamespacePrefix(attributeNamespace, namespaceContext);
+            if (prefix) {
+                return prefix + ":" + info.localName;
+            }
+            if (namespaceUri && attributeNamespace === namespaceUri && elementNameParts.prefix) {
+                return elementNameParts.prefix + ":" + info.localName;
+            }
+        }
+        return info.lexicalName;
+    }
+
+    private findNamespacePrefix(namespaceUri: string, context: Map<string, string>): string | undefined {
+        for (const entry of context.entries()) {
+            const prefix: string = entry[0];
+            const uri: string = entry[1];
+            if (uri === namespaceUri && prefix !== '') {
+                return prefix;
+            }
+        }
+        return undefined;
+    }
+
+    private buildSchemaAttributeKey(localName: string, namespace?: string): string {
+        if (namespace) {
+            return namespace + "|" + localName;
+        }
+        return localName;
     }
 
     private buildNamespaceContext(attributes: Map<string, string>, previousContext?: Map<string, string>): Map<string, string> {
@@ -1034,8 +1127,22 @@ export class SAXParser {
         }
         try {
             const parser: XMLSchemaParser = XMLSchemaParser.getInstance(this.catalog);
-            const defaults: Map<string, Map<string, string>> = parser.collectDefaultAttributes(resolvedPath);
-            this.mergeSchemaDefaults(defaults);
+            const rawDefaults: Map<string, Map<string, SchemaAttributeDefault>> = parser.collectDefaultAttributes(resolvedPath);
+            const convertedDefaults: Map<string, Map<string, SchemaAttributeDefault>> = new Map<string, Map<string, SchemaAttributeDefault>>();
+            rawDefaults.forEach((attributeMap: Map<string, SchemaAttributeDefault>, elementKey: string) => {
+                const converted: Map<string, SchemaAttributeDefault> = new Map<string, SchemaAttributeDefault>();
+                attributeMap.forEach((info: SchemaAttributeDefault, attributeKey: string) => {
+                    const copy: SchemaAttributeDefault = {
+                        localName: info.localName,
+                        namespace: info.namespace,
+                        lexicalName: info.lexicalName,
+                        value: info.value
+                    };
+                    converted.set(attributeKey, copy);
+                });
+                convertedDefaults.set(elementKey, converted);
+            });
+            this.mergeSchemaDefaults(convertedDefaults);
             this.processedSchemaLocations.add(resolvedPath);
             this.processedSchemaLocations.add(identifier);
             return true;
@@ -1099,19 +1206,28 @@ export class SAXParser {
         return undefined;
     }
 
-    private mergeSchemaDefaults(defaults: Map<string, Map<string, string>>): void {
-        defaults.forEach((attributeMap: Map<string, string>, elementName: string) => {
+    private mergeSchemaDefaults(defaults: Map<string, Map<string, SchemaAttributeDefault>>): void {
+        defaults.forEach((attributeMap: Map<string, SchemaAttributeDefault>, elementName: string) => {
             if (attributeMap.size === 0) {
                 return;
             }
-            const target: Map<string, string> = this.schemaDefaultAttributes.get(elementName) ?? new Map<string, string>();
-            attributeMap.forEach((value: string, attributeName: string) => {
-                if (!target.has(attributeName)) {
-                    target.set(attributeName, value);
-                }
+            const detailTarget: Map<string, SchemaAttributeDefault> = this.schemaDefaultAttributeDetails.get(elementName) ?? new Map<string, SchemaAttributeDefault>();
+            const plainTarget: Map<string, string> = this.schemaDefaultAttributes.get(elementName) ?? new Map<string, string>();
+            attributeMap.forEach((info: SchemaAttributeDefault, attributeName: string) => {
+                const copy: SchemaAttributeDefault = {
+                    localName: info.localName,
+                    namespace: info.namespace,
+                    lexicalName: info.lexicalName,
+                    value: info.value
+                };
+                detailTarget.set(attributeName, copy);
+                plainTarget.set(attributeName, info.value);
             });
-            if (target.size > 0) {
-                this.schemaDefaultAttributes.set(elementName, target);
+            if (detailTarget.size > 0) {
+                this.schemaDefaultAttributeDetails.set(elementName, detailTarget);
+            }
+            if (plainTarget.size > 0) {
+                this.schemaDefaultAttributes.set(elementName, plainTarget);
             }
         });
     }
