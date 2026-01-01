@@ -229,11 +229,26 @@ export class RelaxNGParser {
     }
 
     private findDefaultValueFromChildren(attribute: XMLElement): string | undefined {
+        // Search depth-first for any compatibility "defaultValue" element among descendants
+        const stack: XMLElement[] = [];
         for (const child of attribute.getChildren()) {
-            if (this.getLocalNameFromElement(child) === "defaultValue") {
-                return child.getText().trim();
+            if (child.getNodeType() === Constants.ELEMENT_NODE) {
+                stack.push(child as XMLElement);
             }
         }
+
+        while (stack.length > 0) {
+            const node: XMLElement = stack.pop() as XMLElement;
+            if (this.getLocalNameFromElement(node) === "defaultValue") {
+                return node.getText().trim();
+            }
+            for (const child of node.getChildren()) {
+                if (child.getNodeType() === Constants.ELEMENT_NODE) {
+                    stack.push(child as XMLElement);
+                }
+            }
+        }
+
         return undefined;
     }
 
