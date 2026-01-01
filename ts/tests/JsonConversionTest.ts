@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2025 Maxprograms.
+ * Copyright (c) 2023-2026 Maxprograms.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse   License 1.0
@@ -21,15 +21,12 @@ import {
     JsonElementObject,
     JsonValue,
     XmlJsonDocument,
-    jsonFileToXmlDocument,
     jsonFileToXmlFile,
     jsonObjectToXmlDocument,
     jsonObjectToXmlFile,
     jsonStreamToXmlDocument,
     xmlDocumentToJsonObject,
-    xmlDocumentToJsonFile,
     xmlFileToJsonFile,
-    xmlFileToJsonObject,
     xmlStreamToJsonObject,
     xmlStringToJsonFile,
     xmlStringToJsonObject
