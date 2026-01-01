@@ -48,23 +48,23 @@ export class AttListDecl implements XMLNode {
             }
 
             if (!XMLUtils.isValidXMLName(name)) {
-                throw new Error(`Invalid attribute name in ATTLIST declaration: "${name}"`);
+                throw new Error('Invalid attribute name in ATTLIST declaration: ' + '\'' + name + '\'');
             }
 
-            const namePos: number = this.findTokenPosition(text, name, scanIndex);
-            scanIndex = namePos + name.length;
+            const nameMatch = this.locateToken(text, name, scanIndex);
+            scanIndex = nameMatch.position + nameMatch.length;
 
             if (state.index >= parts.length) {
-                throw new Error(`Missing attribute type for attribute "${name}"`);
+                throw new Error('Missing attribute type for attribute ' + '\'' + name + '\'');
             }
 
             const attType: string = this.readAttributeType(parts, state);
             if (!this.isValidAttributeType(attType)) {
-                throw new Error(`Invalid attribute type in ATTLIST declaration: "${attType}"`);
+                throw new Error('Invalid attribute type in ATTLIST declaration: ' + '\'' + attType + '\'');
             }
 
-            const typePos: number = this.findTokenPosition(text, attType, scanIndex);
-            scanIndex = typePos + attType.length;
+            const typeMatch = this.locateToken(text, attType, scanIndex);
+            scanIndex = typeMatch.position + typeMatch.length;
 
             let defaultDecl: string = '';
             let defaultValue: string = '';
@@ -73,36 +73,36 @@ export class AttListDecl implements XMLNode {
                 const nextPart: string = parts[state.index];
 
                 if (nextPart === '#REQUIRED' || nextPart === '#IMPLIED') {
-                    const keywordPos: number = this.findTokenPosition(text, nextPart, scanIndex);
-                    this.ensureSeparated(text, scanIndex, keywordPos, attType, nextPart);
-                    scanIndex = keywordPos + nextPart.length;
+                    const keywordMatch = this.locateToken(text, nextPart, scanIndex);
+                    this.ensureSeparated(text, scanIndex, keywordMatch.position, attType, nextPart);
+                    scanIndex = keywordMatch.position + keywordMatch.length;
                     defaultDecl = nextPart;
                     state.index++;
                 } else if (nextPart === '#FIXED') {
-                    const fixedPos: number = this.findTokenPosition(text, nextPart, scanIndex);
-                    this.ensureSeparated(text, scanIndex, fixedPos, attType, nextPart);
-                    scanIndex = fixedPos + nextPart.length;
+                    const fixedMatch = this.locateToken(text, nextPart, scanIndex);
+                    this.ensureSeparated(text, scanIndex, fixedMatch.position, attType, nextPart);
+                    scanIndex = fixedMatch.position + fixedMatch.length;
                     defaultDecl = nextPart;
                     state.index++;
 
                     if (state.index >= parts.length) {
-                        throw new Error(`Invalid attribute declaration: missing value for #FIXED attribute "${name}"`);
+                        throw new Error('Invalid attribute declaration: missing value for #FIXED attribute ' + '\'' + name + '\'');
                     }
 
                     const valueToken: string = parts[state.index++];
-                    const valuePos: number = this.findTokenPosition(text, valueToken, scanIndex);
-                    this.ensureSeparated(text, scanIndex, valuePos, nextPart, valueToken);
+                    const valueMatch = this.locateToken(text, valueToken, scanIndex);
+                    this.ensureSeparated(text, scanIndex, valueMatch.position, nextPart, valueToken);
                     defaultValue = this.isQuotedValue(valueToken) ? this.trimQuotes(valueToken) : valueToken;
-                    scanIndex = valuePos + valueToken.length;
+                    scanIndex = valueMatch.position + valueMatch.length;
                 } else if (nextPart && this.isQuotedValue(nextPart)) {
-                    const valuePos: number = this.findTokenPosition(text, nextPart, scanIndex);
-                    this.ensureSeparated(text, scanIndex, valuePos, attType, nextPart);
+                    const valueMatch = this.locateToken(text, nextPart, scanIndex);
+                    this.ensureSeparated(text, scanIndex, valueMatch.position, attType, nextPart);
                     defaultDecl = nextPart;
                     defaultValue = this.trimQuotes(nextPart);
-                    scanIndex = valuePos + nextPart.length;
+                    scanIndex = valueMatch.position + valueMatch.length;
                     state.index++;
                 } else if (nextPart && !XMLUtils.isValidXMLName(nextPart)) {
-                    throw new Error(`Invalid attribute declaration: unexpected token "${nextPart}" after attribute type "${attType}"`);
+                    throw new Error('Invalid attribute declaration: unexpected token ' + '\'' + nextPart + '\'' + ' after attribute type ' + '\'' + attType + '\'');
                 }
             }
 
@@ -231,21 +231,60 @@ export class AttListDecl implements XMLNode {
         return false;
     }
 
-    private findTokenPosition(text: string, token: string, startIndex: number): number {
-        const position: number = text.indexOf(token, startIndex);
-        if (position === -1) {
-            throw new Error(`Invalid attribute declaration: unable to locate token "${token}"`);
+    private locateToken(text: string, token: string, startIndex: number): { position: number; length: number } {
+        const direct: number = text.indexOf(token, startIndex);
+        if (direct !== -1) {
+            return { position: direct, length: token.length };
         }
-        return position;
+
+        if (token.startsWith('(') && token.endsWith(')')) {
+            const normalizedToken: string = this.normalizeEnumeration(token);
+            let searchIndex: number = startIndex;
+
+            while (searchIndex < text.length) {
+                const openIndex: number = text.indexOf('(', searchIndex);
+                if (openIndex === -1) {
+                    break;
+                }
+
+                let depth: number = 0;
+                let cursor: number = openIndex;
+
+                while (cursor < text.length) {
+                    const char: string = text.charAt(cursor);
+                    if (char === '(') {
+                        depth++;
+                    } else if (char === ')') {
+                        depth--;
+                        if (depth === 0) {
+                            const segment: string = text.substring(openIndex, cursor + 1);
+                            if (this.normalizeEnumeration(segment) === normalizedToken) {
+                                return { position: openIndex, length: segment.length };
+                            }
+                            cursor++;
+                            break;
+                        }
+                    }
+                    cursor++;
+                }
+
+                if (depth > 0) {
+                    break;
+                }
+                searchIndex = cursor;
+            }
+        }
+
+        throw new Error('Invalid attribute declaration: unable to locate token ' + '\'' + token + '\'');
     }
 
     private ensureSeparated(text: string, startIndex: number, tokenPosition: number, previousToken: string, currentToken: string): void {
         if (tokenPosition < startIndex) {
-            throw new Error(`Invalid attribute declaration: unexpected ordering between "${previousToken}" and "${currentToken}"`);
+            throw new Error('Invalid attribute declaration: unexpected ordering between ' + '\'' + previousToken + '\'' + ' and ' + '\'' + currentToken + '\'');
         }
         const between: string = text.substring(startIndex, tokenPosition);
         if (!this.containsWhitespace(between)) {
-            throw new Error(`Invalid attribute declaration: missing whitespace between "${previousToken}" and "${currentToken}"`);
+            throw new Error('Invalid attribute declaration: missing whitespace between ' + '\'' + previousToken + '\'' + ' and ' + '\'' + currentToken + '\'');
         }
     }
 

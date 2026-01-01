@@ -21,6 +21,13 @@ import { TextNode } from "./TextNode";
 import { XMLAttribute } from "./XMLAttribute";
 import { XMLElement } from "./XMLElement";
 import { XMLNode } from "./XMLNode";
+import { type AttributeDefault } from "./XMLSchemaParser";
+
+type NameInfo = {
+    lexicalName: string;
+    localName: string;
+    namespace?: string;
+};
 
 export class RelaxNGParser {
 
@@ -31,8 +38,6 @@ export class RelaxNGParser {
     private defaultNamespace: string = Constants.RELAXNG_NS_URI;
     private definitions: Map<string, XMLElement> = new Map();
     private elements: XMLElement[] = [];
-    private attributes: XMLElement[] = [];
-    private visited: Set<string> = new Set();
     private divsRemoved: boolean = false;
 
     constructor(schemaPath: string, catalog?: Catalog) {
@@ -74,59 +79,144 @@ export class RelaxNGParser {
             this.divsRemoved = false;
             this.removeDivs(this.root);
         } while (this.divsRemoved);
-        this.nameAttribute(this.root);
+        this.nameAttribute(this.root, new Map<string, string>());
     }
 
-    getElements(): Map<string, Map<string, string>> {
-        const result: Map<string, Map<string, string>> = new Map();
+    getElements(): Map<string, Map<string, AttributeDefault>> {
+        const result: Map<string, Map<string, AttributeDefault>> = new Map<string, Map<string, AttributeDefault>>();
 
-        this.definitions = new Map();
+        this.definitions = new Map<string, XMLElement>();
         this.harvestDefinitions(this.root);
 
         this.elements = [];
         this.harvestElements(this.root);
 
         for (const element of this.elements) {
-            this.attributes = [];
-            this.visited = new Set();
-            this.getAttributes(element);
-
-            const defaults: Map<string, string> = new Map();
-            for (const attribute of this.attributes) {
-                const nameElement: XMLElement | undefined = this.findChildByLocalName(attribute, "name");
-                if (!nameElement) {
-                    continue;
-                }
-                const attributeName: string = nameElement.getText().trim();
-                if (!attributeName) {
-                    continue;
-                }
-                if (attributeName.indexOf(":") !== -1 && !attributeName.startsWith("xml:")) {
-                    continue;
-                }
-
-                const defaultValue: string | undefined = this.findDefaultValue(attribute);
-                if (defaultValue !== undefined) {
-                    defaults.set(attributeName, defaultValue);
-                }
+            const nameElement: XMLElement | undefined = this.findChildByLocalName(element, "name");
+            if (!nameElement) {
+                continue;
+            }
+            const elementInfo: NameInfo | undefined = this.extractNameInfo(nameElement);
+            if (!elementInfo) {
+                continue;
             }
 
+            const defaults: Map<string, AttributeDefault> = new Map<string, AttributeDefault>();
+            const visitedRefs: Set<string> = new Set<string>();
+            this.collectAttributeDefaultsFromPattern(element, defaults, visitedRefs, true);
             if (defaults.size === 0) {
                 continue;
             }
 
-            const elementNameElement: XMLElement | undefined = this.findChildByLocalName(element, "name");
-            if (!elementNameElement) {
-                continue;
-            }
-
-            const elementName: string = elementNameElement.getText().trim();
-            if (elementName) {
-                result.set(elementName, defaults);
-            }
+            this.storeElementDefaults(result, elementInfo, defaults);
         }
 
         return result;
+    }
+
+    private storeElementDefaults(result: Map<string, Map<string, AttributeDefault>>, elementInfo: NameInfo, defaults: Map<string, AttributeDefault>): void {
+        result.set(elementInfo.lexicalName, this.cloneAttributeDefaultMap(defaults));
+        if (!result.has(elementInfo.localName)) {
+            result.set(elementInfo.localName, this.cloneAttributeDefaultMap(defaults));
+        }
+        if (elementInfo.namespace) {
+            const namespacedKey: string = this.buildAttributeKey(elementInfo.localName, elementInfo.namespace);
+            result.set(namespacedKey, this.cloneAttributeDefaultMap(defaults));
+        }
+    }
+
+    private cloneAttributeDefaultMap(source: Map<string, AttributeDefault>): Map<string, AttributeDefault> {
+        const clone: Map<string, AttributeDefault> = new Map<string, AttributeDefault>();
+        source.forEach((value: AttributeDefault, key: string) => {
+            clone.set(key, {
+                localName: value.localName,
+                namespace: value.namespace,
+                lexicalName: value.lexicalName,
+                value: value.value
+            });
+        });
+        return clone;
+    }
+
+    private collectAttributeDefaultsFromPattern(pattern: XMLElement, defaults: Map<string, AttributeDefault>, visitedRefs: Set<string>, allowElementTraversal: boolean): void {
+        const localName: string = this.getLocalNameFromElement(pattern);
+        if (localName === "attribute") {
+            this.addAttributeDefault(pattern, defaults);
+            return;
+        }
+        if (localName === "ref" || localName === "parentRef") {
+            const nameAttr: XMLAttribute | undefined = pattern.getAttribute("name");
+            const refName: string | undefined = nameAttr?.getValue();
+            if (!refName || visitedRefs.has(refName)) {
+                return;
+            }
+            visitedRefs.add(refName);
+            const referenced: XMLElement | undefined = this.definitions.get(refName);
+            if (referenced) {
+                this.collectAttributeDefaultsFromPattern(referenced, defaults, visitedRefs, allowElementTraversal);
+            }
+            return;
+        }
+        let childAllowTraversal: boolean = allowElementTraversal;
+        if (localName === "element") {
+            if (!allowElementTraversal) {
+                return;
+            }
+            childAllowTraversal = false;
+        }
+        for (const child of pattern.getChildren()) {
+            if (child.getNodeType() !== Constants.ELEMENT_NODE) {
+                continue;
+            }
+            this.collectAttributeDefaultsFromPattern(child as XMLElement, defaults, visitedRefs, childAllowTraversal);
+        }
+    }
+
+    private addAttributeDefault(attributeElement: XMLElement, defaults: Map<string, AttributeDefault>): void {
+        const defaultValue: string | undefined = this.findDefaultValue(attributeElement);
+        if (defaultValue === undefined) {
+            return;
+        }
+        const nameElement: XMLElement | undefined = this.findChildByLocalName(attributeElement, "name");
+        if (!nameElement) {
+            return;
+        }
+        const nameInfo: NameInfo | undefined = this.extractNameInfo(nameElement);
+        if (!nameInfo) {
+            return;
+        }
+        const attributeDefault: AttributeDefault = {
+            localName: nameInfo.localName,
+            namespace: nameInfo.namespace,
+            lexicalName: nameInfo.lexicalName,
+            value: defaultValue
+        };
+        this.setAttributeDefault(defaults, attributeDefault);
+    }
+
+    private extractNameInfo(nameElement: XMLElement): NameInfo | undefined {
+        const lexicalName: string = nameElement.getText().trim();
+        if (!lexicalName) {
+            return undefined;
+        }
+        const nsAttr: XMLAttribute | undefined = nameElement.getAttribute("ns");
+        let namespace: string | undefined = nsAttr ? nsAttr.getValue() : undefined;
+        let localName: string = lexicalName;
+        const separatorIndex: number = lexicalName.indexOf(":");
+        if (separatorIndex !== -1) {
+            localName = lexicalName.substring(separatorIndex + 1);
+            if (!namespace) {
+                const prefix: string = lexicalName.substring(0, separatorIndex);
+                if (prefix === "xml") {
+                    namespace = "http://www.w3.org/XML/1998/namespace";
+                }
+            }
+        }
+        return {
+            lexicalName: lexicalName,
+            localName: localName,
+            namespace: namespace && namespace.length > 0 ? namespace : undefined
+        };
     }
 
     private findDefaultValue(attribute: XMLElement): string | undefined {
@@ -135,7 +225,49 @@ export class RelaxNGParser {
                 return attr.getValue();
             }
         }
+        return this.findDefaultValueFromChildren(attribute);
+    }
+
+    private findDefaultValueFromChildren(attribute: XMLElement): string | undefined {
+        for (const child of attribute.getChildren()) {
+            if (this.getLocalNameFromElement(child) === "defaultValue") {
+                return child.getText().trim();
+            }
+        }
         return undefined;
+    }
+
+    private setAttributeDefault(target: Map<string, AttributeDefault>, value: AttributeDefault): void {
+        const key: string = this.buildAttributeKey(value.localName, value.namespace);
+        const removals: string[] = [];
+        target.forEach((existing: AttributeDefault, existingKey: string) => {
+            if (existing.localName !== value.localName) {
+                return;
+            }
+            const sameNamespace: boolean = existing.namespace === value.namespace;
+            if (sameNamespace && existingKey === key) {
+                return;
+            }
+            if (sameNamespace || (value.namespace && !existing.namespace)) {
+                removals.push(existingKey);
+            }
+        });
+        for (const removalKey of removals) {
+            target.delete(removalKey);
+        }
+        target.set(key, {
+            localName: value.localName,
+            namespace: value.namespace,
+            lexicalName: value.lexicalName,
+            value: value.value
+        });
+    }
+
+    private buildAttributeKey(name: string, namespace?: string): string {
+        if (namespace) {
+            return namespace + "|" + name;
+        }
+        return name;
     }
 
     private removeForeign(element: XMLElement): void {
@@ -150,6 +282,9 @@ export class RelaxNGParser {
             if (nodeType === Constants.ELEMENT_NODE) {
                 const child: XMLElement = node as XMLElement;
                 if (!this.isRelaxNGElement(child)) {
+                    if (this.isCompatibilityAnnotation(child)) {
+                        newContent.push(child);
+                    }
                     continue;
                 }
                 this.removeForeign(child);
@@ -283,35 +418,12 @@ export class RelaxNGParser {
         }
     }
 
-    private getAttributes(element: XMLElement): void {
+    private nameAttribute(element: XMLElement, context: Map<string, string>): void {
+        const currentContext: Map<string, string> = this.augmentNamespaceContext(context, element);
         const localName: string = this.getLocalNameFromElement(element);
-        if (localName === "attribute") {
-            this.attributes.push(element);
-            return;
-        }
-        if (localName === "ref") {
-            const nameAttr: XMLAttribute | undefined = element.getAttribute("name");
-            const refName: string | undefined = nameAttr?.getValue();
-            if (refName && !this.visited.has(refName)) {
-                this.visited.add(refName);
-                const definition: XMLElement | undefined = this.definitions.get(refName);
-                if (definition) {
-                    this.getAttributes(definition);
-                }
-            }
-            return;
-        }
-        for (const child of element.getChildren()) {
-            if (this.getLocalNameFromElement(child) === "element") {
-                return;
-            }
-            this.getAttributes(child);
-        }
-    }
-
-    private nameAttribute(element: XMLElement): void {
-        const localName: string = this.getLocalNameFromElement(element);
-        if ((localName === "element" || localName === "attribute") && element.hasAttribute("name")) {
+        const isElementPattern: boolean = localName === "element";
+        const isAttributePattern: boolean = localName === "attribute";
+        if ((isElementPattern || isAttributePattern) && element.hasAttribute("name")) {
             const nameValue: string = element.getAttribute("name")?.getValue() ?? "";
             const nameElement: XMLElement = this.createRelaxNGElement("name");
             nameElement.addString(nameValue);
@@ -320,6 +432,11 @@ export class RelaxNGParser {
             if (nsAttr) {
                 nameElement.setAttribute(new XMLAttribute("ns", nsAttr.getValue()));
                 element.removeAttribute("ns");
+            } else {
+                const resolvedNamespace: string | undefined = this.resolveNamespaceBinding(nameValue, currentContext, isElementPattern, isAttributePattern);
+                if (resolvedNamespace) {
+                    nameElement.setAttribute(new XMLAttribute("ns", resolvedNamespace));
+                }
             }
 
             element.removeAttribute("name");
@@ -327,8 +444,42 @@ export class RelaxNGParser {
             element.setContent(content);
         }
         for (const child of element.getChildren()) {
-            this.nameAttribute(child);
+            this.nameAttribute(child, currentContext);
         }
+    }
+
+    private augmentNamespaceContext(baseContext: Map<string, string>, element: XMLElement): Map<string, string> {
+        const updated: Map<string, string> = new Map<string, string>(baseContext);
+        for (const attribute of element.getAttributes()) {
+            const attributeName: string = attribute.getName();
+            if (attributeName === "xmlns") {
+                updated.set("", attribute.getValue());
+                continue;
+            }
+            if (attributeName.startsWith("xmlns:")) {
+                const prefix: string = attributeName.substring(6);
+                updated.set(prefix, attribute.getValue());
+            }
+        }
+        if (!updated.has("xml")) {
+            updated.set("xml", "http://www.w3.org/XML/1998/namespace");
+        }
+        return updated;
+    }
+
+    private resolveNamespaceBinding(lexicalName: string, context: Map<string, string>, isElementPattern: boolean, isAttributePattern: boolean): string | undefined {
+        const separatorIndex: number = lexicalName.indexOf(":");
+        if (separatorIndex === -1) {
+            if (isElementPattern) {
+                return context.get("") ?? undefined;
+            }
+            if (isAttributePattern) {
+                return undefined;
+            }
+            return context.get("") ?? undefined;
+        }
+        const prefix: string = lexicalName.substring(0, separatorIndex);
+        return context.get(prefix);
     }
 
     private resolveHref(href: string): string | undefined {
@@ -407,6 +558,14 @@ export class RelaxNGParser {
         const name: string = element.getName();
         const index: number = name.indexOf(":");
         return index === -1 ? "" : name.substring(0, index);
+    }
+
+    private isCompatibilityAnnotation(element: XMLElement): boolean {
+        const localName: string = this.getLocalNameFromElement(element);
+        if (localName === "defaultValue") {
+            return true;
+        }
+        return false;
     }
 
     private isRelaxNGElement(element: XMLElement): boolean {

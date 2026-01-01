@@ -68,9 +68,8 @@ export class SAXParser {
     currentFile: string | undefined;
     catalog: Catalog | undefined;
     validating: boolean = false;
-    relaxNGDefaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
-    schemaDefaultAttributes: Map<string, Map<string, string>> = new Map<string, Map<string, string>>();
-    private schemaDefaultAttributeDetails: Map<string, Map<string, SchemaAttributeDefault>> = new Map<string, Map<string, SchemaAttributeDefault>>();
+    relaxNGDefaultAttributes: Map<string, Map<string, SchemaAttributeDefault>> = new Map<string, Map<string, SchemaAttributeDefault>>();
+    schemaDefaultAttributes: Map<string, Map<string, SchemaAttributeDefault>> = new Map<string, Map<string, SchemaAttributeDefault>>();
     processedSchemaLocations: Set<string> = new Set<string>();
     failedSchemaLocations: Set<string> = new Set<string>();
     namespaceContextStack: Array<Map<string, string>> = [];
@@ -217,9 +216,8 @@ export class SAXParser {
         this.reader = reader;
         const fallbackVirtualPath: string = resolve(process.cwd(), SAXParser.DEFAULT_VIRTUAL_FILENAME);
         this.currentFile = currentFilePath || fallbackVirtualPath;
-        this.relaxNGDefaultAttributes = new Map<string, Map<string, string>>();
-        this.schemaDefaultAttributes = new Map<string, Map<string, string>>();
-        this.schemaDefaultAttributeDetails = new Map<string, Map<string, SchemaAttributeDefault>>();
+        this.relaxNGDefaultAttributes = new Map<string, Map<string, SchemaAttributeDefault>>();
+        this.schemaDefaultAttributes = new Map<string, Map<string, SchemaAttributeDefault>>();
         this.processedSchemaLocations = new Set<string>();
         this.failedSchemaLocations = new Set<string>();
         this.namespaceContextStack = [];
@@ -881,14 +879,21 @@ export class SAXParser {
         const namespaceUri: string | undefined = this.getNamespaceUriForElement(elementName);
         if (namespaceUri) {
             const namespaceKey: string = namespaceUri + "|" + nameParts.localName;
-            this.appendSchemaDefaultsForElement(this.schemaDefaultAttributeDetails.get(namespaceKey), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
+            this.appendSchemaDefaultsForElement(this.schemaDefaultAttributes.get(namespaceKey), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
         }
-        this.appendSchemaDefaultsForElement(this.schemaDefaultAttributeDetails.get(nameParts.localName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
+        this.appendSchemaDefaultsForElement(this.schemaDefaultAttributes.get(nameParts.localName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
         if (nameParts.localName !== elementName) {
-            this.appendSchemaDefaultsForElement(this.schemaDefaultAttributeDetails.get(elementName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
+            this.appendSchemaDefaultsForElement(this.schemaDefaultAttributes.get(elementName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
         }
         if (this.isRelaxNG) {
-            this.appendRelaxNGDefaultsForElement(this.relaxNGDefaultAttributes.get(elementName), attributes, existingAttributeNames, existingAttributeKeys);
+            if (namespaceUri) {
+                const namespaceRelaxKey: string = namespaceUri + "|" + nameParts.localName;
+                this.appendSchemaDefaultsForElement(this.relaxNGDefaultAttributes.get(namespaceRelaxKey), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
+            }
+            this.appendSchemaDefaultsForElement(this.relaxNGDefaultAttributes.get(nameParts.localName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
+            if (nameParts.localName !== elementName) {
+                this.appendSchemaDefaultsForElement(this.relaxNGDefaultAttributes.get(elementName), attributes, existingAttributeNames, existingAttributeKeys, namespaceUri, nameParts, namespaceContext);
+            }
         }
         return attributes;
     }
@@ -909,26 +914,6 @@ export class SAXParser {
             const normalizedValue: string = this.normalizeAttributeValue(info.value, info.value);
             attributes.push(new XMLAttribute(attributeName, normalizedValue));
             existingAttributeNames.add(attributeName);
-            existingAttributeKeys.add(attributeKey);
-        });
-    }
-
-    private appendRelaxNGDefaultsForElement(defaults: Map<string, string> | undefined, attributes: Array<XMLAttribute>, existingAttributeNames: Set<string>, existingAttributeKeys: Set<string>): void {
-        if (!defaults) {
-            return;
-        }
-        defaults.forEach((value: string, key: string) => {
-            if (existingAttributeNames.has(key)) {
-                return;
-            }
-            const parts: { prefix?: string; localName: string } = this.splitQualifiedName(key);
-            const attributeKey: string = this.buildSchemaAttributeKey(parts.localName, undefined);
-            if (existingAttributeKeys.has(attributeKey)) {
-                return;
-            }
-            const normalizedValue: string = this.normalizeAttributeValue(value, value);
-            attributes.push(new XMLAttribute(key, normalizedValue));
-            existingAttributeNames.add(key);
             existingAttributeKeys.add(attributeKey);
         });
     }
@@ -993,6 +978,9 @@ export class SAXParser {
                 context.set(prefix, value);
             }
         });
+        if (!context.has('xml')) {
+            context.set('xml', 'http://www.w3.org/XML/1998/namespace');
+        }
         return context;
     }
 
@@ -1211,8 +1199,7 @@ export class SAXParser {
             if (attributeMap.size === 0) {
                 return;
             }
-            const detailTarget: Map<string, SchemaAttributeDefault> = this.schemaDefaultAttributeDetails.get(elementName) ?? new Map<string, SchemaAttributeDefault>();
-            const plainTarget: Map<string, string> = this.schemaDefaultAttributes.get(elementName) ?? new Map<string, string>();
+            const target: Map<string, SchemaAttributeDefault> = this.schemaDefaultAttributes.get(elementName) ?? new Map<string, SchemaAttributeDefault>();
             attributeMap.forEach((info: SchemaAttributeDefault, attributeName: string) => {
                 const copy: SchemaAttributeDefault = {
                     localName: info.localName,
@@ -1220,14 +1207,10 @@ export class SAXParser {
                     lexicalName: info.lexicalName,
                     value: info.value
                 };
-                detailTarget.set(attributeName, copy);
-                plainTarget.set(attributeName, info.value);
+                target.set(attributeName, copy);
             });
-            if (detailTarget.size > 0) {
-                this.schemaDefaultAttributeDetails.set(elementName, detailTarget);
-            }
-            if (plainTarget.size > 0) {
-                this.schemaDefaultAttributes.set(elementName, plainTarget);
+            if (target.size > 0) {
+                this.schemaDefaultAttributes.set(elementName, target);
             }
         });
     }
@@ -1373,15 +1356,18 @@ export class SAXParser {
             const attributesFromPi: Map<string, string> = this.parseAttributes(data);
             const href: string | undefined = attributesFromPi.get('href');
             const schemaType: string | undefined = attributesFromPi.get('schematypens');
-            if (href && schemaType === Constants.RELAXNG_NS_URI) {
-                try {
-                    this.parseRelaxNG(href);
-                } catch (error) {
-                    if (this.validating) {
-                        throw error;
+            if (href) {
+                const isRelaxNgSchema: boolean = schemaType ? schemaType === Constants.RELAXNG_NS_URI : href.endsWith('.rng');
+                if (isRelaxNgSchema) {
+                    try {
+                        this.parseRelaxNG(href);
+                    } catch (error) {
+                        if (this.validating) {
+                            throw error;
+                        }
+                        const message: string = error instanceof Error ? error.message : String(error);
+                        console.warn(`Warning: Could not load RelaxNG defaults from ${href}: ${message}`);
                     }
-                    const message: string = error instanceof Error ? error.message : String(error);
-                    console.warn(`Warning: Could not load RelaxNG defaults from ${href}: ${message}`);
                 }
             }
         }
