@@ -1,9 +1,4 @@
-import {
-    jsonObjectToXmlDocument,
-    xmlStringToJsonObject,
-    type JsonValue,
-    type XmlJsonDocument
-} from "typesxml";
+import { jsonObjectToXmlDocument, xmlStringToJsonObject, type JsonValue, type XmlJsonDocument } from "typesxml";
 
 function demoJsonToXml(): void {
     const simpleJson: JsonValue = {

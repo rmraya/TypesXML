@@ -1,7 +1,7 @@
 {
   "name": "typesxml",
   "productName": "TypesXML",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Open source XML library written in TypeScript",
   "keywords": [
     "XML",
@@ -14,9 +14,11 @@
     "JSON"
   ],
   "scripts": {
-    "build": "tsc",
-    "testDtd": "tsc && node dist/tests/DTDTestSuite.js",
-    "testJson": "tsc && node dist/tests/JsonConversionTest.js"
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc --project tsconfig.cjs.json",
+    "build:esm": "tsc --project tsconfig.esm.json && node scripts/create-esm-package.cjs",
+    "testDtd": "npm run build:cjs && node dist/cjs/tests/DTDTestSuite.js",
+    "testJson": "npm run build:cjs && node dist/cjs/tests/JsonConversionTest.js"
   },
   "author": {
     "name": "Rodolfo M. Raya",
@@ -24,8 +26,19 @@
     "email": "rmraya@maxprograms.com"
   },
   "license": "EPL-1.0",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
+    },
+    "./package.json": "./package.json",
+    "./cjs/*": "./dist/cjs/*"
+  },
   "files": [
     "/dist"
   ],
