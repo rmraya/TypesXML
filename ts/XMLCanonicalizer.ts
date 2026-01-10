@@ -11,18 +11,18 @@
  *******************************************************************************/
 
 import { Readable } from "node:stream";
-import { CData } from "./CData";
-import { DOMBuilder } from "./DOMBuilder";
-import { ProcessingInstruction } from "./ProcessingInstruction";
-import { ParseSourceOptions, SAXParser, StreamParseOptions } from "./SAXParser";
-import { TextNode } from "./TextNode";
-import { XMLAttribute } from "./XMLAttribute";
-import { XMLComment } from "./XMLComment";
-import { XMLDeclaration } from "./XMLDeclaration";
-import { XMLDocument } from "./XMLDocument";
-import { XMLDocumentType } from "./XMLDocumentType";
-import { XMLElement } from "./XMLElement";
-import { XMLNode } from "./XMLNode";
+import { CData } from "./CData.js";
+import { DOMBuilder } from "./DOMBuilder.js";
+import { ProcessingInstruction } from "./ProcessingInstruction.js";
+import { ParseSourceOptions, SAXParser, StreamParseOptions } from "./SAXParser.js";
+import { TextNode } from "./TextNode.js";
+import { XMLAttribute } from "./XMLAttribute.js";
+import { XMLComment } from "./XMLComment.js";
+import { XMLDeclaration } from "./XMLDeclaration.js";
+import { XMLDocument } from "./XMLDocument.js";
+import { XMLDocumentType } from "./XMLDocumentType.js";
+import { XMLElement } from "./XMLElement.js";
+import { XMLNode } from "./XMLNode.js";
 
 /**
  * Generates the canonical XML representation defined by the W3C XML Test Suite.

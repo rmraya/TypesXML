@@ -10,8 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Constants } from "./Constants";
-import { XMLNode } from "./XMLNode";
+import { Constants } from "./Constants.js";
+import { XMLNode } from "./XMLNode.js";
 
 export class ProcessingInstruction implements XMLNode {
 

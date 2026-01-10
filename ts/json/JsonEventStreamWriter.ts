@@ -11,11 +11,11 @@
  *******************************************************************************/
 
 import { Writable } from "node:stream";
-import { Catalog } from "../Catalog";
-import { ContentHandler } from "../ContentHandler";
-import { Grammar } from "../grammar/Grammar";
-import { XMLAttribute } from "../XMLAttribute";
-import { JsonAttributeDescriptor, JsonNodeEvent } from "./JsonNodeReader";
+import { Catalog } from "../Catalog.js";
+import { ContentHandler } from "../ContentHandler.js";
+import { Grammar } from "../grammar/Grammar.js";
+import { XMLAttribute } from "../XMLAttribute.js";
+import { JsonAttributeDescriptor, JsonNodeEvent } from "./JsonNodeReader.js";
 
 export class JsonEventStreamWriter implements ContentHandler {
 

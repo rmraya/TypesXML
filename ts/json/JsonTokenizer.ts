@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { NeedMoreDataError } from "../NeedMoreDataError";
+import { NeedMoreDataError } from "../NeedMoreDataError.js";
 
 export type JsonToken =
     | { type: 'braceOpen' }

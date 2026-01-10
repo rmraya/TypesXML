@@ -12,15 +12,15 @@
 
 import { Stats, closeSync, openSync, readSync, statSync } from "node:fs";
 import { dirname, sep } from "node:path";
-import { Catalog } from "../Catalog";
-import { FileReader } from "../FileReader";
-import { XMLUtils } from "../XMLUtils";
-import { AttDecl } from "./AttDecl";
-import { AttListDecl } from "./AttListDecl";
-import { DTDGrammar } from "./DTDGrammar";
-import { ElementDecl } from "./ElementDecl";
-import { EntityDecl } from "./EntityDecl";
-import { NotationDecl } from "./NotationDecl";
+import { Catalog } from "../Catalog.js";
+import { FileReader } from "../FileReader.js";
+import { XMLUtils } from "../XMLUtils.js";
+import { AttDecl } from "./AttDecl.js";
+import { AttListDecl } from "./AttListDecl.js";
+import { DTDGrammar } from "./DTDGrammar.js";
+import { ElementDecl } from "./ElementDecl.js";
+import { EntityDecl } from "./EntityDecl.js";
+import { NotationDecl } from "./NotationDecl.js";
 
 export class DTDParser {
 

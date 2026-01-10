@@ -10,15 +10,15 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Constants } from "./Constants";
-import { ProcessingInstruction } from "./ProcessingInstruction";
-import { TextNode } from "./TextNode";
-import { XMLComment } from "./XMLComment";
-import { XMLDeclaration } from "./XMLDeclaration";
-import { XMLDocumentType } from "./XMLDocumentType";
-import { XMLElement } from "./XMLElement";
-import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
+import { Constants } from "./Constants.js";
+import { ProcessingInstruction } from "./ProcessingInstruction.js";
+import { TextNode } from "./TextNode.js";
+import { XMLComment } from "./XMLComment.js";
+import { XMLDeclaration } from "./XMLDeclaration.js";
+import { XMLDocumentType } from "./XMLDocumentType.js";
+import { XMLElement } from "./XMLElement.js";
+import { XMLNode } from "./XMLNode.js";
+import { XMLUtils } from "./XMLUtils.js";
 
 export class XMLDocument implements XMLNode {
 

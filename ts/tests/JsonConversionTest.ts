@@ -14,9 +14,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { DOMBuilder } from "../DOMBuilder";
-import { SAXParser } from "../SAXParser";
-import { XMLDocument } from "../XMLDocument";
+import { DOMBuilder } from "../DOMBuilder.js";
+import { SAXParser } from "../SAXParser.js";
+import { XMLDocument } from "../XMLDocument.js";
 import {
     JsonElementObject,
     JsonValue,
@@ -30,7 +30,7 @@ import {
     xmlStreamToJsonObject,
     xmlStringToJsonFile,
     xmlStringToJsonObject
-} from "../json/JsonConversion";
+} from "../json/JsonConversion.js";
 
 async function runJsonConversionTests(): Promise<void> {
     const samples: Array<string> = [

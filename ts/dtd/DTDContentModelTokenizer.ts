@@ -15,7 +15,7 @@ export type DTDToken = {
     value: string
 }
 
-import { XMLUtils } from "../XMLUtils";
+import { XMLUtils } from "../XMLUtils.js";
 
 export class DTDContentModelTokenizer {
 

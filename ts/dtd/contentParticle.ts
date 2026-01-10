@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Cardinality } from "./ContentModel";
+import { Cardinality } from "./ContentModel.js";
 
 export const ContentParticleType = {
     PCDATA: 0,

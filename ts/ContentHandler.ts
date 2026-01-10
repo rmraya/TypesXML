@@ -10,9 +10,9 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Catalog } from "./Catalog";
-import { Grammar } from "./grammar/Grammar";
-import { XMLAttribute } from "./XMLAttribute";
+import { Catalog } from "./Catalog.js";
+import { Grammar } from "./grammar/Grammar.js";
+import { XMLAttribute } from "./XMLAttribute.js";
 
 export interface ContentHandler {
 

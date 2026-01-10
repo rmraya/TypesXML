@@ -12,12 +12,12 @@
 
 import { existsSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
-import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser } from "./SAXParser";
-import { XMLAttribute } from "./XMLAttribute";
-import { XMLDocument } from "./XMLDocument";
-import { XMLElement } from "./XMLElement";
-import { XMLUtils } from "./XMLUtils";
+import { DOMBuilder } from "./DOMBuilder.js";
+import { SAXParser } from "./SAXParser.js";
+import { XMLAttribute } from "./XMLAttribute.js";
+import { XMLDocument } from "./XMLDocument.js";
+import { XMLElement } from "./XMLElement.js";
+import { XMLUtils } from "./XMLUtils.js";
 
 export class Catalog {
 

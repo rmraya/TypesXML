@@ -11,9 +11,9 @@
  *******************************************************************************/
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { DOMBuilder } from "../DOMBuilder";
-import { SAXParser } from "../SAXParser";
-import { XMLCanonicalizer } from "../XMLCanonicalizer";
+import { DOMBuilder } from "../DOMBuilder.js";
+import { SAXParser } from "../SAXParser.js";
+import { XMLCanonicalizer } from "../XMLCanonicalizer.js";
 
 export class DTDTestSuite {
 

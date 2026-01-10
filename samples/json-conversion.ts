@@ -1,14 +1,12 @@
-// @ts-nocheck
-
-import typesxml from "typesxml";
-
-const { jsonObjectToXmlDocument, xmlStringToJsonObject } = typesxml as Record<string, unknown> as {
-    jsonObjectToXmlDocument: (json: any, rootName?: string) => any;
-    xmlStringToJsonObject: (xml: string, options?: any) => any;
-};
+import {
+    jsonObjectToXmlDocument,
+    xmlStringToJsonObject,
+    type JsonValue,
+    type XmlJsonDocument
+} from "typesxml";
 
 function demoJsonToXml(): void {
-    const simpleJson: any = {
+    const simpleJson: JsonValue = {
         library: {
             _attributes: { category: "memo" },
             _text: "painters"
@@ -35,11 +33,11 @@ function demoXmlToJson(): void {
         "</libraryCatalog>"
     ].join("\n");
 
-    const simpleJson: any = xmlStringToJsonObject(xmlSource);
+    const simpleJson: JsonValue = xmlStringToJsonObject(xmlSource);
     console.log("\nXML → JSON (simple mode):");
     console.log(JSON.stringify(simpleJson, null, 2));
 
-    const roundTripJson: any = xmlStringToJsonObject(xmlSource, { mode: "roundtrip" });
+    const roundTripJson: XmlJsonDocument = xmlStringToJsonObject(xmlSource, { mode: "roundtrip" });
     console.log("\nXML → JSON (roundtrip mode):");
     console.log(JSON.stringify(roundTripJson, null, 2));
 

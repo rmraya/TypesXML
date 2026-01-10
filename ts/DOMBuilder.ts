@@ -10,21 +10,21 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { CData } from "./CData";
-import { Catalog } from "./Catalog";
-import { ContentHandler } from "./ContentHandler";
-import { ProcessingInstruction } from "./ProcessingInstruction";
-import { TextNode } from "./TextNode";
-import { XMLAttribute } from "./XMLAttribute";
-import { XMLComment } from "./XMLComment";
-import { XMLDeclaration } from "./XMLDeclaration";
-import { XMLDocument } from "./XMLDocument";
-import { XMLDocumentType } from "./XMLDocumentType";
-import { XMLElement } from "./XMLElement";
-import { XMLUtils } from "./XMLUtils";
-import { DTDParser } from "./dtd/DTDParser";
-import { DTDGrammar } from "./dtd/DTDGrammar";
-import { Grammar } from "./grammar/Grammar";
+import { CData } from "./CData.js";
+import { Catalog } from "./Catalog.js";
+import { ContentHandler } from "./ContentHandler.js";
+import { ProcessingInstruction } from "./ProcessingInstruction.js";
+import { TextNode } from "./TextNode.js";
+import { XMLAttribute } from "./XMLAttribute.js";
+import { XMLComment } from "./XMLComment.js";
+import { XMLDeclaration } from "./XMLDeclaration.js";
+import { XMLDocument } from "./XMLDocument.js";
+import { XMLDocumentType } from "./XMLDocumentType.js";
+import { XMLElement } from "./XMLElement.js";
+import { XMLUtils } from "./XMLUtils.js";
+import { DTDParser } from "./dtd/DTDParser.js";
+import { DTDGrammar } from "./dtd/DTDGrammar.js";
+import { Grammar } from "./grammar/Grammar.js";
 
 export class DOMBuilder implements ContentHandler {
 

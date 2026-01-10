@@ -10,10 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Cardinality } from "./ContentModel";
-import { ContentParticle, ContentParticleType } from "./contentParticle";
-import { DTDChoice } from "./dtdChoice";
-import { DTDName } from "./dtdName";
+import { Cardinality } from "./ContentModel.js";
+import { ContentParticle, ContentParticleType } from "./contentParticle.js";
+import { DTDChoice } from "./dtdChoice.js";
+import { DTDName } from "./dtdName.js";
 
 export class DTDSecuence implements ContentParticle {
 

@@ -10,8 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { NeedMoreDataError } from "../NeedMoreDataError";
-import { JsonTokenizer, JsonToken } from "./JsonTokenizer";
+import { NeedMoreDataError } from "../NeedMoreDataError.js";
+import { JsonTokenizer, JsonToken } from "./JsonTokenizer.js";
 
 export interface JsonAttributeDescriptor {
     name: string;

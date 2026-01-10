@@ -11,11 +11,11 @@
  *******************************************************************************/
 
 import { Writable } from "node:stream";
-import { Catalog } from "../Catalog";
-import { ContentHandler } from "../ContentHandler";
-import { Grammar } from "../grammar/Grammar";
-import { XMLAttribute } from "../XMLAttribute";
-import { XMLUtils } from "../XMLUtils";
+import { Catalog } from "../Catalog.js";
+import { ContentHandler } from "../ContentHandler.js";
+import { Grammar } from "../grammar/Grammar.js";
+import { XMLAttribute } from "../XMLAttribute.js";
+import { XMLUtils } from "../XMLUtils.js";
 
 interface ElementFrame {
     name: string;

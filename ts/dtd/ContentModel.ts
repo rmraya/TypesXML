@@ -10,11 +10,11 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { ContentParticle } from "./contentParticle";
-import { DTDChoice } from "./dtdChoice";
-import { DTDName } from "./dtdName";
-import { DTDPCData } from "./dtdPCData";
-import { DTDSecuence } from "./dtdSecuence";
+import { ContentParticle } from "./contentParticle.js";
+import { DTDChoice } from "./dtdChoice.js";
+import { DTDName } from "./dtdName.js";
+import { DTDPCData } from "./dtdPCData.js";
+import { DTDSecuence } from "./dtdSecuence.js";
 
 export const Cardinality = {
     NONE: 0, // (exactly one)

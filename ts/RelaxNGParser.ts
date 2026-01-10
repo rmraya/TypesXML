@@ -13,15 +13,15 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Catalog } from "./Catalog";
-import { Constants } from "./Constants";
-import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser } from "./SAXParser";
-import { TextNode } from "./TextNode";
-import { XMLAttribute } from "./XMLAttribute";
-import { XMLElement } from "./XMLElement";
-import { XMLNode } from "./XMLNode";
-import { type AttributeDefault } from "./XMLSchemaParser";
+import { Catalog } from "./Catalog.js";
+import { Constants } from "./Constants.js";
+import { DOMBuilder } from "./DOMBuilder.js";
+import { SAXParser } from "./SAXParser.js";
+import { TextNode } from "./TextNode.js";
+import { XMLAttribute } from "./XMLAttribute.js";
+import { XMLElement } from "./XMLElement.js";
+import { XMLNode } from "./XMLNode.js";
+import { type AttributeDefault } from "./XMLSchemaParser.js";
 
 type NameInfo = {
     lexicalName: string;

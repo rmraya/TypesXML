@@ -10,9 +10,9 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLUtils } from '../XMLUtils';
-import { DTDContentModel } from './DTDContentModel';
-import { DTDElementNameParticle } from './DTDElementNameParticle';
+import { XMLUtils } from '../XMLUtils.js';
+import { DTDContentModel } from './DTDContentModel.js';
+import { DTDElementNameParticle } from './DTDElementNameParticle.js';
 
 export class DTDSequenceModel implements DTDContentModel {
 

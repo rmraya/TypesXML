@@ -10,12 +10,12 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Constants } from "./Constants";
-import { TextNode } from "./TextNode";
-import { XMLAttribute } from "./XMLAttribute";
-import { XMLElement } from "./XMLElement";
-import { XMLNode } from "./XMLNode";
-import { XMLUtils } from "./XMLUtils";
+import { Constants } from "./Constants.js";
+import { TextNode } from "./TextNode.js";
+import { XMLAttribute } from "./XMLAttribute.js";
+import { XMLElement } from "./XMLElement.js";
+import { XMLNode } from "./XMLNode.js";
+import { XMLUtils } from "./XMLUtils.js";
 
 export class Indenter {
 

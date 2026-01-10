@@ -13,13 +13,13 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Catalog } from "./Catalog";
-import { Constants } from "./Constants";
-import { DOMBuilder } from "./DOMBuilder";
-import { SAXParser } from "./SAXParser";
-import { XMLAttribute } from "./XMLAttribute";
-import { XMLDocument } from "./XMLDocument";
-import { XMLElement } from "./XMLElement";
+import { Catalog } from "./Catalog.js";
+import { Constants } from "./Constants.js";
+import { DOMBuilder } from "./DOMBuilder.js";
+import { SAXParser } from "./SAXParser.js";
+import { XMLAttribute } from "./XMLAttribute.js";
+import { XMLDocument } from "./XMLDocument.js";
+import { XMLElement } from "./XMLElement.js";
 
 type ElementInfo = {
     element: XMLElement;

@@ -10,10 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Constants } from "../Constants";
-import { XMLNode } from "../XMLNode";
-import { XMLUtils } from "../XMLUtils";
-import { AttDecl } from "./AttDecl";
+import { Constants } from "../Constants.js";
+import { XMLNode } from "../XMLNode.js";
+import { XMLUtils } from "../XMLUtils.js";
+import { AttDecl } from "./AttDecl.js";
 
 export class AttListDecl implements XMLNode {
 

@@ -10,9 +10,9 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { ContentHandler } from "../ContentHandler";
-import { XMLAttribute } from "../XMLAttribute";
-import { JsonAttributeDescriptor, JsonNodeEvent, JsonNodeReader } from "./JsonNodeReader";
+import { ContentHandler } from "../ContentHandler.js";
+import { XMLAttribute } from "../XMLAttribute.js";
+import { JsonAttributeDescriptor, JsonNodeEvent, JsonNodeReader } from "./JsonNodeReader.js";
 
 export class JsonToXmlHandler {
 

@@ -11,9 +11,9 @@
  *******************************************************************************/
 
 import { appendFileSync, writeFileSync } from "node:fs";
-import { XMLDeclaration } from "./XMLDeclaration";
-import { XMLDocument } from "./XMLDocument";
-import { XMLNode } from "./XMLNode";
+import { XMLDeclaration } from "./XMLDeclaration.js";
+import { XMLDocument } from "./XMLDocument.js";
+import { XMLNode } from "./XMLNode.js";
 
 export class XMLWriter {
 

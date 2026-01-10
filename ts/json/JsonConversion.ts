@@ -12,17 +12,17 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { DOMBuilder } from "../DOMBuilder";
-import { SAXParser, ParseSourceOptions, StreamParseOptions } from "../SAXParser";
-import { XMLDocument } from "../XMLDocument";
-import { XMLElement } from "../XMLElement";
-import { XMLAttribute } from "../XMLAttribute";
-import { TextNode } from "../TextNode";
-import { CData } from "../CData";
-import { XMLComment } from "../XMLComment";
-import { ProcessingInstruction } from "../ProcessingInstruction";
-import { XMLDeclaration } from "../XMLDeclaration";
-import { XMLDocumentType } from "../XMLDocumentType";
+import { DOMBuilder } from "../DOMBuilder.js";
+import { SAXParser, ParseSourceOptions, StreamParseOptions } from "../SAXParser.js";
+import { XMLDocument } from "../XMLDocument.js";
+import { XMLElement } from "../XMLElement.js";
+import { XMLAttribute } from "../XMLAttribute.js";
+import { TextNode } from "../TextNode.js";
+import { CData } from "../CData.js";
+import { XMLComment } from "../XMLComment.js";
+import { ProcessingInstruction } from "../ProcessingInstruction.js";
+import { XMLDeclaration } from "../XMLDeclaration.js";
+import { XMLDocumentType } from "../XMLDocumentType.js";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonElementObject | Array<JsonValue>;

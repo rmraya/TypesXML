@@ -10,13 +10,13 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationContext, ValidationResult } from '../grammar/Grammar';
-import { XMLUtils } from "../XMLUtils";
-import { AttDecl } from './AttDecl';
-import { ContentModel, ContentModelType } from './ContentModel';
-import { ElementDecl } from './ElementDecl';
-import { EntityDecl } from './EntityDecl';
-import { NotationDecl } from './NotationDecl';
+import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationContext, ValidationResult } from '../grammar/Grammar.js';
+import { XMLUtils } from "../XMLUtils.js";
+import { AttDecl } from './AttDecl.js';
+import { ContentModel, ContentModelType } from './ContentModel.js';
+import { ElementDecl } from './ElementDecl.js';
+import { EntityDecl } from './EntityDecl.js';
+import { NotationDecl } from './NotationDecl.js';
 
 export class DTDGrammar implements Grammar {
 

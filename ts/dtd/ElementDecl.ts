@@ -10,10 +10,10 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { Constants } from "../Constants";
-import { XMLNode } from "../XMLNode";
-import { DTDContentModel } from "./DTDContentModel";
-import { DTDContentModelParser } from "./DTDContentModelParser";
+import { Constants } from "../Constants.js";
+import { XMLNode } from "../XMLNode.js";
+import { DTDContentModel } from "./DTDContentModel.js";
+import { DTDContentModelParser } from "./DTDContentModelParser.js";
 
 export class ElementDecl implements XMLNode {
 

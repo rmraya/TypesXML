@@ -10,12 +10,12 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { XMLUtils } from "../XMLUtils";
-import { DTDChoiceModel } from "./DTDChoiceModel";
-import { DTDContentModel } from "./DTDContentModel";
-import { DTDContentModelTokenizer, DTDToken } from "./DTDContentModelTokenizer";
-import { DTDElementNameParticle } from "./DTDElementNameParticle";
-import { DTDSequenceModel } from "./DTDSequenceModel";
+import { XMLUtils } from "../XMLUtils.js";
+import { DTDChoiceModel } from "./DTDChoiceModel.js";
+import { DTDContentModel } from "./DTDContentModel.js";
+import { DTDContentModelTokenizer, DTDToken } from "./DTDContentModelTokenizer.js";
+import { DTDElementNameParticle } from "./DTDElementNameParticle.js";
+import { DTDSequenceModel } from "./DTDSequenceModel.js";
 
 export class DTDContentModelParser {
 
