@@ -87,6 +87,57 @@ parser.setValidating(true); // Turns on DTD validation only.
 - Use the [JSON and XML Conversion Guide](docs/jsonTutorial.md) to translate between XML documents and JSON objects, with guidance on when to enable the metadata-preserving round-trip mode.
 - Explore the runnable examples under [`samples/`](samples/README.md) to see the code in action.
 
+## Performance
+
+Benchmarked against **fast-xml-parser** and **tXml** on real-world XML files. Each result is the best of three runs after a warmup pass.
+
+``` text
+Size: 1.858 MB | Elements: 41349
++-----------------+---------------+-------------------+---------+
+| Parser          | Duration (ms) | Throughput (MB/s) | Success |
++-----------------+---------------+-------------------+---------+
+| TypesXML        |     165.20 ms |        11.25 MB/s | yes     |
+| fast-xml-parser |     154.41 ms |        12.03 MB/s | yes     |
+| tXml            |      17.19 ms |       108.06 MB/s | yes     |
++-----------------+---------------+-------------------+---------+
+
+
+Size: 63.215 MB | Elements: 817216
++-----------------+---------------+-------------------+---------+
+| Parser          | Duration (ms) | Throughput (MB/s) | Success |
++-----------------+---------------+-------------------+---------+
+| TypesXML        |    5444.54 ms |        11.61 MB/s | yes     |
+| fast-xml-parser |    4294.62 ms |        14.72 MB/s | yes     |
+| tXml            |     555.80 ms |       113.74 MB/s | yes     |
++-----------------+---------------+-------------------+---------+
+
+
+Size: 121.517 MB | Elements: 1883407
++-----------------+---------------+-------------------+---------+
+| Parser          | Duration (ms) | Throughput (MB/s) | Success |
++-----------------+---------------+-------------------+---------+
+| TypesXML        |    8530.47 ms |        14.25 MB/s | yes     |
+| fast-xml-parser |    8615.05 ms |        14.11 MB/s | yes     |
+| tXml            |    1169.80 ms |       103.88 MB/s | yes     |
++-----------------+---------------+-------------------+---------+
+
+
+Size: 574.672 MB | Elements: 7853048
++-----------------+---------------+-------------------+---------+
+| Parser          | Duration (ms) | Throughput (MB/s) | Success |
++-----------------+---------------+-------------------+---------+
+| TypesXML        |   57134.36 ms |        10.06 MB/s | yes     |
+| fast-xml-parser |           n/a |               n/a | no      |
+| tXml            |           n/a |               n/a | no      |
++-----------------+---------------+-------------------+---------+
+
+Parser Failures:
+  - fast-xml-parser: Error: Cannot create a string longer than 0x1fffffe8 characters
+  - tXml: Error: Cannot create a string longer than 0x1fffffe8 characters
+```
+
+fast-xml-parser and tXml fail on the 574 MB file with a Node.js string-length error (`Cannot create a string longer than 0x1fffffe8 characters`) because they read the entire file into a single string and build a DOM tree in memory. Node.js limits strings to `0x1fffffe8` characters (~512 MB), so any XML file approaching or exceeding that size will cause these parsers to crash. TypesXML uses SAX streaming and reads the file in chunks, so it is not subject to this limit and parses the file successfully.
+
 ## W3C XML Test Suite
 
 The repository includes a harness that runs against the official W3C XML Conformance Test Suite for DTD grammars. To execute it locally:
