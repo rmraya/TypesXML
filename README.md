@@ -89,7 +89,7 @@ parser.setValidating(true); // Turns on DTD validation only.
 
 ## Performance
 
-Benchmarked against **fast-xml-parser** and **tXml** on real-world XML files. Each result is the best of three runs after a warmup pass.
+The following benchmark compares TypesXML with fast-xml-parser and tXml on the specified input file. All parsers run on the same machine under identical conditions. Each result is the best of three runs after a warmup pass. Throughput is calculated as file_size / duration. The comparison is limited to parsing speed only; feature sets differ across parsers.
 
 ``` text
 Size: 1.858 MB | Elements: 41349
@@ -136,7 +136,7 @@ Parser Failures:
   - tXml: Error: Cannot create a string longer than 0x1fffffe8 characters
 ```
 
-fast-xml-parser and tXml fail on the 574 MB file with a Node.js string-length error (`Cannot create a string longer than 0x1fffffe8 characters`) because they read the entire file into a single string and build a DOM tree in memory. Node.js limits strings to `0x1fffffe8` characters (~512 MB), so any XML file approaching or exceeding that size will cause these parsers to crash. TypesXML uses SAX streaming and reads the file in chunks, so it is not subject to this limit and parses the file successfully.
+fast-xml-parser and tXml load the entire document into a single JavaScript string before processing. Node.js limits string size to 0x1fffffe8 characters (~512 MB). Files approaching or exceeding this size cause both parsers to fail with “Cannot create a string longer than 0x1fffffe8 characters.” TypesXML reads input in chunks through a SAX streaming pipeline, so it does not hit this limit and completes parsing successfully.
 
 ## W3C XML Test Suite
 
