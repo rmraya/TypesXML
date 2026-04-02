@@ -89,13 +89,13 @@ parser.setValidating(true); // Turns on DTD validation only.
 
 ## Benchmark
 
-The following benchmark compares TypesXML with fast-xml-parser and tXml using the same input files and runtime environment. Each result is the best of three runs after a warmup pass. Throughput is calculated as file_size / duration.
+The following benchmark compares TypesXML with fast-xml-parser and tXml using the same input files and runtime environment. Each result is the best of three runs after a warmup pass. Throughput is calculated as `file_size / duration`.
 
 This comparison focuses on parsing speed only. Feature sets and parsing models differ significantly between libraries.
 
 ### Small to Medium Files
 
-``` text
+```text
 Size: 1.858 MB | Elements: 41,349
 +-----------------+---------------+-------------------+---------+
 | Parser          | Duration (ms) | Throughput (MB/s) | Success |
@@ -107,12 +107,16 @@ Size: 1.858 MB | Elements: 41,349
 
 Size: 63.215 MB | Elements: 817,216
 +-----------------+---------------+-------------------+---------+
+| Parser          | Duration (ms) | Throughput (MB/s) | Success |
++-----------------+---------------+-------------------+---------+
 | TypesXML        |    5444.54 ms |        11.61 MB/s | yes     |
 | fast-xml-parser |    4294.62 ms |        14.72 MB/s | yes     |
 | tXml            |     555.80 ms |       113.74 MB/s | yes     |
 +-----------------+---------------+-------------------+---------+
 
 Size: 121.517 MB | Elements: 1,883,407
++-----------------+---------------+-------------------+---------+
+| Parser          | Duration (ms) | Throughput (MB/s) | Success |
 +-----------------+---------------+-------------------+---------+
 | TypesXML        |    8530.47 ms |        14.25 MB/s | yes     |
 | fast-xml-parser |    8615.05 ms |        14.11 MB/s | yes     |
@@ -124,7 +128,7 @@ tXml achieves significantly higher throughput on smaller inputs because it parse
 
 ### Large Files (Streaming vs In-Memory)
 
-``` text
+```text
 Size: 574.672 MB | Elements: 7,853,048
 +-----------------+---------------+-------------------+---------+
 | Parser          | Duration (ms) | Throughput (MB/s) | Success |
