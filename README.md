@@ -95,6 +95,7 @@ This comparison focuses on parsing speed only. Feature sets and parsing models d
 
 ### Small to Medium Files
 
+``` text
 Size: 1.858 MB | Elements: 41,349
 +-----------------+---------------+-------------------+---------+
 | Parser          | Duration (ms) | Throughput (MB/s) | Success |
@@ -117,11 +118,13 @@ Size: 121.517 MB | Elements: 1,883,407
 | fast-xml-parser |    8615.05 ms |        14.11 MB/s | yes     |
 | tXml            |    1169.80 ms |       103.88 MB/s | yes     |
 +-----------------+---------------+-------------------+---------+
+```
 
 tXml achieves significantly higher throughput on smaller inputs because it parses from a fully loaded in-memory string and performs minimal processing.
 
 ### Large Files (Streaming vs In-Memory)
 
+``` text
 Size: 574.672 MB | Elements: 7,853,048
 +-----------------+---------------+-------------------+---------+
 | Parser          | Duration (ms) | Throughput (MB/s) | Success |
@@ -130,6 +133,7 @@ Size: 574.672 MB | Elements: 7,853,048
 | fast-xml-parser |           n/a |               n/a | no      |
 | tXml            |           n/a |               n/a | no      |
 +-----------------+---------------+-------------------+---------+
+```
 
 Both fast-xml-parser and tXml fail on this input with:
 
