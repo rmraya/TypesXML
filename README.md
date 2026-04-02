@@ -139,9 +139,7 @@ Size: 574.672 MB | Elements: 7,853,048
 +-----------------+---------------+-------------------+---------+
 ```
 
-Both fast-xml-parser and tXml fail on this input with:
-
-  Error: Cannot create a string longer than 0x1fffffe8 characters
+Both fast-xml-parser and tXml fail on this input with: `Error: Cannot create a string longer than 0x1fffffe8 characters`
 
 These parsers require loading the entire document into a single JavaScript string. Node.js imposes a maximum string size (~512 MB), which causes parsing to fail for large inputs.
 
