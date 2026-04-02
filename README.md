@@ -87,12 +87,15 @@ parser.setValidating(true); // Turns on DTD validation only.
 - Use the [JSON and XML Conversion Guide](docs/jsonTutorial.md) to translate between XML documents and JSON objects, with guidance on when to enable the metadata-preserving round-trip mode.
 - Explore the runnable examples under [`samples/`](samples/README.md) to see the code in action.
 
-## Performance
+## Benchmark
 
-The following benchmark compares TypesXML with fast-xml-parser and tXml on the specified input file. All parsers run on the same machine under identical conditions. Each result is the best of three runs after a warmup pass. Throughput is calculated as file_size / duration. The comparison is limited to parsing speed only; feature sets differ across parsers.
+The following benchmark compares TypesXML with fast-xml-parser and tXml using the same input files and runtime environment. Each result is the best of three runs after a warmup pass. Throughput is calculated as file_size / duration.
 
-``` text
-Size: 1.858 MB | Elements: 41349
+This comparison focuses on parsing speed only. Feature sets and parsing models differ significantly between libraries.
+
+### Small to Medium Files
+
+Size: 1.858 MB | Elements: 41,349
 +-----------------+---------------+-------------------+---------+
 | Parser          | Duration (ms) | Throughput (MB/s) | Success |
 +-----------------+---------------+-------------------+---------+
@@ -101,28 +104,25 @@ Size: 1.858 MB | Elements: 41349
 | tXml            |      17.19 ms |       108.06 MB/s | yes     |
 +-----------------+---------------+-------------------+---------+
 
-
-Size: 63.215 MB | Elements: 817216
-+-----------------+---------------+-------------------+---------+
-| Parser          | Duration (ms) | Throughput (MB/s) | Success |
+Size: 63.215 MB | Elements: 817,216
 +-----------------+---------------+-------------------+---------+
 | TypesXML        |    5444.54 ms |        11.61 MB/s | yes     |
 | fast-xml-parser |    4294.62 ms |        14.72 MB/s | yes     |
 | tXml            |     555.80 ms |       113.74 MB/s | yes     |
 +-----------------+---------------+-------------------+---------+
 
-
-Size: 121.517 MB | Elements: 1883407
-+-----------------+---------------+-------------------+---------+
-| Parser          | Duration (ms) | Throughput (MB/s) | Success |
+Size: 121.517 MB | Elements: 1,883,407
 +-----------------+---------------+-------------------+---------+
 | TypesXML        |    8530.47 ms |        14.25 MB/s | yes     |
 | fast-xml-parser |    8615.05 ms |        14.11 MB/s | yes     |
 | tXml            |    1169.80 ms |       103.88 MB/s | yes     |
 +-----------------+---------------+-------------------+---------+
 
+tXml achieves significantly higher throughput on smaller inputs because it parses from a fully loaded in-memory string and performs minimal processing.
 
-Size: 574.672 MB | Elements: 7853048
+### Large Files (Streaming vs In-Memory)
+
+Size: 574.672 MB | Elements: 7,853,048
 +-----------------+---------------+-------------------+---------+
 | Parser          | Duration (ms) | Throughput (MB/s) | Success |
 +-----------------+---------------+-------------------+---------+
@@ -131,12 +131,21 @@ Size: 574.672 MB | Elements: 7853048
 | tXml            |           n/a |               n/a | no      |
 +-----------------+---------------+-------------------+---------+
 
-Parser Failures:
-  - fast-xml-parser: Error: Cannot create a string longer than 0x1fffffe8 characters
-  - tXml: Error: Cannot create a string longer than 0x1fffffe8 characters
-```
+Both fast-xml-parser and tXml fail on this input with:
 
-fast-xml-parser and tXml load the entire document into a single JavaScript string before processing. Node.js limits string size to 0x1fffffe8 characters (~512 MB). Files approaching or exceeding this size cause both parsers to fail with “Cannot create a string longer than 0x1fffffe8 characters.” TypesXML reads input in chunks through a SAX streaming pipeline, so it does not hit this limit and completes parsing successfully.
+  Error: Cannot create a string longer than 0x1fffffe8 characters
+
+These parsers require loading the entire document into a single JavaScript string. Node.js imposes a maximum string size (~512 MB), which causes parsing to fail for large inputs.
+
+TypesXML uses a streaming SAX pipeline and processes input in chunks, allowing it to handle arbitrarily large files without hitting this limitation.
+
+### Summary
+
+- **tXml**: Extremely fast for small to medium files, but limited by in-memory string size
+- **fast-xml-parser**: Competitive speed, but same memory limitation
+- **TypesXML**: Consistent performance and capable of processing very large files reliably
+
+If your use case involves large XML documents or streaming pipelines, TypesXML provides predictable performance where in-memory parsers cannot operate.
 
 ## W3C XML Test Suite
 
