@@ -14,7 +14,7 @@ import { ContentParticle } from "./contentParticle.js";
 import { DTDChoice } from "./dtdChoice.js";
 import { DTDName } from "./dtdName.js";
 import { DTDPCData } from "./dtdPCData.js";
-import { DTDSecuence } from "./dtdSecuence.js";
+import { DTDSequence } from "./dtdSequence.js";
 
 export const Cardinality = {
     NONE: 0, // (exactly one)
@@ -174,7 +174,7 @@ export class ContentModel {
     }
 
     isContentParticle(obj: any): boolean {
-        return obj instanceof DTDName || obj instanceof DTDChoice || obj instanceof DTDSecuence || obj instanceof DTDPCData;
+        return obj instanceof DTDName || obj instanceof DTDChoice || obj instanceof DTDSequence || obj instanceof DTDPCData;
     }
 
     processGroup(group: Array<any>): ContentParticle {
@@ -189,8 +189,8 @@ export class ContentModel {
             if (obj instanceof DTDChoice) {
                 return obj as DTDChoice;
             }
-            if (obj instanceof DTDSecuence) {
-                return obj as DTDSecuence;
+            if (obj instanceof DTDSequence) {
+                return obj as DTDSequence;
             }
             if (obj instanceof DTDName) {
                 return obj as DTDName;
@@ -212,7 +212,7 @@ export class ContentModel {
         if (sep === null) {
             throw new Error('No separator found when parsing group');
         }
-        let result: ContentParticle = sep === "|" ? new DTDChoice() : new DTDSecuence();
+        let result: ContentParticle = sep === "|" ? new DTDChoice() : new DTDSequence();
         for (let obj of group) {
             if (obj === "|" || obj === ",") {
                 continue;
@@ -221,7 +221,7 @@ export class ContentModel {
                 result.addParticle(new DTDName(obj));
             } else if (obj instanceof DTDChoice) {
                 result.addParticle(obj);
-            } else if (obj instanceof DTDSecuence) {
+            } else if (obj instanceof DTDSequence) {
                 result.addParticle(obj);
             } else if (obj instanceof DTDName) {
                 result.addParticle(obj);
@@ -292,8 +292,8 @@ export class ContentModel {
                     children.add(child);
                 }
             }
-            if (particle instanceof DTDSecuence) {
-                const sequence = particle as DTDSecuence;
+            if (particle instanceof DTDSequence) {
+                const sequence = particle as DTDSequence;
                 for (const child of sequence.getChildren()) {
                     children.add(child);
                 }
@@ -336,7 +336,7 @@ export class ContentModel {
         if (particle instanceof DTDName) {
             return this.matchNameParticle(particle, children, start);
         }
-        if (particle instanceof DTDSecuence) {
+        if (particle instanceof DTDSequence) {
             return this.matchSequenceParticle(particle, children, start);
         }
         if (particle instanceof DTDChoice) {
@@ -363,7 +363,7 @@ export class ContentModel {
         return index;
     }
 
-    private matchSequenceParticle(sequence: DTDSecuence, children: string[], start: number): number {
+    private matchSequenceParticle(sequence: DTDSequence, children: string[], start: number): number {
         const min:number = this.getMinOccurs(sequence.getCardinality());
         const max: number = this.getMaxOccurs(sequence.getCardinality());
         let index: number = start;
@@ -416,7 +416,7 @@ export class ContentModel {
         return index;
     }
 
-    private matchSequenceOnce(sequence: DTDSecuence, children: string[], start: number): number {
+    private matchSequenceOnce(sequence: DTDSequence, children: string[], start: number): number {
         let index:number = start;
         for (const subParticle of sequence.getParticles()) {
             const nextIndex: number = this.matchParticle(subParticle, children, index);

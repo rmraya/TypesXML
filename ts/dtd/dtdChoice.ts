@@ -13,7 +13,7 @@
 import { Cardinality } from "./ContentModel.js";
 import { ContentParticle, ContentParticleType } from "./contentParticle.js";
 import { DTDName } from "./dtdName.js";
-import { DTDSecuence } from "./dtdSecuence.js";
+import { DTDSequence } from "./dtdSequence.js";
 
 export class DTDChoice implements ContentParticle {
 
@@ -83,8 +83,8 @@ export class DTDChoice implements ContentParticle {
                     children.add(child);
                 }
             }
-            if (particle instanceof DTDSecuence) {
-                let sequence = particle as DTDSecuence;
+            if (particle instanceof DTDSequence) {
+                let sequence = particle as DTDSequence;
                 // add all the children of the sequence
                 for (const child of sequence.getChildren()) {
                     children.add(child);

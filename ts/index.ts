@@ -50,7 +50,7 @@ export { DTDGrammar } from "./dtd/DTDGrammar.js";
 export { DTDName } from "./dtd/dtdName.js";
 export { DTDPCData } from "./dtd/dtdPCData.js";
 export { DTDSequenceModel } from "./dtd/DTDSequenceModel.js";
-export { DTDSecuence } from "./dtd/dtdSecuence.js";
+export { DTDSequence } from "./dtd/dtdSequence.js";
 export { ElementDecl } from "./dtd/ElementDecl.js";
 export { EntityDecl } from "./dtd/EntityDecl.js";
 export { NotationDecl } from "./dtd/NotationDecl.js";
