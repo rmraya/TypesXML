@@ -264,15 +264,9 @@ export class SchemaBuilder extends XMLSchemaParser {
                 const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localTypeName);
                 if (namedSimpleType) {
                     // Resolve base xs: type so validateTextContent can use SchemaTypeValidator.
-                    const restrictionEl: XMLElement | undefined = this.findChildByLocalName(namedSimpleType, 'restriction');
-                    if (restrictionEl) {
-                        const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
-                        if (baseAttr) {
-                            decl.setSimpleType(baseAttr.getValue());
-                        }
-                    } else if (this.findChildByLocalName(namedSimpleType, 'list') || this.findChildByLocalName(namedSimpleType, 'union')) {
-                        // xs:list and xs:union produce whitespace-separated text content.
-                        decl.setSimpleType('xs:string');
+                    const resolvedBase: string | undefined = this.resolveSimpleTypeBase(namedSimpleType);
+                    if (resolvedBase) {
+                        decl.setSimpleType(resolvedBase);
                     }
                     const facets: SchemaFacets = this.collectFacets(namedSimpleType);
                     decl.setTextFacets(facets);
@@ -285,15 +279,9 @@ export class SchemaBuilder extends XMLSchemaParser {
             const simpleTypeEl: XMLElement | undefined = this.findChildByLocalName(info.element, 'simpleType');
             if (simpleTypeEl) {
                 decl.setContentModel(SchemaContentModel.empty());
-                const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
-                if (restrictionEl) {
-                    const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
-                    if (baseAttr) {
-                        decl.setSimpleType(baseAttr.getValue());
-                    }
-                } else if (this.findChildByLocalName(simpleTypeEl, 'list') || this.findChildByLocalName(simpleTypeEl, 'union')) {
-                    // xs:list and xs:union produce whitespace-separated text content.
-                    decl.setSimpleType('xs:string');
+                const resolvedBase2: string | undefined = this.resolveSimpleTypeBase(simpleTypeEl);
+                if (resolvedBase2) {
+                    decl.setSimpleType(resolvedBase2);
                 }
                 const facets: SchemaFacets = this.collectFacets(simpleTypeEl);
                 decl.setTextFacets(facets);
@@ -602,6 +590,13 @@ export class SchemaBuilder extends XMLSchemaParser {
         return decl;
     }
 
+    private resolveCharRefs(s: string): string {
+        return s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+                .replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+    }
+
     private collectFacets(simpleTypeEl: XMLElement): SchemaFacets {
         const facets: SchemaFacets = {};
         const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
@@ -614,7 +609,7 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (!valueAttr) {
                 continue;
             }
-            const val: string = valueAttr.getValue();
+            const val: string = this.resolveCharRefs(valueAttr.getValue());
             if (localChildName === 'enumeration') {
                 if (!facets.enumeration) {
                     facets.enumeration = [];
@@ -658,7 +653,7 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (this.getLocalName(child.getName()) === 'enumeration') {
                 const valueAttr: XMLAttribute | undefined = child.getAttribute('value');
                 if (valueAttr) {
-                    values.push(valueAttr.getValue());
+                    values.push(this.resolveCharRefs(valueAttr.getValue()));
                 }
             }
         }
@@ -675,7 +670,7 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (this.getLocalName(child.getName()) === 'pattern') {
                 const valueAttr: XMLAttribute | undefined = child.getAttribute('value');
                 if (valueAttr) {
-                    patterns.push(valueAttr.getValue());
+                    patterns.push(this.resolveCharRefs(valueAttr.getValue()));
                 }
             }
         }
@@ -770,6 +765,25 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (this.getLocalName(child.getName()) === localName) {
                 return child;
             }
+        }
+        return undefined;
+    }
+
+    private resolveSimpleTypeBase(simpleTypeEl: XMLElement): string | undefined {
+        const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
+        if (restrictionEl) {
+            const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
+            if (baseAttr) {
+                return baseAttr.getValue();
+            }
+            // restriction with no base attribute — look for inline xs:simpleType child
+            const innerSimpleType: XMLElement | undefined = this.findChildByLocalName(restrictionEl, 'simpleType');
+            if (innerSimpleType) {
+                return this.resolveSimpleTypeBase(innerSimpleType);
+            }
+        }
+        if (this.findChildByLocalName(simpleTypeEl, 'list') || this.findChildByLocalName(simpleTypeEl, 'union')) {
+            return 'xs:string';
         }
         return undefined;
     }

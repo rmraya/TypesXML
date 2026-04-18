@@ -20,6 +20,7 @@ import { SAXParser } from "./SAXParser.js";
 import { XMLAttribute } from "./XMLAttribute.js";
 import { XMLDocument } from "./XMLDocument.js";
 import { XMLElement } from "./XMLElement.js";
+import { XSDSemanticValidator } from "./schema/XSDSemanticValidator.js";
 
 type ElementInfo = {
     element: XMLElement;
@@ -465,6 +466,7 @@ export class XMLSchemaParser {
         }
         const targetNamespaceAttribute: XMLAttribute | undefined = root.getAttribute("targetNamespace");
         const targetNamespace: string | undefined = targetNamespaceAttribute ? targetNamespaceAttribute.getValue() : undefined;
+        XSDSemanticValidator.validate(root);
         this.registerSchemaComponents(root, targetNamespace);
         this.processSchemaReferences(root, dirname(normalizedPath));
     }
