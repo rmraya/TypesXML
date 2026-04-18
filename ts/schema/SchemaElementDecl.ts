@@ -24,6 +24,8 @@ export class SchemaElementDecl {
     private anyAttributeNamespace: string = '##any';
     private simpleType: string | undefined;
     private textFacets: SchemaFacets | undefined;
+    private declaredTypeName: string | undefined;
+    private abstract: boolean = false;
 
     constructor(name: string, namespace?: string, contentModel?: SchemaContentModel) {
         this.name = name;
@@ -94,6 +96,22 @@ export class SchemaElementDecl {
 
     getAnyAttributeNamespace(): string {
         return this.anyAttributeNamespace;
+    }
+
+    setDeclaredTypeName(typeName: string): void {
+        this.declaredTypeName = typeName;
+    }
+
+    getDeclaredTypeName(): string | undefined {
+        return this.declaredTypeName;
+    }
+
+    setAbstract(value: boolean): void {
+        this.abstract = value;
+    }
+
+    isAbstractElement(): boolean {
+        return this.abstract;
     }
 }
 

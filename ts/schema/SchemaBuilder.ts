@@ -67,6 +67,27 @@ export class SchemaBuilder extends XMLSchemaParser {
             members.add(info.localName);
         }
 
+        // Expand substitution groups to include transitive members.
+        // e.g. if B substitutes A and C substitutes B, then A's group must include C.
+        let changed: boolean = true;
+        while (changed) {
+            changed = false;
+            for (const [head, members] of this.substitutionGroups) {
+                const before: number = members.size;
+                for (const member of Array.from(members)) {
+                    const memberGroup: Set<string> | undefined = this.substitutionGroups.get(member);
+                    if (memberGroup) {
+                        for (const transitive of memberGroup) {
+                            members.add(transitive);
+                        }
+                    }
+                }
+                if (members.size !== before) {
+                    changed = true;
+                }
+            }
+        }
+
         const grammar: SchemaGrammar = new SchemaGrammar();
 
         // Register every target namespace found across the walked schema set.
@@ -138,6 +159,21 @@ export class SchemaBuilder extends XMLSchemaParser {
                 decl.setAnyAttribute(anyAttributeNamespace);
             }
             grammar.addComplexTypeDecl(typeLocalName, decl);
+        }
+
+        // Build type hierarchy for xsi:type ancestry validation (spec §3.9.4).
+        const processedHierarchy: Set<string> = new Set<string>();
+        for (const [key, typeElement] of this.complexTypeDefinitions) {
+            const pipeIdx: number = key.indexOf('|');
+            const typeLocalName: string = pipeIdx !== -1 ? key.substring(pipeIdx + 1) : key;
+            if (processedHierarchy.has(typeLocalName)) {
+                continue;
+            }
+            processedHierarchy.add(typeLocalName);
+            const baseTypeName: string | undefined = this.findTypeBase(typeElement);
+            if (baseTypeName) {
+                grammar.addTypeHierarchyEntry(typeLocalName, baseTypeName);
+            }
         }
 
         // Register element decls for inline element declarations found in groups and complex types.
@@ -227,6 +263,13 @@ export class SchemaBuilder extends XMLSchemaParser {
         const decl: SchemaElementDecl = new SchemaElementDecl(info.localName, info.namespace);
 
         const typeAttr: XMLAttribute | undefined = info.element.getAttribute('type');
+        if (typeAttr) {
+            decl.setDeclaredTypeName(this.getLocalName(typeAttr.getValue()));
+        }
+        const abstractAttr: XMLAttribute | undefined = info.element.getAttribute('abstract');
+        if (abstractAttr && abstractAttr.getValue() === 'true') {
+            decl.setAbstract(true);
+        }
         let typeElement: XMLElement | undefined;
 
         if (typeAttr) {
@@ -784,6 +827,44 @@ export class SchemaBuilder extends XMLSchemaParser {
         }
         if (this.findChildByLocalName(simpleTypeEl, 'list') || this.findChildByLocalName(simpleTypeEl, 'union')) {
             return 'xs:string';
+        }
+        return undefined;
+    }
+
+    private findTypeBase(typeElement: XMLElement): string | undefined {
+        const complexContentEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'complexContent');
+        if (complexContentEl) {
+            const extEl: XMLElement | undefined = this.findChildByLocalName(complexContentEl, 'extension');
+            if (extEl) {
+                const baseAttr: XMLAttribute | undefined = extEl.getAttribute('base');
+                if (baseAttr) {
+                    return this.getLocalName(baseAttr.getValue());
+                }
+            }
+            const restrEl: XMLElement | undefined = this.findChildByLocalName(complexContentEl, 'restriction');
+            if (restrEl) {
+                const baseAttr: XMLAttribute | undefined = restrEl.getAttribute('base');
+                if (baseAttr) {
+                    return this.getLocalName(baseAttr.getValue());
+                }
+            }
+        }
+        const simpleContentEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'simpleContent');
+        if (simpleContentEl) {
+            const extEl: XMLElement | undefined = this.findChildByLocalName(simpleContentEl, 'extension');
+            if (extEl) {
+                const baseAttr: XMLAttribute | undefined = extEl.getAttribute('base');
+                if (baseAttr) {
+                    return this.getLocalName(baseAttr.getValue());
+                }
+            }
+            const restrEl: XMLElement | undefined = this.findChildByLocalName(simpleContentEl, 'restriction');
+            if (restrEl) {
+                const baseAttr: XMLAttribute | undefined = restrEl.getAttribute('base');
+                if (baseAttr) {
+                    return this.getLocalName(baseAttr.getValue());
+                }
+            }
         }
         return undefined;
     }

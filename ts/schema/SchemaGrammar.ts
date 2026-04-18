@@ -25,6 +25,7 @@ export class SchemaGrammar implements Grammar {
     private globalAttributeDecls: Map<string, SchemaAttributeDecl>;
     private importedGrammars: Map<string, SchemaGrammar>;
     private xsiTypeStack: Array<string | undefined>;
+    private typeHierarchy: Map<string, string>;
 
     constructor() {
         this.elementDecls = new Map<string, SchemaElementDecl>();
@@ -34,6 +35,7 @@ export class SchemaGrammar implements Grammar {
         this.globalAttributeDecls = new Map<string, SchemaAttributeDecl>();
         this.importedGrammars = new Map<string, SchemaGrammar>();
         this.xsiTypeStack = [];
+        this.typeHierarchy = new Map<string, string>();
     }
 
     addTargetNamespace(namespace: string): void {
@@ -54,6 +56,10 @@ export class SchemaGrammar implements Grammar {
 
     addComplexTypeDecl(typeName: string, decl: SchemaElementDecl): void {
         this.complexTypeDecls.set(typeName, decl);
+    }
+
+    addTypeHierarchyEntry(typeName: string, baseTypeName: string): void {
+        this.typeHierarchy.set(typeName, baseTypeName);
     }
 
     mergeFrom(other: SchemaGrammar): void {
@@ -78,6 +84,11 @@ export class SchemaGrammar implements Grammar {
                 this.importedGrammars.set(ns, grammar);
             }
         }
+        for (const [typeName, baseTypeName] of other.typeHierarchy) {
+            if (!this.typeHierarchy.has(typeName)) {
+                this.typeHierarchy.set(typeName, baseTypeName);
+            }
+        }
     }
 
     addElementDecl(decl: SchemaElementDecl): void {
@@ -96,6 +107,12 @@ export class SchemaGrammar implements Grammar {
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
+        }
+        // Per the spec, an abstract element cannot appear directly in an instance.
+        if (decl.isAbstractElement() && xsiType === undefined) {
+            return ValidationResult.error(
+                'Element "' + element + '" is declared abstract and cannot appear directly in an instance'
+            );
         }
         const effectiveDecl: SchemaElementDecl = substitutedDecl !== undefined ? substitutedDecl : decl;
         return effectiveDecl.getContentModel().validateChildren(element, children);
@@ -154,6 +171,18 @@ export class SchemaGrammar implements Grammar {
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
+        }
+        // Per the spec (§3.9.4), xsi:type must name a type validly derived from the element's declared type.
+        if (xsiTypeLocalName !== undefined) {
+            const declaredTypeName: string | undefined = decl.getDeclaredTypeName();
+            if (declaredTypeName !== undefined && this.complexTypeDecls.has(declaredTypeName)) {
+                if (!this.isTypeDerivedFrom(xsiTypeLocalName, declaredTypeName)) {
+                    return ValidationResult.error(
+                        'xsi:type "' + xsiTypeLocalName + '" is not derived from the declared type "' +
+                        declaredTypeName + '" of element "' + element + '"'
+                    );
+                }
+            }
         }
 
         // If xsi:type is present, also use the substituted type's attribute declarations
@@ -417,5 +446,28 @@ export class SchemaGrammar implements Grammar {
         }
 
         return undefined;
+    }
+
+    private isTypeDerivedFrom(candidate: string, required: string): boolean {
+        if (candidate === required) {
+            return true;
+        }
+        // xs:anyType is the root of all types.
+        if (required === 'anyType') {
+            return true;
+        }
+        let current: string | undefined = candidate;
+        const visited: Set<string> = new Set<string>();
+        while (current !== undefined) {
+            if (current === required) {
+                return true;
+            }
+            if (visited.has(current)) {
+                break;
+            }
+            visited.add(current);
+            current = this.typeHierarchy.get(current);
+        }
+        return false;
     }
 }
