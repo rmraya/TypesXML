@@ -50,6 +50,7 @@ export class XMLSchemaParser {
     private schemaProcessingStack: Set<string>;
     visitedSchemas: Set<string>;
     complexTypeDefinitions: Map<string, XMLElement>;
+    redefineOriginals: Map<string, XMLElement>;
     attributeGroupDefinitions: Map<string, XMLElement>;
     attributeDefinitions: Map<string, AttributeDefinitionInfo>;
     elementDefinitions: Map<string, ElementInfo>;
@@ -64,6 +65,7 @@ export class XMLSchemaParser {
         this.schemaProcessingStack = new Set<string>();
         this.visitedSchemas = new Set<string>();
         this.complexTypeDefinitions = new Map<string, XMLElement>();
+        this.redefineOriginals = new Map<string, XMLElement>();
         this.attributeGroupDefinitions = new Map<string, XMLElement>();
         this.attributeDefinitions = new Map<string, AttributeDefinitionInfo>();
         this.elementDefinitions = new Map<string, ElementInfo>();
@@ -116,6 +118,7 @@ export class XMLSchemaParser {
     protected resetWorkingState(): void {
         this.visitedSchemas = new Set<string>();
         this.complexTypeDefinitions = new Map<string, XMLElement>();
+        this.redefineOriginals = new Map<string, XMLElement>();
         this.attributeGroupDefinitions = new Map<string, XMLElement>();
         this.attributeDefinitions = new Map<string, AttributeDefinitionInfo>();
         this.elementDefinitions = new Map<string, ElementInfo>();
@@ -377,6 +380,11 @@ export class XMLSchemaParser {
         return undefined;
     }
 
+    protected lookupOriginalComplexType(typeName: string): XMLElement | undefined {
+        const localName: string = this.getLocalName(typeName);
+        return this.redefineOriginals.get(typeName) ?? this.redefineOriginals.get(localName);
+    }
+
     protected lookupAttributeGroup(groupName: string): XMLElement | undefined {
         const direct: XMLElement | undefined = this.attributeGroupDefinitions.get(groupName);
         if (direct) {
@@ -479,6 +487,39 @@ export class XMLSchemaParser {
             const resolved: string | undefined = this.resolveReference(location, baseDir, namespaceValue);
             if (resolved) {
                 this.walkSchema(resolved);
+            }
+            // For xs:redefine, after loading the base schema apply the redefined components (force-overwrite).
+            if (localName === 'redefine') {
+                const targetNsAttr: XMLAttribute | undefined = schemaElement.getAttribute('targetNamespace');
+                const targetNamespace: string | undefined = targetNsAttr ? targetNsAttr.getValue() : undefined;
+                this.applyRedefinitions(child, targetNamespace);
+            }
+        }
+    }
+
+    protected applyRedefinitions(redefineElement: XMLElement, targetNamespace?: string): void {
+        for (const child of redefineElement.getChildren()) {
+            const localName: string = this.getLocalName(child.getName());
+            if (localName === 'complexType') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (!nameAttr) { continue; }
+                const typeName: string = nameAttr.getValue();
+                const nsKey: string = this.buildTypeKey(typeName, targetNamespace);
+                const localKey: string = this.getLocalName(typeName);
+                // Save the original before overwriting so self-extension can resolve it.
+                const original: XMLElement | undefined =
+                    this.complexTypeDefinitions.get(nsKey)
+                    ?? this.complexTypeDefinitions.get(typeName)
+                    ?? this.complexTypeDefinitions.get(localKey);
+                if (original) {
+                    this.redefineOriginals.set(typeName, original);
+                    this.redefineOriginals.set(nsKey, original);
+                    this.redefineOriginals.set(localKey, original);
+                }
+                // Force-overwrite with the redefined version.
+                this.complexTypeDefinitions.set(nsKey, child);
+                this.complexTypeDefinitions.set(typeName, child);
+                this.complexTypeDefinitions.set(localKey, child);
             }
         }
     }

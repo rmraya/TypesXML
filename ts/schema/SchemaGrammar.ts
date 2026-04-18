@@ -19,17 +19,21 @@ import { SchemaTypeValidator } from './SchemaTypeValidator.js';
 export class SchemaGrammar implements Grammar {
 
     private elementDecls: Map<string, SchemaElementDecl>;
+    private complexTypeDecls: Map<string, SchemaElementDecl>;
     private targetNamespaces: Set<string>;
     private namespaceDeclarations: Map<string, string>;
     private globalAttributeDecls: Map<string, SchemaAttributeDecl>;
     private importedGrammars: Map<string, SchemaGrammar>;
+    private xsiTypeStack: Array<string | undefined>;
 
     constructor() {
         this.elementDecls = new Map<string, SchemaElementDecl>();
+        this.complexTypeDecls = new Map<string, SchemaElementDecl>();
         this.targetNamespaces = new Set<string>();
         this.namespaceDeclarations = new Map<string, string>();
         this.globalAttributeDecls = new Map<string, SchemaAttributeDecl>();
         this.importedGrammars = new Map<string, SchemaGrammar>();
+        this.xsiTypeStack = [];
     }
 
     addTargetNamespace(namespace: string): void {
@@ -48,9 +52,18 @@ export class SchemaGrammar implements Grammar {
         this.importedGrammars.set(namespace, grammar);
     }
 
+    addComplexTypeDecl(typeName: string, decl: SchemaElementDecl): void {
+        this.complexTypeDecls.set(typeName, decl);
+    }
+
     mergeFrom(other: SchemaGrammar): void {
         for (const [, decl] of other.elementDecls) {
             this.addElementDecl(decl);
+        }
+        for (const [typeName, decl] of other.complexTypeDecls) {
+            if (!this.complexTypeDecls.has(typeName)) {
+                this.complexTypeDecls.set(typeName, decl);
+            }
         }
         for (const ns of other.targetNamespaces) {
             this.targetNamespaces.add(ns);
@@ -77,11 +90,15 @@ export class SchemaGrammar implements Grammar {
     }
 
     validateElement(element: string, children: string[]): ValidationResult {
+        const xsiType: string | undefined = this.xsiTypeStack.length > 0 ? this.xsiTypeStack.pop() : undefined;
+        const substitutedDecl: SchemaElementDecl | undefined = xsiType !== undefined ? this.complexTypeDecls.get(xsiType) : undefined;
+
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
-        return decl.getContentModel().validateChildren(element, children);
+        const effectiveDecl: SchemaElementDecl = substitutedDecl !== undefined ? substitutedDecl : decl;
+        return effectiveDecl.getContentModel().validateChildren(element, children);
     }
 
     validateTextContent(element: string, text: string): ValidationResult {
@@ -116,12 +133,38 @@ export class SchemaGrammar implements Grammar {
     }
 
     validateAttributes(element: string, attributes: Map<string, string>): ValidationResult {
+        // Detect xsi:type for content-model substitution and push to stack.
+        let xsiTypeLocalName: string | undefined = undefined;
+        for (const [attrName, attrValue] of attributes) {
+            if (attrName === 'xsi:type') {
+                xsiTypeLocalName = this.localName(attrValue);
+                break;
+            }
+            if (attrName.endsWith(':type') && attrName.indexOf(':') !== -1) {
+                const prefix: string = attrName.substring(0, attrName.indexOf(':'));
+                const ns: string | undefined = this.resolvePrefix(prefix);
+                if (ns === 'http://www.w3.org/2001/XMLSchema-instance') {
+                    xsiTypeLocalName = this.localName(attrValue);
+                    break;
+                }
+            }
+        }
+        this.xsiTypeStack.push(xsiTypeLocalName);
+
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
 
-        const declaredAttributes: Map<string, SchemaAttributeDecl> = decl.getAttributeDecls();
+        // If xsi:type is present, also use the substituted type's attribute declarations
+        // so that derived-type attributes (e.g. exportCode on UKAddress) are accepted.
+        const substitutedDecl: SchemaElementDecl | undefined = xsiTypeLocalName !== undefined
+            ? this.complexTypeDecls.get(xsiTypeLocalName)
+            : undefined;
+        const baseAttributes: Map<string, SchemaAttributeDecl> = decl.getAttributeDecls();
+        const declaredAttributes: Map<string, SchemaAttributeDecl> = substitutedDecl !== undefined
+            ? substitutedDecl.getAttributeDecls()
+            : baseAttributes;
 
         // Check provided attributes.
         for (const [attrName, attrValue] of attributes) {

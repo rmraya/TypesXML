@@ -117,6 +117,76 @@ export class SchemaBuilder extends XMLSchemaParser {
             grammar.addImportedGrammar(ns, subGrammar);
         }
 
+        // Build complex type decls for xsi:type substitution support.
+        // Store one decl per unique local type name so the grammar can swap content models.
+        const processedTypeNames: Set<string> = new Set<string>();
+        for (const [key, typeElement] of this.complexTypeDefinitions) {
+            const pipeIdx: number = key.indexOf('|');
+            const typeLocalName: string = pipeIdx !== -1 ? key.substring(pipeIdx + 1) : key;
+            if (processedTypeNames.has(typeLocalName)) {
+                continue;
+            }
+            processedTypeNames.add(typeLocalName);
+            const typeNamespace: string | undefined = pipeIdx !== -1 ? key.substring(0, pipeIdx) : undefined;
+            const decl: SchemaElementDecl = new SchemaElementDecl(typeLocalName, typeNamespace);
+            decl.setContentModel(this.buildContentModel(typeElement, typeNamespace));
+            const { attrs, anyAttributeNamespace } = this.collectAllAttributes(typeElement, typeNamespace);
+            for (const attrDecl of attrs.values()) {
+                decl.addAttributeDecl(attrDecl);
+            }
+            if (anyAttributeNamespace !== undefined) {
+                decl.setAnyAttribute(anyAttributeNamespace);
+            }
+            grammar.addComplexTypeDecl(typeLocalName, decl);
+        }
+
+        // Register element decls for inline element declarations found in groups and complex types.
+        // These are needed so attribute and child validation works for locally-declared elements
+        // (e.g. elements declared inside xs:group or inside anonymous/named xs:complexType).
+        const inlineNameProcessed: Set<string> = new Set<string>();
+        const inlineContainerProcessed: Set<XMLElement> = new Set<XMLElement>();
+        const walkInlineElements = (container: XMLElement): void => {
+            for (const child of container.getChildren()) {
+                if (inlineContainerProcessed.has(child)) {
+                    continue;
+                }
+                inlineContainerProcessed.add(child);
+                const childLocal: string = this.getLocalName(child.getName());
+                if (childLocal === 'element') {
+                    const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                    if (nameAttr && !child.getAttribute('ref')) {
+                        const elName: string = nameAttr.getValue();
+                        if (!inlineNameProcessed.has(elName)) {
+                            inlineNameProcessed.add(elName);
+                            const info: ElementInfo = { element: child, namespace: undefined, localName: elName };
+                            grammar.addElementDecl(this.buildElementDecl(info));
+                        }
+                    }
+                }
+                walkInlineElements(child);
+            }
+        };
+        const containerProcessed: Set<XMLElement> = new Set<XMLElement>();
+        for (const [, groupEl] of this.modelGroupDefinitions) {
+            if (!containerProcessed.has(groupEl)) {
+                containerProcessed.add(groupEl);
+                walkInlineElements(groupEl);
+            }
+        }
+        for (const [, typeEl] of this.complexTypeDefinitions) {
+            if (!containerProcessed.has(typeEl)) {
+                containerProcessed.add(typeEl);
+                walkInlineElements(typeEl);
+            }
+        }
+        // Also walk original types saved by xs:redefine so their inline elements remain registered.
+        for (const [, typeEl] of this.redefineOriginals) {
+            if (!containerProcessed.has(typeEl)) {
+                containerProcessed.add(typeEl);
+                walkInlineElements(typeEl);
+            }
+        }
+
         return grammar;
     }
 
@@ -244,6 +314,12 @@ export class SchemaBuilder extends XMLSchemaParser {
                         const baseTypeEl: XMLElement | undefined = this.lookupComplexType(baseAttr.getValue());
                         if (baseTypeEl) {
                             baseParticle = this.buildContentModel(baseTypeEl, namespace, visitingTypes).getRootParticle();
+                        }
+                    } else {
+                        // Cycle detected — may be xs:redefine self-extension; try the original definition.
+                        const originalTypeEl: XMLElement | undefined = this.lookupOriginalComplexType(baseAttr.getValue());
+                        if (originalTypeEl) {
+                            baseParticle = this.buildContentModel(originalTypeEl, namespace, new Set<string>()).getRootParticle();
                         }
                     }
                 }
