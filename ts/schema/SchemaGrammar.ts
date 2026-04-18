@@ -129,8 +129,20 @@ export class SchemaGrammar implements Grammar {
             if (attrName === 'xmlns' || attrName.startsWith('xmlns:')) {
                 continue;
             }
+            // XML Schema instance attributes (xsi:*) are always permitted on any element.
+            if (attrName.startsWith('xsi:')) {
+                continue;
+            }
 
             const colonIndex: number = attrName.indexOf(':');
+            if (colonIndex !== -1) {
+                const prefix0: string = attrName.substring(0, colonIndex);
+                const ns0: string | undefined = this.resolvePrefix(prefix0);
+                if (ns0 === 'http://www.w3.org/2001/XMLSchema-instance') {
+                    continue;
+                }
+            }
+
             const attrLocalName: string = colonIndex !== -1 ? attrName.substring(colonIndex + 1) : attrName;
             const attrDecl: SchemaAttributeDecl | undefined =
                 declaredAttributes.get(attrName) !== undefined
