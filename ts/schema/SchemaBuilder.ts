@@ -186,6 +186,15 @@ export class SchemaBuilder extends XMLSchemaParser {
                 walkInlineElements(typeEl);
             }
         }
+        // Walk the anonymous xs:complexType children of top-level element declarations.
+        // These are not in complexTypeDefinitions (they are inline/anonymous) so they are missed above.
+        for (const [, info] of this.elementDefinitions) {
+            const inlineComplexType: XMLElement | undefined = this.findChildByLocalName(info.element, 'complexType');
+            if (inlineComplexType && !containerProcessed.has(inlineComplexType)) {
+                containerProcessed.add(inlineComplexType);
+                walkInlineElements(inlineComplexType);
+            }
+        }
 
         return grammar;
     }
@@ -261,6 +270,9 @@ export class SchemaBuilder extends XMLSchemaParser {
                         if (baseAttr) {
                             decl.setSimpleType(baseAttr.getValue());
                         }
+                    } else if (this.findChildByLocalName(namedSimpleType, 'list') || this.findChildByLocalName(namedSimpleType, 'union')) {
+                        // xs:list and xs:union produce whitespace-separated text content.
+                        decl.setSimpleType('xs:string');
                     }
                     const facets: SchemaFacets = this.collectFacets(namedSimpleType);
                     decl.setTextFacets(facets);
@@ -279,6 +291,9 @@ export class SchemaBuilder extends XMLSchemaParser {
                     if (baseAttr) {
                         decl.setSimpleType(baseAttr.getValue());
                     }
+                } else if (this.findChildByLocalName(simpleTypeEl, 'list') || this.findChildByLocalName(simpleTypeEl, 'union')) {
+                    // xs:list and xs:union produce whitespace-separated text content.
+                    decl.setSimpleType('xs:string');
                 }
                 const facets: SchemaFacets = this.collectFacets(simpleTypeEl);
                 decl.setTextFacets(facets);
@@ -611,13 +626,13 @@ export class SchemaBuilder extends XMLSchemaParser {
                 }
                 facets.patterns.push(val);
             } else if (localChildName === 'minExclusive') {
-                facets.minExclusive = parseFloat(val);
+                facets.minExclusive = val;
             } else if (localChildName === 'maxExclusive') {
-                facets.maxExclusive = parseFloat(val);
+                facets.maxExclusive = val;
             } else if (localChildName === 'minInclusive') {
-                facets.minInclusive = parseFloat(val);
+                facets.minInclusive = val;
             } else if (localChildName === 'maxInclusive') {
-                facets.maxInclusive = parseFloat(val);
+                facets.maxInclusive = val;
             } else if (localChildName === 'length') {
                 facets.length = parseInt(val, 10);
             } else if (localChildName === 'minLength') {

@@ -13,10 +13,10 @@
 export interface SchemaFacets {
     enumeration?: string[];
     patterns?: string[];
-    minExclusive?: number;
-    maxExclusive?: number;
-    minInclusive?: number;
-    maxInclusive?: number;
+    minExclusive?: string;
+    maxExclusive?: string;
+    minInclusive?: string;
+    maxInclusive?: string;
     length?: number;
     minLength?: number;
     maxLength?: number;
@@ -50,20 +50,24 @@ export class SchemaTypeValidator {
         }
         if (facets.minExclusive !== undefined || facets.maxExclusive !== undefined ||
                 facets.minInclusive !== undefined || facets.maxInclusive !== undefined) {
-            const num: number = parseFloat(value);
-            if (isNaN(num)) {
+            const numValue: number = parseFloat(value);
+            const compare = (bound: string): number => {
+                const numBound: number = parseFloat(bound);
+                if (!isNaN(numValue) && !isNaN(numBound)) {
+                    return numValue < numBound ? -1 : numValue > numBound ? 1 : 0;
+                }
+                return value < bound ? -1 : value > bound ? 1 : 0;
+            };
+            if (facets.minExclusive !== undefined && compare(facets.minExclusive) <= 0) {
                 return false;
             }
-            if (facets.minExclusive !== undefined && num <= facets.minExclusive) {
+            if (facets.maxExclusive !== undefined && compare(facets.maxExclusive) >= 0) {
                 return false;
             }
-            if (facets.maxExclusive !== undefined && num >= facets.maxExclusive) {
+            if (facets.minInclusive !== undefined && compare(facets.minInclusive) < 0) {
                 return false;
             }
-            if (facets.minInclusive !== undefined && num < facets.minInclusive) {
-                return false;
-            }
-            if (facets.maxInclusive !== undefined && num > facets.maxInclusive) {
+            if (facets.maxInclusive !== undefined && compare(facets.maxInclusive) > 0) {
                 return false;
             }
         }
@@ -153,8 +157,9 @@ export class SchemaTypeValidator {
                 return SchemaTypeValidator.isGDay(value);
 
             // Name / token types
-            case 'NCName':
             case 'Name':
+                return SchemaTypeValidator.isName(value);
+            case 'NCName':
             case 'ID':
             case 'IDREF':
             case 'ENTITY':
@@ -263,6 +268,10 @@ export class SchemaTypeValidator {
 
     private static isGDay(value: string): boolean {
         return /^---[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})?$/.test(value);
+    }
+
+    private static isName(value: string): boolean {
+        return /^[:A-Za-z_\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD][:\-\.0-9A-Za-z_\u00B7\u0300-\u036F\u203F-\u2040\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD]*$/.test(value);
     }
 
     private static isNCName(value: string): boolean {

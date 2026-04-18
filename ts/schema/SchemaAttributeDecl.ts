@@ -78,19 +78,19 @@ export class SchemaAttributeDecl {
         this.facets.patterns = values.slice();
     }
 
-    setMinInclusive(value: number): void {
+    setMinInclusive(value: string): void {
         this.facets.minInclusive = value;
     }
 
-    setMaxInclusive(value: number): void {
+    setMaxInclusive(value: string): void {
         this.facets.maxInclusive = value;
     }
 
-    setMinExclusive(value: number): void {
+    setMinExclusive(value: string): void {
         this.facets.minExclusive = value;
     }
 
-    setMaxExclusive(value: number): void {
+    setMaxExclusive(value: string): void {
         this.facets.maxExclusive = value;
     }
 
