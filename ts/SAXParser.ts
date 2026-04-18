@@ -29,6 +29,8 @@ import { AttDecl } from "./dtd/AttDecl.js";
 import { DTDGrammar } from "./dtd/DTDGrammar.js";
 import { DTDParser } from "./dtd/DTDParser.js";
 import { Grammar, ValidationError, ValidationResult } from "./grammar/Grammar.js";
+import { SchemaBuilder } from "./schema/SchemaBuilder.js";
+import { SchemaGrammar } from "./schema/SchemaGrammar.js";
 
 export interface ParseSourceOptions {
     basePath?: string;
@@ -61,7 +63,9 @@ export class SAXParser {
     buffer: string = '';
     elementStack: number;
     elementNameStack: string[] = [];
+    nilStack: boolean[] = [];
     childrenNames: Array<string[]> = [];
+    textContentStack: string[] = [];
     characterRun: string;
     rootParsed: boolean;
     xmlVersion: string;
@@ -94,6 +98,7 @@ export class SAXParser {
         this.elementStack = 0;
         this.elementNameStack = [];
         this.childrenNames = [];
+        this.textContentStack = [];
         this.pointer = 0;
         this.rootParsed = false;
         this.xmlVersion = '1.0';
@@ -228,7 +233,9 @@ export class SAXParser {
         this.buffer = '';
         this.elementStack = 0;
         this.elementNameStack = [];
+        this.nilStack = [];
         this.childrenNames = [];
+        this.textContentStack = [];
         this.characterRun = '';
         this.rootParsed = false;
         this.xmlVersion = '1.0';
@@ -715,10 +722,12 @@ export class SAXParser {
             }
             // Push a new empty array for this element's children
             this.childrenNames.push([]);
+            this.textContentStack.push('');
 
             this.contentHandler?.startElement(name, attributes);
             this.elementStack++;
             this.elementNameStack.push(name);
+            this.nilStack.push(this.isNilled(attributesMap, namespaceContext));
             if (!this.rootParsed) {
                 this.rootParsed = true;
             }
@@ -728,7 +737,9 @@ export class SAXParser {
                 this.contentHandler?.endElement(name);
                 this.elementStack--;
                 this.elementNameStack.pop();
+                this.nilStack.pop();
                 this.childrenNames.pop();
+                this.textContentStack.pop();
                 if (namespacePushed && this.namespaceContextStack.length > 0) {
                     this.namespaceContextStack.pop();
                     namespacePushed = false;
@@ -812,6 +823,12 @@ export class SAXParser {
         if (this.childrenNames.length > 0) {
             this.childrenNames.pop();
         }
+        if (this.textContentStack.length > 0) {
+            this.textContentStack.pop();
+        }
+        if (this.nilStack.length > 0) {
+            this.nilStack.pop();
+        }
         if (this.namespaceContextStack.length > 0) {
             this.namespaceContextStack.pop();
         }
@@ -821,6 +838,9 @@ export class SAXParser {
     }
 
     validateElement(name: string): void {
+        if (this.nilStack.length > 0 && this.nilStack[this.nilStack.length - 1]) {
+            return;
+        }
         const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
         if (grammar) {
             const actualChildrenNames: string[] = this.childrenNames.length > 0 ? this.childrenNames[this.childrenNames.length - 1] : [];
@@ -829,7 +849,28 @@ export class SAXParser {
                 const errorMessages: string = elementValidationResult.errors.map(e => e.message).join('; ');
                 throw new Error('Element validation failed for element "' + name + '": ' + errorMessages);
             }
+            if (this.validating) {
+                const text: string = this.textContentStack.length > 0 ? this.textContentStack[this.textContentStack.length - 1] : '';
+                const textValidationResult = grammar.validateTextContent(name, text);
+                if (!textValidationResult.isValid) {
+                    const errorMessages: string = textValidationResult.errors.map(e => e.message).join('; ');
+                    throw new Error('Text content validation failed for element "' + name + '": ' + errorMessages);
+                }
+            }
         }
+    }
+
+    private isNilled(attributes: Map<string, string>, namespaceContext: Map<string, string>): boolean {
+        for (const [prefix, uri] of namespaceContext) {
+            if (uri === Constants.XML_SCHEMA_INSTANCE_NS_URI) {
+                const nilKey: string = prefix ? prefix + ':nil' : 'nil';
+                const val: string | undefined = attributes.get(nilKey);
+                if (val === 'true' || val === '1') {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     getDefaultAttributes(elementName: string, attributes: Array<XMLAttribute>): Array<XMLAttribute> {
@@ -992,6 +1033,7 @@ export class SAXParser {
                 if (trimmed !== '' && trimmed !== previousValue) {
                     this.tryLoadSchemaForNamespace(trimmed);
                 }
+                this.propagateNamespaceToGrammar('', trimmed);
                 return;
             }
             if (!key.startsWith('xmlns:') || key.length <= 6) {
@@ -1003,13 +1045,25 @@ export class SAXParser {
             if (trimmed !== '' && trimmed !== previousValue) {
                 this.tryLoadSchemaForNamespace(trimmed);
             }
+            this.propagateNamespaceToGrammar(prefix, trimmed);
         });
         // If no new declaration appears on the current element, ensure the default namespace is considered.
         if (!previousContext && namespaceContext.has('')) {
             const defaultNamespace: string | undefined = namespaceContext.get('');
             if (defaultNamespace) {
                 this.tryLoadSchemaForNamespace(defaultNamespace);
+                this.propagateNamespaceToGrammar('', defaultNamespace);
             }
+        }
+    }
+
+    private propagateNamespaceToGrammar(prefix: string, uri: string): void {
+        if (!uri) {
+            return;
+        }
+        const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        if (grammar instanceof SchemaGrammar) {
+            grammar.addNamespaceDeclaration(prefix, uri);
         }
     }
 
@@ -1133,6 +1187,16 @@ export class SAXParser {
             this.mergeSchemaDefaults(convertedDefaults);
             this.processedSchemaLocations.add(resolvedPath);
             this.processedSchemaLocations.add(identifier);
+            if (this.validating) {
+                const builder: SchemaBuilder = new SchemaBuilder(this.catalog);
+                const grammar: SchemaGrammar = builder.buildGrammar(resolvedPath);
+                const existing: Grammar | undefined = this.contentHandler?.getGrammar();
+                if (existing instanceof SchemaGrammar) {
+                    existing.mergeFrom(grammar);
+                } else {
+                    this.contentHandler?.setGrammar(grammar);
+                }
+            }
             return true;
         } catch (error) {
             if (this.validating) {
@@ -1245,6 +1309,9 @@ export class SAXParser {
                     this.contentHandler?.ignorableWhitespace(this.characterRun);
                 } else {
                     // in an element
+                    if (this.textContentStack.length > 0) {
+                        this.textContentStack[this.textContentStack.length - 1] += this.characterRun;
+                    }
                     this.contentHandler?.characters(this.characterRun);
                 }
             } else {

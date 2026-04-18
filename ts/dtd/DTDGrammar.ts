@@ -391,6 +391,10 @@ export class DTDGrammar implements Grammar {
         return result;
     }
 
+    validateTextContent(_element: string, _text: string): ValidationResult {
+        return ValidationResult.success();
+    }
+
     resolveEntity(name: string): string | undefined {
         const entity: EntityDecl | undefined = this.getEntity(name);
         if (!entity) {
@@ -407,8 +411,8 @@ export class DTDGrammar implements Grammar {
         return GrammarType.DTD;
     }
 
-    getTargetNamespace(): string | undefined {
-        return undefined;
+    getTargetNamespaces(): Set<string> {
+        return new Set<string>();
     }
 
     getNamespaceDeclarations(): Map<string, string> {

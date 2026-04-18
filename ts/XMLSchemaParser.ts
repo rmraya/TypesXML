@@ -53,11 +53,12 @@ export class XMLSchemaParser {
     attributeGroupDefinitions: Map<string, XMLElement>;
     attributeDefinitions: Map<string, AttributeDefinitionInfo>;
     elementDefinitions: Map<string, ElementInfo>;
+    simpleTypeDefinitions: Map<string, XMLElement>;
     collectedDefaults: Map<string, Map<string, AttributeDefault>>;
     complexTypeDefaultCache: Map<string, Map<string, AttributeDefault>>;
     attributeGroupDefaultCache: Map<string, Map<string, AttributeDefault>>;
 
-    private constructor(catalog?: Catalog) {
+    protected constructor(catalog?: Catalog) {
         this.catalog = catalog;
         this.schemaCache = new Map<string, Map<string, Map<string, AttributeDefault>>>();
         this.schemaProcessingStack = new Set<string>();
@@ -66,6 +67,7 @@ export class XMLSchemaParser {
         this.attributeGroupDefinitions = new Map<string, XMLElement>();
         this.attributeDefinitions = new Map<string, AttributeDefinitionInfo>();
         this.elementDefinitions = new Map<string, ElementInfo>();
+        this.simpleTypeDefinitions = new Map<string, XMLElement>();
         this.collectedDefaults = new Map<string, Map<string, AttributeDefault>>();
         this.complexTypeDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.attributeGroupDefaultCache = new Map<string, Map<string, AttributeDefault>>();
@@ -117,6 +119,7 @@ export class XMLSchemaParser {
         this.attributeGroupDefinitions = new Map<string, XMLElement>();
         this.attributeDefinitions = new Map<string, AttributeDefinitionInfo>();
         this.elementDefinitions = new Map<string, ElementInfo>();
+        this.simpleTypeDefinitions = new Map<string, XMLElement>();
         this.collectedDefaults = new Map<string, Map<string, AttributeDefault>>();
         this.complexTypeDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.attributeGroupDefaultCache = new Map<string, Map<string, AttributeDefault>>();
@@ -564,6 +567,23 @@ export class XMLSchemaParser {
                 const localKey: string = this.getLocalName(attributeName);
                 if (!this.attributeDefinitions.has(localKey)) {
                     this.attributeDefinitions.set(localKey, info);
+                }
+                continue;
+            }
+            if (localName === "simpleType") {
+                const nameAttribute: XMLAttribute | undefined = child.getAttribute("name");
+                if (!nameAttribute) {
+                    continue;
+                }
+                const typeName: string = nameAttribute.getValue();
+                if (!this.simpleTypeDefinitions.has(typeName)) {
+                    this.simpleTypeDefinitions.set(typeName, child);
+                }
+                if (targetNamespace) {
+                    const nsKey: string = targetNamespace + '|' + typeName;
+                    if (!this.simpleTypeDefinitions.has(nsKey)) {
+                        this.simpleTypeDefinitions.set(nsKey, child);
+                    }
                 }
             }
         }
