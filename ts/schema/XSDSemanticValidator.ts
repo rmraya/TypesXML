@@ -32,7 +32,9 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkNamedComponents(schemaRoot);
         XSDSemanticValidator.checkAnnotationCount(schemaRoot);
         XSDSemanticValidator.checkNotationAttributes(schemaRoot);
+        XSDSemanticValidator.checkNotationPlacement(schemaRoot, true);
         XSDSemanticValidator.checkIdAttributes(schemaRoot);
+        XSDSemanticValidator.checkFacetValues(schemaRoot);
     }
 
     private static checkNamedComponents(schemaRoot: XMLElement): void {
@@ -53,6 +55,7 @@ export class XSDSemanticValidator {
     }
 
     private static checkNotationAttributes(schemaRoot: XMLElement): void {
+        const seenNames: Set<string> = new Set<string>();
         for (const child of schemaRoot.getChildren()) {
             if (XSDSemanticValidator.localName(child.getName()) !== 'notation') {
                 continue;
@@ -60,6 +63,40 @@ export class XSDSemanticValidator {
             if (!child.getAttribute('public')) {
                 throw new Error('xs:notation is missing required "public" attribute');
             }
+            const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+            if (nameAttr) {
+                const notName: string = nameAttr.getValue();
+                if (seenNames.has(notName)) {
+                    throw new Error('Duplicate xs:notation name: "' + notName + '"');
+                }
+                seenNames.add(notName);
+            }
+            for (const attr of child.getAttributes()) {
+                const attrName: string = attr.getName();
+                if (!attrName.includes(':') && attrName !== 'id' && attrName !== 'name' && attrName !== 'public' && attrName !== 'system') {
+                    throw new Error('xs:notation has invalid attribute: "' + attrName + '"');
+                }
+            }
+            for (const notChild of child.getChildren()) {
+                const notChildLocal: string = XSDSemanticValidator.localName(notChild.getName());
+                if (notChildLocal !== 'annotation') {
+                    throw new Error('xs:notation cannot contain xs:' + notChildLocal);
+                }
+            }
+        }
+    }
+
+    private static checkNotationPlacement(el: XMLElement, isSchemaRoot: boolean): void {
+        const elLocal: string = XSDSemanticValidator.localName(el.getName());
+        if (elLocal === 'appinfo' || elLocal === 'documentation') {
+            return;
+        }
+        for (const child of el.getChildren()) {
+            const childLocal: string = XSDSemanticValidator.localName(child.getName());
+            if (!isSchemaRoot && childLocal === 'notation') {
+                throw new Error('xs:notation must be a top-level schema component');
+            }
+            XSDSemanticValidator.checkNotationPlacement(child, false);
         }
     }
 
@@ -77,23 +114,68 @@ export class XSDSemanticValidator {
     }
 
     private static checkAnnotationCount(el: XMLElement): void {
-        let annotationCount: number = 0;
         const elLocal: string = XSDSemanticValidator.localName(el.getName());
+        const isSchema: boolean = elLocal === 'schema';
+        let annotationCount: number = 0;
+        let seenNonAnnotation: boolean = false;
         for (const child of el.getChildren()) {
             const childLocal: string = XSDSemanticValidator.localName(child.getName());
             if (childLocal === 'annotation') {
                 annotationCount++;
-                if (annotationCount > 1) {
+                if (!isSchema && annotationCount > 1) {
                     throw new Error('xs:' + elLocal + ' has more than one xs:annotation child');
+                }
+                if (!isSchema && seenNonAnnotation) {
+                    throw new Error('xs:annotation in xs:' + elLocal + ' must appear before other children');
+                }
+                for (const attr of child.getAttributes()) {
+                    const attrName: string = attr.getName();
+                    if (!attrName.includes(':') && attrName !== 'id') {
+                        throw new Error('xs:annotation has invalid attribute: "' + attrName + '"');
+                    }
                 }
                 for (const annotChild of child.getChildren()) {
                     const annotChildLocal: string = XSDSemanticValidator.localName(annotChild.getName());
                     if (annotChildLocal !== 'appinfo' && annotChildLocal !== 'documentation') {
                         throw new Error('xs:annotation contains invalid child element xs:' + annotChildLocal);
                     }
+                    if (annotChildLocal === 'documentation') {
+                        const langAttr: XMLAttribute | undefined = annotChild.getAttribute('xml:lang');
+                        if (langAttr && !/^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$/.test(langAttr.getValue())) {
+                            throw new Error('xs:documentation has invalid xml:lang value: "' + langAttr.getValue() + '"');
+                        }
+                    }
+                }
+            } else {
+                seenNonAnnotation = true;
+            }
+            if (childLocal !== 'appinfo' && childLocal !== 'documentation') {
+                XSDSemanticValidator.checkAnnotationCount(child);
+            }
+        }
+    }
+
+    private static checkFacetValues(el: XMLElement): void {
+        const localEl: string = XSDSemanticValidator.localName(el.getName());
+        if (localEl === 'length' || localEl === 'minLength' || localEl === 'maxLength' || localEl === 'fractionDigits') {
+            const valAttr: XMLAttribute | undefined = el.getAttribute('value');
+            if (valAttr) {
+                const raw: string = valAttr.getValue();
+                if (!/^[0-9]+$/.test(raw)) {
+                    throw new Error('xs:' + localEl + ' value must be a non-negative integer, got: "' + raw + '"');
                 }
             }
-            XSDSemanticValidator.checkAnnotationCount(child);
+        } else if (localEl === 'totalDigits') {
+            const valAttr: XMLAttribute | undefined = el.getAttribute('value');
+            if (valAttr) {
+                const raw: string = valAttr.getValue();
+                if (!/^[0-9]+$/.test(raw) || parseInt(raw, 10) < 1) {
+                    throw new Error('xs:totalDigits value must be a positive integer, got: "' + raw + '"');
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkFacetValues(child);
         }
     }
 
