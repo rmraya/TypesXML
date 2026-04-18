@@ -170,9 +170,9 @@ export class SchemaBuilder extends XMLSchemaParser {
                 continue;
             }
             processedHierarchy.add(typeLocalName);
-            const baseTypeName: string | undefined = this.findTypeBase(typeElement);
-            if (baseTypeName) {
-                grammar.addTypeHierarchyEntry(typeLocalName, baseTypeName);
+            const baseTypeInfo: {base: string, method: string} | undefined = this.findTypeBase(typeElement);
+            if (baseTypeInfo) {
+                grammar.addTypeHierarchyEntry(typeLocalName, baseTypeInfo.base, baseTypeInfo.method);
             }
         }
 
@@ -269,6 +269,23 @@ export class SchemaBuilder extends XMLSchemaParser {
         const abstractAttr: XMLAttribute | undefined = info.element.getAttribute('abstract');
         if (abstractAttr && abstractAttr.getValue() === 'true') {
             decl.setAbstract(true);
+        }
+        const blockAttr: XMLAttribute | undefined = info.element.getAttribute('block');
+        if (blockAttr) {
+            const blockVal: string = blockAttr.getValue().trim();
+            const blockSet: Set<string> = new Set<string>();
+            if (blockVal === '#all') {
+                blockSet.add('#all');
+            } else {
+                for (const token of blockVal.split(/\s+/)) {
+                    if (token) {
+                        blockSet.add(token);
+                    }
+                }
+            }
+            if (blockSet.size > 0) {
+                decl.setBlockConstraints(blockSet);
+            }
         }
         let typeElement: XMLElement | undefined;
 
@@ -439,7 +456,9 @@ export class SchemaBuilder extends XMLSchemaParser {
                     ? this.getLocalName(refAttr.getValue())
                     : nameAttr ? nameAttr.getValue() : undefined;
                 if (particleName) {
-                    const members: Set<string> | undefined = this.substitutionGroups.get(particleName);
+                    const members: Set<string> | undefined = this.isSubstitutionBlocked(particleName)
+                        ? undefined
+                        : this.substitutionGroups.get(particleName);
                     particles.push(new SchemaElementParticle(particleName, min, max, members));
                 }
             } else if (localName === 'any') {
@@ -831,21 +850,21 @@ export class SchemaBuilder extends XMLSchemaParser {
         return undefined;
     }
 
-    private findTypeBase(typeElement: XMLElement): string | undefined {
+    private findTypeBase(typeElement: XMLElement): {base: string, method: string} | undefined {
         const complexContentEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'complexContent');
         if (complexContentEl) {
             const extEl: XMLElement | undefined = this.findChildByLocalName(complexContentEl, 'extension');
             if (extEl) {
                 const baseAttr: XMLAttribute | undefined = extEl.getAttribute('base');
                 if (baseAttr) {
-                    return this.getLocalName(baseAttr.getValue());
+                    return {base: this.getLocalName(baseAttr.getValue()), method: 'extension'};
                 }
             }
             const restrEl: XMLElement | undefined = this.findChildByLocalName(complexContentEl, 'restriction');
             if (restrEl) {
                 const baseAttr: XMLAttribute | undefined = restrEl.getAttribute('base');
                 if (baseAttr) {
-                    return this.getLocalName(baseAttr.getValue());
+                    return {base: this.getLocalName(baseAttr.getValue()), method: 'restriction'};
                 }
             }
         }
@@ -855,17 +874,31 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (extEl) {
                 const baseAttr: XMLAttribute | undefined = extEl.getAttribute('base');
                 if (baseAttr) {
-                    return this.getLocalName(baseAttr.getValue());
+                    return {base: this.getLocalName(baseAttr.getValue()), method: 'extension'};
                 }
             }
             const restrEl: XMLElement | undefined = this.findChildByLocalName(simpleContentEl, 'restriction');
             if (restrEl) {
                 const baseAttr: XMLAttribute | undefined = restrEl.getAttribute('base');
                 if (baseAttr) {
-                    return this.getLocalName(baseAttr.getValue());
+                    return {base: this.getLocalName(baseAttr.getValue()), method: 'restriction'};
                 }
             }
         }
         return undefined;
+    }
+
+    private isSubstitutionBlocked(elementLocalName: string): boolean {
+        for (const [, info] of this.elementDefinitions) {
+            if (info.localName === elementLocalName) {
+                const blockAttr: XMLAttribute | undefined = info.element.getAttribute('block');
+                if (!blockAttr) {
+                    return false;
+                }
+                const val: string = blockAttr.getValue().trim();
+                return val === '#all' || val.split(/\s+/).indexOf('substitution') !== -1;
+            }
+        }
+        return false;
     }
 }

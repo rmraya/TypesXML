@@ -54,6 +54,16 @@ export class SchemaTypeValidator {
             const compare = (bound: string): number => {
                 const numBound: number = parseFloat(bound);
                 if (!isNaN(numValue) && !isNaN(numBound)) {
+                    // Use BigInt for integers that exceed JavaScript's safe integer range.
+                    if (/^-?[0-9]+$/.test(value) && /^-?[0-9]+$/.test(bound)) {
+                        try {
+                            const bigValue: bigint = BigInt(value);
+                            const bigBound: bigint = BigInt(bound);
+                            return bigValue < bigBound ? -1 : bigValue > bigBound ? 1 : 0;
+                        } catch (e) {
+                            // Fall through to float comparison.
+                        }
+                    }
                     return numValue < numBound ? -1 : numValue > numBound ? 1 : 0;
                 }
                 return value < bound ? -1 : value > bound ? 1 : 0;

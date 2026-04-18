@@ -25,7 +25,7 @@ export class SchemaGrammar implements Grammar {
     private globalAttributeDecls: Map<string, SchemaAttributeDecl>;
     private importedGrammars: Map<string, SchemaGrammar>;
     private xsiTypeStack: Array<string | undefined>;
-    private typeHierarchy: Map<string, string>;
+    private typeHierarchy: Map<string, {base: string, method: string}>;
 
     constructor() {
         this.elementDecls = new Map<string, SchemaElementDecl>();
@@ -35,7 +35,7 @@ export class SchemaGrammar implements Grammar {
         this.globalAttributeDecls = new Map<string, SchemaAttributeDecl>();
         this.importedGrammars = new Map<string, SchemaGrammar>();
         this.xsiTypeStack = [];
-        this.typeHierarchy = new Map<string, string>();
+        this.typeHierarchy = new Map<string, {base: string, method: string}>();
     }
 
     addTargetNamespace(namespace: string): void {
@@ -58,8 +58,8 @@ export class SchemaGrammar implements Grammar {
         this.complexTypeDecls.set(typeName, decl);
     }
 
-    addTypeHierarchyEntry(typeName: string, baseTypeName: string): void {
-        this.typeHierarchy.set(typeName, baseTypeName);
+    addTypeHierarchyEntry(typeName: string, baseTypeName: string, method: string): void {
+        this.typeHierarchy.set(typeName, {base: baseTypeName, method: method});
     }
 
     mergeFrom(other: SchemaGrammar): void {
@@ -84,9 +84,9 @@ export class SchemaGrammar implements Grammar {
                 this.importedGrammars.set(ns, grammar);
             }
         }
-        for (const [typeName, baseTypeName] of other.typeHierarchy) {
+        for (const [typeName, entry] of other.typeHierarchy) {
             if (!this.typeHierarchy.has(typeName)) {
-                this.typeHierarchy.set(typeName, baseTypeName);
+                this.typeHierarchy.set(typeName, entry);
             }
         }
     }
@@ -181,6 +181,30 @@ export class SchemaGrammar implements Grammar {
                         'xsi:type "' + xsiTypeLocalName + '" is not derived from the declared type "' +
                         declaredTypeName + '" of element "' + element + '"'
                     );
+                }
+                // Check block constraints: the element's declared type may block certain derivations.
+                const blockConstraints: Set<string> = decl.getBlockConstraints();
+                if (blockConstraints.size > 0) {
+                    const blocksAll: boolean = blockConstraints.has('#all');
+                    if (blocksAll || blockConstraints.has('extension') || blockConstraints.has('restriction')) {
+                        const pathMethods: Set<string> = this.getPathMethods(xsiTypeLocalName, declaredTypeName);
+                        if (pathMethods.size > 0) {
+                            if (blocksAll) {
+                                return ValidationResult.error(
+                                    'Element "' + element + '" blocks all type derivation; xsi:type "' +
+                                    xsiTypeLocalName + '" is not permitted'
+                                );
+                            }
+                            for (const m of pathMethods) {
+                                if (blockConstraints.has(m)) {
+                                    return ValidationResult.error(
+                                        'Element "' + element + '" blocks derivation by "' + m +
+                                        '"; xsi:type "' + xsiTypeLocalName + '" is not permitted'
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -466,8 +490,35 @@ export class SchemaGrammar implements Grammar {
                 break;
             }
             visited.add(current);
-            current = this.typeHierarchy.get(current);
+            const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
+            current = entry ? entry.base : undefined;
         }
         return false;
+    }
+
+    private getPathMethods(candidate: string, required: string): Set<string> {
+        if (candidate === required) {
+            return new Set<string>();
+        }
+        let current: string | undefined = candidate;
+        const visited: Set<string> = new Set<string>();
+        const methods: Set<string> = new Set<string>();
+        while (current !== undefined) {
+            if (current === required) {
+                return methods;
+            }
+            if (visited.has(current)) {
+                break;
+            }
+            visited.add(current);
+            const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
+            if (!entry) {
+                break;
+            }
+            methods.add(entry.method);
+            current = entry.base;
+        }
+        // Did not reach required — type is not derived; return empty set.
+        return new Set<string>();
     }
 }

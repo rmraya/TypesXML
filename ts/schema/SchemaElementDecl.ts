@@ -26,6 +26,7 @@ export class SchemaElementDecl {
     private textFacets: SchemaFacets | undefined;
     private declaredTypeName: string | undefined;
     private abstract: boolean = false;
+    private blockConstraints: Set<string> = new Set<string>();
 
     constructor(name: string, namespace?: string, contentModel?: SchemaContentModel) {
         this.name = name;
@@ -112,6 +113,14 @@ export class SchemaElementDecl {
 
     isAbstractElement(): boolean {
         return this.abstract;
+    }
+
+    setBlockConstraints(constraints: Set<string>): void {
+        this.blockConstraints = constraints;
+    }
+
+    getBlockConstraints(): Set<string> {
+        return this.blockConstraints;
     }
 }
 
