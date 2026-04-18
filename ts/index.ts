@@ -61,6 +61,22 @@ export type { ContentParticle } from "./dtd/contentParticle.js";
 export { AttributeInfo, AttributeUse, GrammarType, ValidationContext, ValidationError, ValidationResult, ValidationWarning } from "./grammar/Grammar.js";
 export type { Grammar } from "./grammar/Grammar.js";
 
+// XML Schema classes
+export { SchemaAll } from "./schema/SchemaAll.js";
+export { SchemaAttributeDecl } from "./schema/SchemaAttributeDecl.js";
+export { SchemaBuilder } from "./schema/SchemaBuilder.js";
+export { SchemaChoice } from "./schema/SchemaChoice.js";
+export { SchemaContentModel, SchemaContentModelType } from "./schema/SchemaContentModel.js";
+export { SchemaElementDecl } from "./schema/SchemaElementDecl.js";
+export { SchemaElementParticle } from "./schema/SchemaElementParticle.js";
+export { SchemaGrammar } from "./schema/SchemaGrammar.js";
+export { SchemaParticle } from "./schema/SchemaParticle.js";
+export { SchemaSequence } from "./schema/SchemaSequence.js";
+export { SchemaTypeValidator } from "./schema/SchemaTypeValidator.js";
+export type { SchemaFacets } from "./schema/SchemaTypeValidator.js";
+export { SchemaWildcardParticle } from "./schema/SchemaWildcardParticle.js";
+export { XSDSemanticValidator } from "./schema/XSDSemanticValidator.js";
+
 // JSON conversion helpers
 export type {
 	JsonPrimitive,
