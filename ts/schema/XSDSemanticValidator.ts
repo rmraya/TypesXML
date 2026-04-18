@@ -34,6 +34,9 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkNotationAttributes(schemaRoot);
         XSDSemanticValidator.checkNotationPlacement(schemaRoot, true);
         XSDSemanticValidator.checkIdAttributes(schemaRoot);
+        XSDSemanticValidator.checkDuplicateIds(schemaRoot);
+        XSDSemanticValidator.checkIncludeRedefine(schemaRoot);
+        XSDSemanticValidator.checkDuplicateImports(schemaRoot);
         XSDSemanticValidator.checkFacetValues(schemaRoot);
     }
 
@@ -151,6 +154,71 @@ export class XSDSemanticValidator {
             }
             if (childLocal !== 'appinfo' && childLocal !== 'documentation') {
                 XSDSemanticValidator.checkAnnotationCount(child);
+            }
+        }
+    }
+
+    private static checkIncludeRedefine(schemaRoot: XMLElement): void {
+        for (const child of schemaRoot.getChildren()) {
+            const local: string = XSDSemanticValidator.localName(child.getName());
+            if (local === 'include') {
+                if (!child.getAttribute('schemaLocation')) {
+                    throw new Error('xs:include is missing required "schemaLocation" attribute');
+                }
+            } else if (local === 'redefine') {
+                if (!child.getAttribute('schemaLocation')) {
+                    throw new Error('xs:redefine is missing required "schemaLocation" attribute');
+                }
+                for (const attr of child.getAttributes()) {
+                    const attrName: string = attr.getName();
+                    if (!attrName.includes(':') && attrName !== 'id' && attrName !== 'schemaLocation') {
+                        throw new Error('xs:redefine has invalid attribute: "' + attrName + '"');
+                    }
+                }
+                for (const redefineChild of child.getChildren()) {
+                    const redefineChildLocal: string = XSDSemanticValidator.localName(redefineChild.getName());
+                    if (redefineChildLocal !== 'annotation' && redefineChildLocal !== 'simpleType' &&
+                        redefineChildLocal !== 'complexType' && redefineChildLocal !== 'group' &&
+                        redefineChildLocal !== 'attributeGroup') {
+                        throw new Error('xs:redefine contains invalid child element xs:' + redefineChildLocal);
+                    }
+                }
+            }
+        }
+    }
+
+    private static checkDuplicateIds(el: XMLElement): void {
+        const seen: Set<string> = new Set<string>();
+        XSDSemanticValidator.collectIds(el, seen);
+    }
+
+    private static collectIds(el: XMLElement, seen: Set<string>): void {
+        const idAttr: XMLAttribute | undefined = el.getAttribute('id');
+        if (idAttr) {
+            const value: string = idAttr.getValue();
+            if (seen.has(value)) {
+                throw new Error('Duplicate id value: "' + value + '"');
+            }
+            seen.add(value);
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.collectIds(child, seen);
+        }
+    }
+
+    private static checkDuplicateImports(schemaRoot: XMLElement): void {
+        const seenNamespaces: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) !== 'import') {
+                continue;
+            }
+            const nsAttr: XMLAttribute | undefined = child.getAttribute('namespace');
+            if (nsAttr) {
+                const ns: string = nsAttr.getValue();
+                if (seenNamespaces.has(ns)) {
+                    throw new Error('Duplicate xs:import for namespace: "' + ns + '"');
+                }
+                seenNamespaces.add(ns);
             }
         }
     }
