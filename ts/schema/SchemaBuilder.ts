@@ -21,6 +21,7 @@ import { SchemaChoice } from './SchemaChoice.js';
 import { SchemaContentModel } from './SchemaContentModel.js';
 import { SchemaElementDecl } from './SchemaElementDecl.js';
 import { SchemaElementParticle } from './SchemaElementParticle.js';
+import { SchemaFacets } from './SchemaTypeValidator.js';
 import { SchemaGrammar } from './SchemaGrammar.js';
 import { SchemaParticle } from './SchemaParticle.js';
 import { SchemaSequence } from './SchemaSequence.js';
@@ -176,7 +177,27 @@ export class SchemaBuilder extends XMLSchemaParser {
         } else if (typeAttr) {
             // Named simple type reference — text content only, no child elements.
             decl.setContentModel(SchemaContentModel.empty());
-            decl.setSimpleType(typeAttr.getValue());
+            const typeValue: string = typeAttr.getValue();
+            if (typeValue.startsWith('xs:')) {
+                decl.setSimpleType(typeValue);
+            } else {
+                const localTypeName: string = this.getLocalName(typeValue);
+                const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localTypeName);
+                if (namedSimpleType) {
+                    // Resolve base xs: type so validateTextContent can use SchemaTypeValidator.
+                    const restrictionEl: XMLElement | undefined = this.findChildByLocalName(namedSimpleType, 'restriction');
+                    if (restrictionEl) {
+                        const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
+                        if (baseAttr) {
+                            decl.setSimpleType(baseAttr.getValue());
+                        }
+                    }
+                    const facets: SchemaFacets = this.collectFacets(namedSimpleType);
+                    decl.setTextFacets(facets);
+                } else {
+                    decl.setSimpleType(typeValue);
+                }
+            }
         } else {
             // Check for an inline xs:simpleType child (no complexType, no type attribute).
             const simpleTypeEl: XMLElement | undefined = this.findChildByLocalName(info.element, 'simpleType');
@@ -189,6 +210,8 @@ export class SchemaBuilder extends XMLSchemaParser {
                         decl.setSimpleType(baseAttr.getValue());
                     }
                 }
+                const facets: SchemaFacets = this.collectFacets(simpleTypeEl);
+                decl.setTextFacets(facets);
             }
         }
         // No type, no inline complexType, no simpleType → leave the default ANY content model.
@@ -488,6 +511,52 @@ export class SchemaBuilder extends XMLSchemaParser {
         return decl;
     }
 
+    private collectFacets(simpleTypeEl: XMLElement): SchemaFacets {
+        const facets: SchemaFacets = {};
+        const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
+        if (!restrictionEl) {
+            return facets;
+        }
+        for (const child of restrictionEl.getChildren()) {
+            const localChildName: string = this.getLocalName(child.getName());
+            const valueAttr: XMLAttribute | undefined = child.getAttribute('value');
+            if (!valueAttr) {
+                continue;
+            }
+            const val: string = valueAttr.getValue();
+            if (localChildName === 'enumeration') {
+                if (!facets.enumeration) {
+                    facets.enumeration = [];
+                }
+                facets.enumeration.push(val);
+            } else if (localChildName === 'pattern') {
+                if (!facets.patterns) {
+                    facets.patterns = [];
+                }
+                facets.patterns.push(val);
+            } else if (localChildName === 'minExclusive') {
+                facets.minExclusive = parseFloat(val);
+            } else if (localChildName === 'maxExclusive') {
+                facets.maxExclusive = parseFloat(val);
+            } else if (localChildName === 'minInclusive') {
+                facets.minInclusive = parseFloat(val);
+            } else if (localChildName === 'maxInclusive') {
+                facets.maxInclusive = parseFloat(val);
+            } else if (localChildName === 'length') {
+                facets.length = parseInt(val, 10);
+            } else if (localChildName === 'minLength') {
+                facets.minLength = parseInt(val, 10);
+            } else if (localChildName === 'maxLength') {
+                facets.maxLength = parseInt(val, 10);
+            } else if (localChildName === 'totalDigits') {
+                facets.totalDigits = parseInt(val, 10);
+            } else if (localChildName === 'fractionDigits') {
+                facets.fractionDigits = parseInt(val, 10);
+            }
+        }
+        return facets;
+    }
+
     private collectEnumeration(simpleTypeEl: XMLElement): string[] {
         const values: string[] = [];
         const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
@@ -522,27 +591,6 @@ export class SchemaBuilder extends XMLSchemaParser {
         return patterns;
     }
 
-    private collectRangeFacets(simpleTypeEl: XMLElement): {min: number | undefined, max: number | undefined} {
-        let min: number | undefined;
-        let max: number | undefined;
-        const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
-        if (!restrictionEl) {
-            return {min, max};
-        }
-        for (const child of restrictionEl.getChildren()) {
-            const localChildName: string = this.getLocalName(child.getName());
-            const valueAttr: XMLAttribute | undefined = child.getAttribute('value');
-            if (!valueAttr) {
-                continue;
-            }
-            if (localChildName === 'minInclusive') {
-                min = parseFloat(valueAttr.getValue());
-            } else if (localChildName === 'maxInclusive') {
-                max = parseFloat(valueAttr.getValue());
-            }
-        }
-        return {min, max};
-    }
 
     private collectUnionAlternatives(simpleTypeEl: XMLElement): Array<{enumerations: string[], patterns: string[]}> {
         const alternatives: Array<{enumerations: string[], patterns: string[]}> = [];
@@ -580,20 +628,39 @@ export class SchemaBuilder extends XMLSchemaParser {
             decl.setUnionAlternatives(unionAlts);
             return;
         }
-        const enumValues: string[] = this.collectEnumeration(simpleTypeEl);
-        if (enumValues.length > 0) {
-            decl.setEnumeration(enumValues);
+        const facets: SchemaFacets = this.collectFacets(simpleTypeEl);
+        if (facets.enumeration && facets.enumeration.length > 0) {
+            decl.setEnumeration(facets.enumeration);
         }
-        const patternValues: string[] = this.collectPatterns(simpleTypeEl);
-        if (patternValues.length > 0) {
-            decl.setPatterns(patternValues);
+        if (facets.patterns && facets.patterns.length > 0) {
+            decl.setPatterns(facets.patterns);
         }
-        const range: {min: number | undefined, max: number | undefined} = this.collectRangeFacets(simpleTypeEl);
-        if (range.min !== undefined) {
-            decl.setMinInclusive(range.min);
+        if (facets.minExclusive !== undefined) {
+            decl.setMinExclusive(facets.minExclusive);
         }
-        if (range.max !== undefined) {
-            decl.setMaxInclusive(range.max);
+        if (facets.maxExclusive !== undefined) {
+            decl.setMaxExclusive(facets.maxExclusive);
+        }
+        if (facets.minInclusive !== undefined) {
+            decl.setMinInclusive(facets.minInclusive);
+        }
+        if (facets.maxInclusive !== undefined) {
+            decl.setMaxInclusive(facets.maxInclusive);
+        }
+        if (facets.length !== undefined) {
+            decl.setLength(facets.length);
+        }
+        if (facets.minLength !== undefined) {
+            decl.setMinLength(facets.minLength);
+        }
+        if (facets.maxLength !== undefined) {
+            decl.setMaxLength(facets.maxLength);
+        }
+        if (facets.totalDigits !== undefined) {
+            decl.setTotalDigits(facets.totalDigits);
+        }
+        if (facets.fractionDigits !== undefined) {
+            decl.setFractionDigits(facets.fractionDigits);
         }
     }
 

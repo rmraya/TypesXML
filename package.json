@@ -18,7 +18,8 @@
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "build:esm": "tsc --project tsconfig.esm.json && node scripts/create-esm-package.cjs",
     "testDtd": "npm run build:cjs && node dist/cjs/tests/DTDTestSuite.js",
-    "testJson": "npm run build:cjs && node dist/cjs/tests/JsonConversionTest.js"
+    "testJson": "npm run build:cjs && node dist/cjs/tests/JsonConversionTest.js",
+    "testXmlSchema": "npm run build:cjs && node dist/cjs/tests/XMLSchemaTestSuite.js"
   },
   "author": {
     "name": "Rodolfo M. Raya",

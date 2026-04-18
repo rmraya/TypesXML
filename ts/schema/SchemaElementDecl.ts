@@ -12,6 +12,7 @@
 
 import { SchemaAttributeDecl } from './SchemaAttributeDecl.js';
 import { SchemaContentModel } from './SchemaContentModel.js';
+import { SchemaFacets, SchemaTypeValidator } from './SchemaTypeValidator.js';
 
 export class SchemaElementDecl {
 
@@ -22,6 +23,7 @@ export class SchemaElementDecl {
     private anyAttribute: boolean = false;
     private anyAttributeNamespace: string = '##any';
     private simpleType: string | undefined;
+    private textFacets: SchemaFacets | undefined;
 
     constructor(name: string, namespace?: string, contentModel?: SchemaContentModel) {
         this.name = name;
@@ -66,6 +68,21 @@ export class SchemaElementDecl {
         return this.simpleType;
     }
 
+    setTextFacets(facets: SchemaFacets): void {
+        this.textFacets = facets;
+    }
+
+    validateText(value: string): boolean {
+        if (!this.textFacets) {
+            return true;
+        }
+        return SchemaTypeValidator.validateFacets(value, this.textFacets);
+    }
+
+    hasTextFacets(): boolean {
+        return this.textFacets !== undefined;
+    }
+
     setAnyAttribute(namespace: string = '##any'): void {
         this.anyAttribute = true;
         this.anyAttributeNamespace = namespace;
@@ -79,3 +96,4 @@ export class SchemaElementDecl {
         return this.anyAttributeNamespace;
     }
 }
+

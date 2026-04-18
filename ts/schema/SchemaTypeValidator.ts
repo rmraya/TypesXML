@@ -10,7 +10,86 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+export interface SchemaFacets {
+    enumeration?: string[];
+    patterns?: string[];
+    minExclusive?: number;
+    maxExclusive?: number;
+    minInclusive?: number;
+    maxInclusive?: number;
+    length?: number;
+    minLength?: number;
+    maxLength?: number;
+    totalDigits?: number;
+    fractionDigits?: number;
+}
+
 export class SchemaTypeValidator {
+
+    static validateFacets(value: string, facets: SchemaFacets): boolean {
+        if (facets.enumeration && facets.enumeration.length > 0) {
+            if (facets.enumeration.indexOf(value) === -1) {
+                return false;
+            }
+        }
+        if (facets.patterns && facets.patterns.length > 0) {
+            let matched: boolean = false;
+            for (let i: number = 0; i < facets.patterns.length; i++) {
+                try {
+                    if (new RegExp('^(?:' + facets.patterns[i] + ')$').test(value)) {
+                        matched = true;
+                        break;
+                    }
+                } catch (e) {
+                    // Skip unrecognised XSD regex syntax.
+                }
+            }
+            if (!matched) {
+                return false;
+            }
+        }
+        if (facets.minExclusive !== undefined || facets.maxExclusive !== undefined ||
+                facets.minInclusive !== undefined || facets.maxInclusive !== undefined) {
+            const num: number = parseFloat(value);
+            if (isNaN(num)) {
+                return false;
+            }
+            if (facets.minExclusive !== undefined && num <= facets.minExclusive) {
+                return false;
+            }
+            if (facets.maxExclusive !== undefined && num >= facets.maxExclusive) {
+                return false;
+            }
+            if (facets.minInclusive !== undefined && num < facets.minInclusive) {
+                return false;
+            }
+            if (facets.maxInclusive !== undefined && num > facets.maxInclusive) {
+                return false;
+            }
+        }
+        if (facets.length !== undefined && value.length !== facets.length) {
+            return false;
+        }
+        if (facets.minLength !== undefined && value.length < facets.minLength) {
+            return false;
+        }
+        if (facets.maxLength !== undefined && value.length > facets.maxLength) {
+            return false;
+        }
+        if (facets.totalDigits !== undefined) {
+            const stripped: string = value.replace(/[^0-9]/g, '');
+            if (stripped.length > facets.totalDigits) {
+                return false;
+            }
+        }
+        if (facets.fractionDigits !== undefined) {
+            const dotIndex: number = value.indexOf('.');
+            if (dotIndex !== -1 && (value.length - dotIndex - 1) > facets.fractionDigits) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     static validate(value: string, typeName: string): boolean {
         const colonIndex: number = typeName.indexOf(':');

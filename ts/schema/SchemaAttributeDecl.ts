@@ -11,7 +11,7 @@
  *******************************************************************************/
 
 import { AttributeInfo, AttributeUse } from '../grammar/Grammar.js';
-import { SchemaTypeValidator } from './SchemaTypeValidator.js';
+import { SchemaFacets, SchemaTypeValidator } from './SchemaTypeValidator.js';
 
 export class SchemaAttributeDecl {
 
@@ -21,10 +21,7 @@ export class SchemaAttributeDecl {
     private use: AttributeUse;
     private defaultValue: string | undefined;
     private fixedValue: string | undefined;
-    private enumeration: string[];
-    private patterns: string[];
-    private minInclusive: number | undefined;
-    private maxInclusive: number | undefined;
+    private facets: SchemaFacets;
     private unionAlternatives: Array<{enumerations: string[], patterns: string[]}>;
 
     constructor(
@@ -41,10 +38,7 @@ export class SchemaAttributeDecl {
         this.use = use;
         this.defaultValue = defaultValue;
         this.fixedValue = fixedValue;
-        this.enumeration = [];
-        this.patterns = [];
-        this.minInclusive = undefined;
-        this.maxInclusive = undefined;
+        this.facets = {};
         this.unionAlternatives = [];
     }
 
@@ -73,23 +67,51 @@ export class SchemaAttributeDecl {
     }
 
     setEnumeration(values: string[]): void {
-        this.enumeration = values.slice();
+        this.facets.enumeration = values.slice();
     }
 
     getEnumeration(): string[] {
-        return this.enumeration;
+        return this.facets.enumeration || [];
     }
 
     setPatterns(values: string[]): void {
-        this.patterns = values.slice();
+        this.facets.patterns = values.slice();
     }
 
     setMinInclusive(value: number): void {
-        this.minInclusive = value;
+        this.facets.minInclusive = value;
     }
 
     setMaxInclusive(value: number): void {
-        this.maxInclusive = value;
+        this.facets.maxInclusive = value;
+    }
+
+    setMinExclusive(value: number): void {
+        this.facets.minExclusive = value;
+    }
+
+    setMaxExclusive(value: number): void {
+        this.facets.maxExclusive = value;
+    }
+
+    setLength(value: number): void {
+        this.facets.length = value;
+    }
+
+    setMinLength(value: number): void {
+        this.facets.minLength = value;
+    }
+
+    setMaxLength(value: number): void {
+        this.facets.maxLength = value;
+    }
+
+    setTotalDigits(value: number): void {
+        this.facets.totalDigits = value;
+    }
+
+    setFractionDigits(value: number): void {
+        this.facets.fractionDigits = value;
     }
 
     setUnionAlternatives(alts: Array<{enumerations: string[], patterns: string[]}>): void {
@@ -104,58 +126,20 @@ export class SchemaAttributeDecl {
         if (this.unionAlternatives.length > 0) {
             for (let i: number = 0; i < this.unionAlternatives.length; i++) {
                 const alt: {enumerations: string[], patterns: string[]} = this.unionAlternatives[i];
-                const matchesEnum: boolean = alt.enumerations.length === 0 || alt.enumerations.indexOf(value) !== -1;
-                const matchesPattern: boolean = alt.patterns.length === 0 || this.testPatterns(value, alt.patterns);
-                if (matchesEnum && matchesPattern) {
+                const altFacets: SchemaFacets = {
+                    enumeration: alt.enumerations,
+                    patterns: alt.patterns
+                };
+                if (SchemaTypeValidator.validateFacets(value, altFacets)) {
                     return true;
                 }
             }
             return false;
         }
-        // Restriction: enumeration check.
-        if (this.enumeration.length > 0) {
-            let found: boolean = false;
-            for (let i: number = 0; i < this.enumeration.length; i++) {
-                if (this.enumeration[i] === value) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return false;
-            }
-        }
-        // Restriction: pattern check.
-        if (this.patterns.length > 0 && !this.testPatterns(value, this.patterns)) {
+        if (!SchemaTypeValidator.validateFacets(value, this.facets)) {
             return false;
-        }
-        // Restriction: range check.
-        if (this.minInclusive !== undefined || this.maxInclusive !== undefined) {
-            const num: number = parseFloat(value);
-            if (isNaN(num)) {
-                return false;
-            }
-            if (this.minInclusive !== undefined && num < this.minInclusive) {
-                return false;
-            }
-            if (this.maxInclusive !== undefined && num > this.maxInclusive) {
-                return false;
-            }
         }
         return SchemaTypeValidator.validate(value, this.type);
-    }
-
-    private testPatterns(value: string, patterns: string[]): boolean {
-        for (let i: number = 0; i < patterns.length; i++) {
-            try {
-                if (new RegExp('^(?:' + patterns[i] + ')$').test(value)) {
-                    return true;
-                }
-            } catch (e) {
-                // Unrecognised XSD regex syntax — skip this pattern.
-            }
-        }
-        return false;
     }
 
     toAttributeInfo(): AttributeInfo {

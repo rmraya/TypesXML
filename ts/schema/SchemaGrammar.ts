@@ -97,6 +97,11 @@ export class SchemaGrammar implements Grammar {
                     'Invalid text content "' + trimmed + '" for element "' + element + '": expected type ' + simpleType
                 );
             }
+            if (trimmed.length > 0 && decl.hasTextFacets() && !decl.validateText(trimmed)) {
+                return ValidationResult.error(
+                    'Text content "' + trimmed + '" of element "' + element + '" violates facet constraints'
+                );
+            }
             return ValidationResult.success();
         }
         if (decl.getContentModel().getType() === SchemaContentModelType.ELEMENT
