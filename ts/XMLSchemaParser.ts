@@ -633,44 +633,17 @@ export class XMLSchemaParser {
     }
 
     protected resolveReference(location: string | undefined, baseDir: string, namespaceValue?: string): string | undefined {
-        if (location) {
-            if (location.startsWith("file://")) {
-                const normalizedFileUrl: string = fileURLToPath(location);
-                if (existsSync(normalizedFileUrl)) {
-                    return normalizedFileUrl;
-                }
-            } else if (isAbsolute(location)) {
-                if (existsSync(location)) {
-                    return location;
-                }
-            } else if (!location.startsWith("http://") && !location.startsWith("https://")) {
-                const resolvedPath: string = resolve(baseDir, location);
-                if (existsSync(resolvedPath)) {
-                    return resolvedPath;
-                }
+        if (this.catalog) {
+            const candidates: Array<string | undefined> = [];
+            if (location) {
+                candidates.push(this.catalog.matchURI(location));
+                candidates.push(this.catalog.matchSystem(location));
             }
-            if (this.catalog) {
-                const catalogCandidates: Array<string | undefined> = [
-                    this.catalog.matchURI(location),
-                    this.catalog.matchSystem(location)
-                ];
-                for (const candidate of catalogCandidates) {
-                    if (!candidate) {
-                        continue;
-                    }
-                    const normalizedCandidate: string = candidate.startsWith("file://") ? fileURLToPath(candidate) : candidate;
-                    if (existsSync(normalizedCandidate)) {
-                        return normalizedCandidate;
-                    }
-                }
+            if (namespaceValue) {
+                candidates.push(this.catalog.matchURI(namespaceValue));
+                candidates.push(this.catalog.matchSystem(namespaceValue));
             }
-        }
-        if (namespaceValue && this.catalog) {
-            const catalogCandidates: Array<string | undefined> = [
-                this.catalog.matchURI(namespaceValue),
-                this.catalog.matchSystem(namespaceValue)
-            ];
-            for (const candidate of catalogCandidates) {
+            for (const candidate of candidates) {
                 if (!candidate) {
                     continue;
                 }
@@ -686,9 +659,22 @@ export class XMLSchemaParser {
         if (location.startsWith("http://") || location.startsWith("https://")) {
             return undefined;
         }
-        const resolvedFallback: string = resolve(baseDir, location);
-        if (existsSync(resolvedFallback)) {
-            return resolvedFallback;
+        if (location.startsWith("file://")) {
+            const normalizedFileUrl: string = fileURLToPath(location);
+            if (existsSync(normalizedFileUrl)) {
+                return normalizedFileUrl;
+            }
+            return undefined;
+        }
+        if (isAbsolute(location)) {
+            if (existsSync(location)) {
+                return location;
+            }
+            return undefined;
+        }
+        const resolvedPath: string = resolve(baseDir, location);
+        if (existsSync(resolvedPath)) {
+            return resolvedPath;
         }
         return undefined;
     }
