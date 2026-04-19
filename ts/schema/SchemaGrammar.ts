@@ -123,26 +123,26 @@ export class SchemaGrammar implements Grammar {
         if (!decl) {
             return ValidationResult.success();
         }
-        const trimmed: string = text.trim();
         const simpleType: string | undefined = decl.getSimpleType();
         if (simpleType !== undefined) {
-            if (trimmed.length > 0 && !SchemaTypeValidator.validate(trimmed, simpleType)) {
+            const normalizedText: string = text.replace(/[\t\n\r ]+/g, ' ').trim();
+            if (!SchemaTypeValidator.validate(normalizedText, simpleType)) {
                 return ValidationResult.error(
-                    'Invalid text content "' + trimmed + '" for element "' + element + '": expected type ' + simpleType
+                    'Invalid text content "' + text + '" for element "' + element + '": expected type ' + simpleType
                 );
             }
-            if (trimmed.length > 0 && decl.hasTextFacets() && !decl.validateText(trimmed)) {
+            if (decl.hasTextFacets() && !decl.validateText(text)) {
                 return ValidationResult.error(
-                    'Text content "' + trimmed + '" of element "' + element + '" violates facet constraints'
+                    'Text content "' + text + '" of element "' + element + '" violates facet constraints'
                 );
             }
             return ValidationResult.success();
         }
         if (decl.getContentModel().getType() === SchemaContentModelType.ELEMENT
                 || decl.getContentModel().getType() === SchemaContentModelType.EMPTY) {
-            if (trimmed.length > 0) {
+            if (text.trim().length > 0) {
                 return ValidationResult.error(
-                    'Element "' + element + '" has element-only content but contains text: "' + trimmed + '"'
+                    'Element "' + element + '" has element-only content but contains text: "' + text + '"'
                 );
             }
         }
@@ -255,7 +255,22 @@ export class SchemaGrammar implements Grammar {
                 continue;
             }
 
-            // Attribute not in element's own declarations — try imported namespace grammars.
+            // anyAttribute wildcard takes priority over imported-grammar lookups.
+            // The wildcard namespace constraint (e.g. ##other) may explicitly exclude
+            // certain namespaces, so it must be evaluated before any global-attribute
+            // fallback that would bypass that restriction.
+            if (decl.allowsAnyAttribute()) {
+                const anyNs: string = decl.getAnyAttributeNamespace();
+                const anyPc: string = decl.getAnyAttributeProcessContents();
+                if (this.anyAttributeCovers(anyNs, anyPc, attrName, attrValue, element)) {
+                    continue;
+                }
+                return ValidationResult.error(
+                    'Attribute "' + attrName + '" is not permitted by the anyAttribute wildcard on element "' + element + '"'
+                );
+            }
+
+            // No anyAttribute — try imported namespace grammars as a fallback.
             if (colonIndex !== -1) {
                 const prefix: string = attrName.substring(0, colonIndex);
                 const namespaceUri: string | undefined = this.resolvePrefix(prefix);
@@ -276,14 +291,6 @@ export class SchemaGrammar implements Grammar {
                         }
                         continue;
                     }
-                }
-            }
-
-            // Wildcard fallback: xs:anyAttribute on this element declaration.
-            if (decl.allowsAnyAttribute()) {
-                const anyNs: string = decl.getAnyAttributeNamespace();
-                if (this.anyAttributeCovers(anyNs, attrName, element)) {
-                    continue;
                 }
             }
 
@@ -365,37 +372,72 @@ export class SchemaGrammar implements Grammar {
         return this.namespaceDeclarations;
     }
 
-    private anyAttributeCovers(anyNs: string, attrName: string, elementName: string): boolean {
-        if (anyNs === '##any') {
-            return true;
-        }
+    private anyAttributeCovers(anyNs: string, processContents: string, attrName: string, attrValue: string, elementName: string): boolean {
         const colonIndex: number = attrName.indexOf(':');
         const attrPrefix: string | undefined = colonIndex !== -1 ? attrName.substring(0, colonIndex) : undefined;
+        const attrLocalName: string = colonIndex !== -1 ? attrName.substring(colonIndex + 1) : attrName;
         const attrNs: string | undefined = attrPrefix ? this.resolvePrefix(attrPrefix) : undefined;
-        if (anyNs === '##local') {
-            return attrPrefix === undefined;
-        }
-        if (anyNs === '##other') {
-            const elementNs: string | undefined = this.getElementNamespace(elementName);
-            return attrNs !== elementNs;
-        }
-        // Space-separated list of URIs, ##local, ##targetNamespace.
-        const tokens: string[] = anyNs.split(/\s+/);
-        for (const token of tokens) {
-            if (token === '##local' && attrPrefix === undefined) {
-                return true;
-            }
-            if (token === '##targetNamespace') {
-                const elementNs: string | undefined = this.getElementNamespace(elementName);
-                if (attrNs === elementNs) {
-                    return true;
+
+        // Check if the attribute's namespace is covered by the wildcard constraint.
+        let covered: boolean = false;
+        if (anyNs === '##any') {
+            covered = true;
+        } else if (anyNs === '##local') {
+            covered = attrPrefix === undefined;
+        } else if (anyNs === '##other') {
+            // Per XSD spec §3.10.1: ##other means any non-absent namespace that is
+            // not the target namespace of the schema owning the anyAttribute.
+            covered = attrNs !== undefined && !this.targetNamespaces.has(attrNs);
+        } else {
+            // Space-separated list of URIs, ##local, ##targetNamespace.
+            const tokens: string[] = anyNs.split(/\s+/);
+            for (const token of tokens) {
+                if (token === '##local' && attrPrefix === undefined) {
+                    covered = true;
+                    break;
+                }
+                if (token === '##targetNamespace') {
+                    if (attrNs !== undefined && this.targetNamespaces.has(attrNs)) {
+                        covered = true;
+                        break;
+                    }
+                }
+                if (token === attrNs) {
+                    covered = true;
+                    break;
                 }
             }
-            if (token === attrNs) {
-                return true;
-            }
         }
-        return false;
+
+        if (!covered) {
+            return false;
+        }
+
+        // Enforce processContents.
+        if (processContents === 'skip') {
+            return true;
+        }
+        // For 'strict' or 'lax', look up the attribute declaration in the imported grammar.
+        if (attrNs !== undefined) {
+            const importedGrammar: SchemaGrammar | undefined = this.importedGrammars.get(attrNs);
+            if (importedGrammar) {
+                const globalDecl: SchemaAttributeDecl | undefined = importedGrammar.globalAttributeDecls.get(attrLocalName);
+                if (globalDecl) {
+                    // Declaration found — validate the value.
+                    return globalDecl.isValid(attrValue);
+                }
+            }
+            // No imported grammar or no declaration found.
+            if (processContents === 'strict') {
+                return false; // strict requires a declaration
+            }
+            return true; // lax: silently accept if no declaration
+        }
+        // Unqualified attribute with no namespace.
+        if (processContents === 'strict') {
+            return false; // strict requires a declaration; none found for unqualified attr
+        }
+        return true; // lax: accept
     }
 
     private getElementNamespace(elementName: string): string | undefined {

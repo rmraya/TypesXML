@@ -22,7 +22,7 @@ export class SchemaAttributeDecl {
     private defaultValue: string | undefined;
     private fixedValue: string | undefined;
     private facets: SchemaFacets;
-    private unionAlternatives: Array<{enumerations: string[], patterns: string[]}>;
+    private unionAlternatives: Array<{enumerations: string[], patterns: string[][]}>;
 
     constructor(
         name: string,
@@ -74,7 +74,7 @@ export class SchemaAttributeDecl {
         return this.facets.enumeration || [];
     }
 
-    setPatterns(values: string[]): void {
+    setPatterns(values: string[][]): void {
         this.facets.patterns = values.slice();
     }
 
@@ -114,7 +114,15 @@ export class SchemaAttributeDecl {
         this.facets.fractionDigits = value;
     }
 
-    setUnionAlternatives(alts: Array<{enumerations: string[], patterns: string[]}>): void {
+    setWhiteSpace(value: string): void {
+        this.facets.whiteSpace = value;
+    }
+
+    setIsList(value: boolean): void {
+        this.facets.isList = value;
+    }
+
+    setUnionAlternatives(alts: Array<{enumerations: string[], patterns: string[][]}>): void {
         this.unionAlternatives = alts.slice();
     }
 
@@ -125,21 +133,26 @@ export class SchemaAttributeDecl {
         // Union: valid if any member type accepts the value.
         if (this.unionAlternatives.length > 0) {
             for (let i: number = 0; i < this.unionAlternatives.length; i++) {
-                const alt: {enumerations: string[], patterns: string[]} = this.unionAlternatives[i];
+                const alt: {enumerations: string[], patterns: string[][]} = this.unionAlternatives[i];
                 const altFacets: SchemaFacets = {
                     enumeration: alt.enumerations,
                     patterns: alt.patterns
-                };
-                if (SchemaTypeValidator.validateFacets(value, altFacets)) {
+                };                if (SchemaTypeValidator.validateFacets(value, altFacets)) {
                     return true;
                 }
             }
             return false;
         }
-        if (!SchemaTypeValidator.validateFacets(value, this.facets)) {
+        if (!SchemaTypeValidator.validateFacets(value, this.facets, this.type)) {
             return false;
         }
-        return SchemaTypeValidator.validate(value, this.type);
+        let normalized: string = value;
+        if (this.facets.whiteSpace === 'replace') {
+            normalized = value.replace(/[\t\n\r]/g, ' ');
+        } else if (this.facets.whiteSpace === 'collapse') {
+            normalized = value.replace(/[\t\n\r ]+/g, ' ').trim();
+        }
+        return SchemaTypeValidator.validate(normalized, this.type);
     }
 
     toAttributeInfo(): AttributeInfo {

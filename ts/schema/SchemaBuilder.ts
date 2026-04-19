@@ -151,12 +151,12 @@ export class SchemaBuilder extends XMLSchemaParser {
             const typeNamespace: string | undefined = pipeIdx !== -1 ? key.substring(0, pipeIdx) : undefined;
             const decl: SchemaElementDecl = new SchemaElementDecl(typeLocalName, typeNamespace);
             decl.setContentModel(this.buildContentModel(typeElement, typeNamespace));
-            const { attrs, anyAttributeNamespace } = this.collectAllAttributes(typeElement, typeNamespace);
+            const { attrs, anyAttributeNamespace, anyAttributeProcessContents } = this.collectAllAttributes(typeElement, typeNamespace);
             for (const attrDecl of attrs.values()) {
                 decl.addAttributeDecl(attrDecl);
             }
             if (anyAttributeNamespace !== undefined) {
-                decl.setAnyAttribute(anyAttributeNamespace);
+                decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents);
             }
             grammar.addComplexTypeDecl(typeLocalName, decl);
         }
@@ -297,12 +297,12 @@ export class SchemaBuilder extends XMLSchemaParser {
 
         if (typeElement) {
             decl.setContentModel(this.buildContentModel(typeElement, info.namespace));
-            const { attrs, anyAttributeNamespace } = this.collectAllAttributes(typeElement, info.namespace);
+            const { attrs, anyAttributeNamespace, anyAttributeProcessContents } = this.collectAllAttributes(typeElement, info.namespace);
             for (const attrDecl of attrs.values()) {
                 decl.addAttributeDecl(attrDecl);
             }
             if (anyAttributeNamespace !== undefined) {
-                decl.setAnyAttribute(anyAttributeNamespace);
+                decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents);
             }
             // xs:complexType with xs:simpleContent — text element with a simple base type.
             const simpleContentEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'simpleContent');
@@ -357,7 +357,23 @@ export class SchemaBuilder extends XMLSchemaParser {
         const isMixed: boolean = mixedAttr !== undefined && mixedAttr.getValue() === 'true';
 
         // simpleContent → text content with attributes, no child elements.
-        if (this.findChildByLocalName(typeElement, 'simpleContent')) {
+        const simpleContentEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'simpleContent');
+        if (simpleContentEl) {
+            const derivationEl: XMLElement | undefined =
+                this.findChildByLocalName(simpleContentEl, 'restriction') ||
+                this.findChildByLocalName(simpleContentEl, 'extension');
+            if (derivationEl) {
+                const baseAttr: XMLAttribute | undefined = derivationEl.getAttribute('base');
+                if (baseAttr) {
+                    const baseTypeEl: XMLElement | undefined = this.lookupComplexType(baseAttr.getValue());
+                    if (baseTypeEl) {
+                        // base is a complex type — it must itself have simpleContent to be valid here
+                        if (!this.findChildByLocalName(baseTypeEl, 'simpleContent')) {
+                            throw new Error('simpleContent base "' + baseAttr.getValue() + '" is a complex type without simpleContent');
+                        }
+                    }
+                }
+            }
             return SchemaContentModel.mixed();
         }
 
@@ -498,7 +514,7 @@ export class SchemaBuilder extends XMLSchemaParser {
             groupEl = this.modelGroupDefinitions.get(localRef);
         }
         if (!groupEl) {
-            return undefined;
+            throw new Error('Reference to undeclared model group: "' + ref + '"');
         }
         // xs:group element wraps sequence/choice/all — find the inner particle.
         const inner: SchemaParticle | undefined = this.buildParticle(groupEl, namespace);
@@ -511,15 +527,16 @@ export class SchemaBuilder extends XMLSchemaParser {
         return inner;
     }
 
-    private collectAllAttributes(typeElement: XMLElement, namespace?: string): { attrs: Map<string, SchemaAttributeDecl>; anyAttributeNamespace: string | undefined } {
+    private collectAllAttributes(typeElement: XMLElement, namespace?: string): { attrs: Map<string, SchemaAttributeDecl>; anyAttributeNamespace: string | undefined; anyAttributeProcessContents: string } {
         const attrs: Map<string, SchemaAttributeDecl> = new Map<string, SchemaAttributeDecl>();
         const visitedTypes: Set<string> = new Set<string>();
         let anyAttributeNamespace: string | undefined = undefined;
-        this.gatherAttributes(typeElement, attrs, visitedTypes, namespace, (ns) => { anyAttributeNamespace = ns; });
-        return { attrs, anyAttributeNamespace };
+        let anyAttributeProcessContents: string = 'strict';
+        this.gatherAttributes(typeElement, attrs, visitedTypes, namespace, (ns, pc) => { anyAttributeNamespace = ns; anyAttributeProcessContents = pc || 'strict'; });
+        return { attrs, anyAttributeNamespace, anyAttributeProcessContents };
     }
 
-    private gatherAttributes(el: XMLElement, result: Map<string, SchemaAttributeDecl>, visitedTypes: Set<string>, namespace?: string, onAnyAttribute?: (ns: string) => void): void {
+    private gatherAttributes(el: XMLElement, result: Map<string, SchemaAttributeDecl>, visitedTypes: Set<string>, namespace?: string, onAnyAttribute?: (ns: string, pc?: string) => void): void {
         for (const child of el.getChildren()) {
             const localName: string = this.getLocalName(child.getName());
             if (localName === 'attribute') {
@@ -530,7 +547,8 @@ export class SchemaBuilder extends XMLSchemaParser {
             } else if (localName === 'anyAttribute') {
                 if (onAnyAttribute) {
                     const nsAttr: XMLAttribute | undefined = child.getAttribute('namespace');
-                    onAnyAttribute(nsAttr ? nsAttr.getValue() : '##any');
+                    const pcAttr: XMLAttribute | undefined = child.getAttribute('processContents');
+                    onAnyAttribute(nsAttr ? nsAttr.getValue() : '##any', pcAttr ? pcAttr.getValue() : 'strict');
                 }
             } else if (localName === 'attributeGroup') {
                 const refAttr: XMLAttribute | undefined = child.getAttribute('ref');
@@ -538,6 +556,8 @@ export class SchemaBuilder extends XMLSchemaParser {
                     const groupEl: XMLElement | undefined = this.lookupAttributeGroup(refAttr.getValue());
                     if (groupEl) {
                         this.gatherAttributes(groupEl, result, visitedTypes, namespace, onAnyAttribute);
+                    } else {
+                        throw new Error('Reference to undeclared attribute group: "' + refAttr.getValue() + '"');
                     }
                 }
             } else if (localName === 'complexContent' || localName === 'simpleContent') {
@@ -597,7 +617,7 @@ export class SchemaBuilder extends XMLSchemaParser {
                     fixedValue = refFixedAttr.getValue();
                 }
             } else {
-                name = this.getLocalName(refAttr.getValue());
+                throw new Error('Reference to undeclared attribute: "' + refAttr.getValue() + '"');
             }
         }
 
@@ -661,10 +681,50 @@ export class SchemaBuilder extends XMLSchemaParser {
 
     private collectFacets(simpleTypeEl: XMLElement): SchemaFacets {
         const facets: SchemaFacets = {};
+        if (this.findChildByLocalName(simpleTypeEl, 'list')) {
+            facets.isList = true;
+            return facets;
+        }
         const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
         if (!restrictionEl) {
             return facets;
         }
+        const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
+        let parentFacets: SchemaFacets | undefined;
+        if (baseAttr) {
+            const baseLocal: string = this.getLocalName(baseAttr.getValue());
+            if (baseLocal === 'normalizedString') {
+                facets.whiteSpace = 'replace';
+            } else if (baseLocal === 'token' || baseLocal === 'language' || baseLocal === 'Name' ||
+                       baseLocal === 'NCName' || baseLocal === 'ID' || baseLocal === 'IDREF' ||
+                       baseLocal === 'ENTITY' || baseLocal === 'NMTOKEN' ||
+                       baseLocal === 'decimal' || baseLocal === 'float' || baseLocal === 'double' ||
+                       baseLocal === 'integer' || baseLocal === 'long' || baseLocal === 'int' ||
+                       baseLocal === 'short' || baseLocal === 'byte' || baseLocal === 'unsignedLong' ||
+                       baseLocal === 'unsignedInt' || baseLocal === 'unsignedShort' || baseLocal === 'unsignedByte' ||
+                       baseLocal === 'nonNegativeInteger' || baseLocal === 'positiveInteger' ||
+                       baseLocal === 'nonPositiveInteger' || baseLocal === 'negativeInteger' ||
+                       baseLocal === 'boolean' || baseLocal === 'dateTime' || baseLocal === 'date' ||
+                       baseLocal === 'time' || baseLocal === 'duration' || baseLocal === 'gYear' ||
+                       baseLocal === 'gYearMonth' || baseLocal === 'gMonth' || baseLocal === 'gMonthDay' ||
+                       baseLocal === 'gDay' || baseLocal === 'hexBinary' || baseLocal === 'base64Binary' ||
+                       baseLocal === 'anyURI' || baseLocal === 'QName' || baseLocal === 'NOTATION') {
+                facets.whiteSpace = 'collapse';
+            }
+            const namedBase: XMLElement | undefined = this.simpleTypeDefinitions.get(baseLocal);
+            if (namedBase) {
+                if (this.findChildByLocalName(namedBase, 'list')) {
+                    facets.isList = true;
+                }
+                parentFacets = this.collectFacets(namedBase);
+                if (parentFacets.whiteSpace !== undefined) {
+                    facets.whiteSpace = parentFacets.whiteSpace;
+                }
+            } else if (baseLocal === 'IDREFS' || baseLocal === 'ENTITIES' || baseLocal === 'NMTOKENS') {
+                facets.isList = true;
+            }
+        }
+        const currentPatterns: string[] = [];
         for (const child of restrictionEl.getChildren()) {
             const localChildName: string = this.getLocalName(child.getName());
             const valueAttr: XMLAttribute | undefined = child.getAttribute('value');
@@ -678,10 +738,7 @@ export class SchemaBuilder extends XMLSchemaParser {
                 }
                 facets.enumeration.push(val);
             } else if (localChildName === 'pattern') {
-                if (!facets.patterns) {
-                    facets.patterns = [];
-                }
-                facets.patterns.push(val);
+                currentPatterns.push(val);
             } else if (localChildName === 'minExclusive') {
                 facets.minExclusive = val;
             } else if (localChildName === 'maxExclusive') {
@@ -700,6 +757,53 @@ export class SchemaBuilder extends XMLSchemaParser {
                 facets.totalDigits = parseInt(val, 10);
             } else if (localChildName === 'fractionDigits') {
                 facets.fractionDigits = parseInt(val, 10);
+            } else if (localChildName === 'whiteSpace') {
+                facets.whiteSpace = val;
+            }
+        }
+        const patternGroups: string[][] = parentFacets && parentFacets.patterns ? parentFacets.patterns.slice() : [];
+        if (currentPatterns.length > 0) {
+            patternGroups.push(currentPatterns);
+        }
+        if (patternGroups.length > 0) {
+            facets.patterns = patternGroups;
+        }
+        if (parentFacets) {
+            if (facets.enumeration === undefined && parentFacets.enumeration !== undefined) {
+                facets.enumeration = parentFacets.enumeration;
+            }
+            if (facets.minExclusive === undefined && parentFacets.minExclusive !== undefined) {
+                facets.minExclusive = parentFacets.minExclusive;
+            }
+            if (facets.maxExclusive === undefined && parentFacets.maxExclusive !== undefined) {
+                facets.maxExclusive = parentFacets.maxExclusive;
+            }
+            if (facets.minInclusive === undefined && parentFacets.minInclusive !== undefined) {
+                facets.minInclusive = parentFacets.minInclusive;
+            }
+            if (facets.maxInclusive === undefined && parentFacets.maxInclusive !== undefined) {
+                facets.maxInclusive = parentFacets.maxInclusive;
+            }
+            if (facets.length === undefined && parentFacets.length !== undefined) {
+                facets.length = parentFacets.length;
+            }
+            if (facets.minLength === undefined && parentFacets.minLength !== undefined) {
+                facets.minLength = parentFacets.minLength;
+            }
+            if (facets.maxLength === undefined && parentFacets.maxLength !== undefined) {
+                facets.maxLength = parentFacets.maxLength;
+            }
+            if (facets.totalDigits === undefined && parentFacets.totalDigits !== undefined) {
+                facets.totalDigits = parentFacets.totalDigits;
+            }
+            if (facets.fractionDigits === undefined && parentFacets.fractionDigits !== undefined) {
+                facets.fractionDigits = parentFacets.fractionDigits;
+            }
+            if (facets.whiteSpace === undefined && parentFacets.whiteSpace !== undefined) {
+                facets.whiteSpace = parentFacets.whiteSpace;
+            }
+            if (facets.isList === undefined && parentFacets.isList !== undefined) {
+                facets.isList = parentFacets.isList;
             }
         }
         return facets;
@@ -722,11 +826,11 @@ export class SchemaBuilder extends XMLSchemaParser {
         return values;
     }
 
-    private collectPatterns(simpleTypeEl: XMLElement): string[] {
+    private collectPatterns(simpleTypeEl: XMLElement): string[][] {
         const patterns: string[] = [];
         const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
         if (!restrictionEl) {
-            return patterns;
+            return [];
         }
         for (const child of restrictionEl.getChildren()) {
             if (this.getLocalName(child.getName()) === 'pattern') {
@@ -736,12 +840,12 @@ export class SchemaBuilder extends XMLSchemaParser {
                 }
             }
         }
-        return patterns;
+        return patterns.length > 0 ? [patterns] : [];
     }
 
 
-    private collectUnionAlternatives(simpleTypeEl: XMLElement): Array<{enumerations: string[], patterns: string[]}> {
-        const alternatives: Array<{enumerations: string[], patterns: string[]}> = [];
+    private collectUnionAlternatives(simpleTypeEl: XMLElement): Array<{enumerations: string[], patterns: string[][]}>  {
+        const alternatives: Array<{enumerations: string[], patterns: string[][]}>  = [];
         const unionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'union');
         if (!unionEl) {
             return alternatives;
@@ -771,7 +875,7 @@ export class SchemaBuilder extends XMLSchemaParser {
     }
 
     private applySimpleTypeConstraints(decl: SchemaAttributeDecl, simpleTypeEl: XMLElement): void {
-        const unionAlts: Array<{enumerations: string[], patterns: string[]}> = this.collectUnionAlternatives(simpleTypeEl);
+        const unionAlts: Array<{enumerations: string[], patterns: string[][]}> = this.collectUnionAlternatives(simpleTypeEl);
         if (unionAlts.length > 0) {
             decl.setUnionAlternatives(unionAlts);
             return;
@@ -809,6 +913,12 @@ export class SchemaBuilder extends XMLSchemaParser {
         }
         if (facets.fractionDigits !== undefined) {
             decl.setFractionDigits(facets.fractionDigits);
+        }
+        if (facets.whiteSpace !== undefined) {
+            decl.setWhiteSpace(facets.whiteSpace);
+        }
+        if (facets.isList !== undefined) {
+            decl.setIsList(facets.isList);
         }
     }
 

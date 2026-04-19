@@ -22,6 +22,7 @@ export class SchemaElementDecl {
     private attributeDecls: Map<string, SchemaAttributeDecl>;
     private anyAttribute: boolean = false;
     private anyAttributeNamespace: string = '##any';
+    private anyAttributeProcessContents: string = 'strict';
     private simpleType: string | undefined;
     private textFacets: SchemaFacets | undefined;
     private declaredTypeName: string | undefined;
@@ -79,16 +80,17 @@ export class SchemaElementDecl {
         if (!this.textFacets) {
             return true;
         }
-        return SchemaTypeValidator.validateFacets(value, this.textFacets);
+        return SchemaTypeValidator.validateFacets(value, this.textFacets, this.simpleType);
     }
 
     hasTextFacets(): boolean {
         return this.textFacets !== undefined;
     }
 
-    setAnyAttribute(namespace: string = '##any'): void {
+    setAnyAttribute(namespace: string = '##any', processContents: string = 'strict'): void {
         this.anyAttribute = true;
         this.anyAttributeNamespace = namespace;
+        this.anyAttributeProcessContents = processContents;
     }
 
     allowsAnyAttribute(): boolean {
@@ -97,6 +99,10 @@ export class SchemaElementDecl {
 
     getAnyAttributeNamespace(): string {
         return this.anyAttributeNamespace;
+    }
+
+    getAnyAttributeProcessContents(): string {
+        return this.anyAttributeProcessContents;
     }
 
     setDeclaredTypeName(typeName: string): void {
