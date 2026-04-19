@@ -23,7 +23,7 @@ export class SchemaElementParticle extends SchemaParticle {
         this.additionalNames = additionalNames !== undefined ? additionalNames : new Set<string>();
     }
 
-    matchOnce(children: string[], pos: number): number[] {
+    matchOnce(children: string[], pos: number, _nsMap?: Map<string, string>): number[] {
         if (pos >= children.length) {
             return [];
         }

@@ -42,6 +42,10 @@ export class JsonEventCollector implements ContentHandler {
         return this.grammar;
     }
 
+    getCurrentText(): string {
+        return '';
+    }
+
     getEvents(): Array<JsonNodeEvent> {
         return this.events;
     }

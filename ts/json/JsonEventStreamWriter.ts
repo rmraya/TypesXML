@@ -51,6 +51,10 @@ export class JsonEventStreamWriter implements ContentHandler {
         return this.grammar;
     }
 
+    getCurrentText(): string {
+        return '';
+    }
+
     startDocument(): void {
         this.writeEvent({ type: "startDocument" });
     }

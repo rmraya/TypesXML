@@ -14,6 +14,14 @@ import { SchemaAttributeDecl } from './SchemaAttributeDecl.js';
 import { SchemaContentModel } from './SchemaContentModel.js';
 import { SchemaFacets, SchemaTypeValidator } from './SchemaTypeValidator.js';
 
+export interface IdentityConstraint {
+    name: string;
+    kind: 'key' | 'keyref' | 'unique';
+    selector: string;
+    fields: string[];
+    refer?: string;
+}
+
 export class SchemaElementDecl {
 
     private name: string;
@@ -28,6 +36,12 @@ export class SchemaElementDecl {
     private declaredTypeName: string | undefined;
     private abstract: boolean = false;
     private blockConstraints: Set<string> = new Set<string>();
+    private finalConstraints: Set<string> = new Set<string>();
+    private nillable: boolean = false;
+    private unionMemberTypes: string[] | undefined;
+    private listItemType: string | undefined;
+    private identityConstraints: IdentityConstraint[] | undefined;
+    private fixedValue: string | undefined;
 
     constructor(name: string, namespace?: string, contentModel?: SchemaContentModel) {
         this.name = name;
@@ -127,6 +141,57 @@ export class SchemaElementDecl {
 
     getBlockConstraints(): Set<string> {
         return this.blockConstraints;
+    }
+
+    setFinalConstraints(constraints: Set<string>): void {
+        this.finalConstraints = constraints;
+    }
+
+    getFinalConstraints(): Set<string> {
+        return this.finalConstraints;
+    }
+
+    setNillable(value: boolean): void {
+        this.nillable = value;
+    }
+
+    isNillable(): boolean {
+        return this.nillable;
+    }
+
+    setUnionMemberTypes(types: string[]): void {
+        this.unionMemberTypes = types;
+    }
+
+    getUnionMemberTypes(): string[] | undefined {
+        return this.unionMemberTypes;
+    }
+
+    setListItemType(type: string): void {
+        this.listItemType = type;
+    }
+
+    getListItemType(): string | undefined {
+        return this.listItemType;
+    }
+
+    addIdentityConstraint(constraint: IdentityConstraint): void {
+        if (!this.identityConstraints) {
+            this.identityConstraints = [];
+        }
+        this.identityConstraints.push(constraint);
+    }
+
+    getIdentityConstraints(): IdentityConstraint[] | undefined {
+        return this.identityConstraints;
+    }
+
+    setFixedValue(value: string): void {
+        this.fixedValue = value;
+    }
+
+    getFixedValue(): string | undefined {
+        return this.fixedValue;
     }
 }
 

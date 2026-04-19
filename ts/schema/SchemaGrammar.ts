@@ -13,29 +13,115 @@
 import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationResult } from '../grammar/Grammar.js';
 import { SchemaAttributeDecl } from './SchemaAttributeDecl.js';
 import { SchemaContentModelType } from './SchemaContentModel.js';
-import { SchemaElementDecl } from './SchemaElementDecl.js';
+import { IdentityConstraint, SchemaElementDecl } from './SchemaElementDecl.js';
 import { SchemaTypeValidator } from './SchemaTypeValidator.js';
+
+const BUILTIN_TYPE_HIERARCHY: Map<string, string> = new Map<string, string>([
+    ['anySimpleType', 'anyType'],
+    ['anyAtomicType', 'anySimpleType'],
+    ['string', 'anyAtomicType'],
+    ['normalizedString', 'string'],
+    ['token', 'normalizedString'],
+    ['language', 'token'],
+    ['NMTOKEN', 'token'],
+    ['Name', 'token'],
+    ['NCName', 'Name'],
+    ['ID', 'NCName'],
+    ['IDREF', 'NCName'],
+    ['ENTITY', 'NCName'],
+    ['NMTOKENS', 'anySimpleType'],
+    ['IDREFS', 'anySimpleType'],
+    ['ENTITIES', 'anySimpleType'],
+    ['decimal', 'anyAtomicType'],
+    ['integer', 'decimal'],
+    ['long', 'integer'],
+    ['int', 'long'],
+    ['short', 'int'],
+    ['byte', 'short'],
+    ['nonNegativeInteger', 'integer'],
+    ['positiveInteger', 'nonNegativeInteger'],
+    ['unsignedLong', 'nonNegativeInteger'],
+    ['unsignedInt', 'unsignedLong'],
+    ['unsignedShort', 'unsignedInt'],
+    ['unsignedByte', 'unsignedShort'],
+    ['nonPositiveInteger', 'integer'],
+    ['negativeInteger', 'nonPositiveInteger'],
+    ['float', 'anyAtomicType'],
+    ['double', 'anyAtomicType'],
+    ['boolean', 'anyAtomicType'],
+    ['duration', 'anyAtomicType'],
+    ['dayTimeDuration', 'duration'],
+    ['yearMonthDuration', 'duration'],
+    ['dateTime', 'anyAtomicType'],
+    ['dateTimeStamp', 'dateTime'],
+    ['date', 'anyAtomicType'],
+    ['time', 'anyAtomicType'],
+    ['gYearMonth', 'anyAtomicType'],
+    ['gYear', 'anyAtomicType'],
+    ['gMonthDay', 'anyAtomicType'],
+    ['gDay', 'anyAtomicType'],
+    ['gMonth', 'anyAtomicType'],
+    ['hexBinary', 'anyAtomicType'],
+    ['base64Binary', 'anyAtomicType'],
+    ['anyURI', 'anyAtomicType'],
+    ['QName', 'anyAtomicType'],
+    ['NOTATION', 'anyAtomicType'],
+]);
+
+interface IdentityConstraintScope {
+    constraint: IdentityConstraint;
+    rootDepth: number;
+    selectorSegments: string[];
+    pendingTuple: Array<string | undefined> | undefined;
+    lastCommittedTuple: Array<string | undefined> | undefined;
+    pendingDepth: number;
+    pendingTupleOverflow: boolean;
+    tuples: Array<Array<string | undefined>>;
+}
 
 export class SchemaGrammar implements Grammar {
 
     private elementDecls: Map<string, SchemaElementDecl>;
     private complexTypeDecls: Map<string, SchemaElementDecl>;
+    private simpleTypeDecls: Map<string, SchemaElementDecl>;
     private targetNamespaces: Set<string>;
     private namespaceDeclarations: Map<string, string>;
     private globalAttributeDecls: Map<string, SchemaAttributeDecl>;
     private importedGrammars: Map<string, SchemaGrammar>;
     private xsiTypeStack: Array<string | undefined>;
+    private nilStack: Array<boolean>;
     private typeHierarchy: Map<string, {base: string, method: string}>;
+    private instanceNsStack: Array<Map<string, string>>;
+    private elementPath: string[];
+    private activeScopes: IdentityConstraintScope[];
+    private completedKeys: Map<string, Array<Array<string | undefined>>>;
+    private lastClosedDepth: number;
+    private lastPoppedXsiType: string | undefined;
+    private lastPoppedNil: boolean;
+    private lastPoppedInstanceNs: Map<string, string> | undefined;
+    private seenIds: Set<string>;
+    private pendingIdrefs: string[];
 
     constructor() {
         this.elementDecls = new Map<string, SchemaElementDecl>();
         this.complexTypeDecls = new Map<string, SchemaElementDecl>();
+        this.simpleTypeDecls = new Map<string, SchemaElementDecl>();
         this.targetNamespaces = new Set<string>();
         this.namespaceDeclarations = new Map<string, string>();
         this.globalAttributeDecls = new Map<string, SchemaAttributeDecl>();
         this.importedGrammars = new Map<string, SchemaGrammar>();
         this.xsiTypeStack = [];
+        this.nilStack = [];
         this.typeHierarchy = new Map<string, {base: string, method: string}>();
+        this.instanceNsStack = [];
+        this.elementPath = [];
+        this.activeScopes = [];
+        this.completedKeys = new Map<string, Array<Array<string | undefined>>>();
+        this.lastClosedDepth = -1;
+        this.lastPoppedXsiType = undefined;
+        this.lastPoppedNil = false;
+        this.seenIds = new Set<string>();
+        this.pendingIdrefs = [];
     }
 
     addTargetNamespace(namespace: string): void {
@@ -58,6 +144,10 @@ export class SchemaGrammar implements Grammar {
         this.complexTypeDecls.set(typeName, decl);
     }
 
+    addSimpleTypeDecl(typeName: string, decl: SchemaElementDecl): void {
+        this.simpleTypeDecls.set(typeName, decl);
+    }
+
     addTypeHierarchyEntry(typeName: string, baseTypeName: string, method: string): void {
         this.typeHierarchy.set(typeName, {base: baseTypeName, method: method});
     }
@@ -69,6 +159,11 @@ export class SchemaGrammar implements Grammar {
         for (const [typeName, decl] of other.complexTypeDecls) {
             if (!this.complexTypeDecls.has(typeName)) {
                 this.complexTypeDecls.set(typeName, decl);
+            }
+        }
+        for (const [typeName, decl] of other.simpleTypeDecls) {
+            if (!this.simpleTypeDecls.has(typeName)) {
+                this.simpleTypeDecls.set(typeName, decl);
             }
         }
         for (const ns of other.targetNamespaces) {
@@ -102,11 +197,46 @@ export class SchemaGrammar implements Grammar {
 
     validateElement(element: string, children: string[]): ValidationResult {
         const xsiType: string | undefined = this.xsiTypeStack.length > 0 ? this.xsiTypeStack.pop() : undefined;
+        this.lastPoppedXsiType = xsiType;
+        const isNilled: boolean = this.nilStack.length > 0 ? (this.nilStack.pop() ?? false) : false;
+        this.lastPoppedNil = isNilled;
+        if (this.instanceNsStack.length > 0) {
+            this.lastPoppedInstanceNs = this.instanceNsStack.pop();
+        } else {
+            this.lastPoppedInstanceNs = undefined;
+        }
+        this.lastClosedDepth = this.elementPath.length - 1;
+        const constraintError: string | undefined = this.closeConstraintScopes();
+        if (this.elementPath.length > 0) {
+            this.elementPath.pop();
+        }
         const substitutedDecl: SchemaElementDecl | undefined = xsiType !== undefined ? this.complexTypeDecls.get(xsiType) : undefined;
 
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
+            if (this.elementPath.length > 0) {
+                const parentName: string = this.elementPath[this.elementPath.length - 1];
+                const parentDecl: SchemaElementDecl | undefined = this.lookupElementDecl(parentName);
+                if (parentDecl !== undefined) {
+                    const pc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, this.lastPoppedInstanceNs);
+                    if (pc === 'skip' || pc === 'lax') {
+                        return ValidationResult.success();
+                    }
+                }
+            }
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
+        }
+        // Per spec §2.6.2: a nilled element must have no element or text children.
+        if (isNilled) {
+            if (children.length > 0) {
+                return ValidationResult.error(
+                    'Element "' + element + '" has xsi:nil="true" but contains child elements'
+                );
+            }
+            if (constraintError !== undefined) {
+                return ValidationResult.error(constraintError);
+            }
+            return ValidationResult.success();
         }
         // Per the spec, an abstract element cannot appear directly in an instance.
         if (decl.isAbstractElement() && xsiType === undefined) {
@@ -115,26 +245,129 @@ export class SchemaGrammar implements Grammar {
             );
         }
         const effectiveDecl: SchemaElementDecl = substitutedDecl !== undefined ? substitutedDecl : decl;
-        return effectiveDecl.getContentModel().validateChildren(element, children);
+        const contentResult: ValidationResult = effectiveDecl.getContentModel().validateChildren(element, children, this.lastPoppedInstanceNs);
+        if (!contentResult.isValid) {
+            return contentResult;
+        }
+        if (constraintError !== undefined) {
+            return ValidationResult.error(constraintError);
+        }
+        if (this.elementPath.length === 0) {
+            for (const ref of this.pendingIdrefs) {
+                if (!this.seenIds.has(ref)) {
+                    return ValidationResult.error(
+                        'xs:IDREF value "' + ref + '" does not match any xs:ID in the document'
+                    );
+                }
+            }
+        }
+        return contentResult;
     }
 
     validateTextContent(element: string, text: string): ValidationResult {
+        if (this.activeScopes.length > 0) {
+            const idDepth: number = this.lastClosedDepth;
+            const idLocalName: string = this.localName(element);
+            for (const scope of this.activeScopes) {
+                const selectedDepth: number = scope.rootDepth + scope.selectorSegments.length;
+                if (idDepth === selectedDepth && scope.lastCommittedTuple !== undefined) {
+                    this.collectTextFields(scope, idLocalName, text, true, this.lastPoppedInstanceNs);
+                } else if (idDepth === selectedDepth + 1 && scope.pendingTuple !== undefined) {
+                    this.collectTextFields(scope, idLocalName, text, false, this.lastPoppedInstanceNs);
+                }
+            }
+        }
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             return ValidationResult.success();
         }
-        const simpleType: string | undefined = decl.getSimpleType();
+        // Per spec §2.6.2: a nilled element must have no text content.
+        const isNilled: boolean = this.lastPoppedNil;
+        if (isNilled) {
+            if (text.trim().length > 0) {
+                return ValidationResult.error(
+                    'Element "' + element + '" has xsi:nil="true" but contains text content'
+                );
+            }
+            return ValidationResult.success();
+        }
+        // If xsi:type is active, validate against the substitute type's constraints.
+        const xsiType: string | undefined = this.lastPoppedXsiType;
+        const substituteDecl: SchemaElementDecl | undefined = xsiType !== undefined
+            ? (this.complexTypeDecls.get(xsiType) ?? this.simpleTypeDecls.get(xsiType))
+            : undefined;
+        const effectiveDecl: SchemaElementDecl = substituteDecl !== undefined ? substituteDecl : decl;
+        const instanceNs: Map<string, string> | undefined = this.instanceNsStack.length > 0
+            ? this.instanceNsStack[this.instanceNsStack.length - 1]
+            : undefined;
+        const fixedValue: string | undefined = effectiveDecl.getFixedValue();
+        if (fixedValue !== undefined) {
+            const normalizedText: string = text.replace(/[\t\n\r ]+/g, ' ').trim();
+            if (normalizedText !== fixedValue) {
+                return ValidationResult.error(
+                    'Element "' + element + '" has a fixed value "' + fixedValue + '" but got "' + normalizedText + '"'
+                );
+            }
+        }
+        const simpleType: string | undefined = effectiveDecl.getSimpleType();
         if (simpleType !== undefined) {
             const normalizedText: string = text.replace(/[\t\n\r ]+/g, ' ').trim();
-            if (!SchemaTypeValidator.validate(normalizedText, simpleType)) {
+            if (!SchemaTypeValidator.validate(normalizedText, simpleType, instanceNs)) {
                 return ValidationResult.error(
                     'Invalid text content "' + text + '" for element "' + element + '": expected type ' + simpleType
                 );
             }
-            if (decl.hasTextFacets() && !decl.validateText(text)) {
+            if (effectiveDecl.hasTextFacets() && !effectiveDecl.validateText(text)) {
                 return ValidationResult.error(
                     'Text content "' + text + '" of element "' + element + '" violates facet constraints'
                 );
+            }
+            const simpleTypeLocal: string = this.localName(simpleType);
+            if (simpleTypeLocal === 'ID' || this.isTypeDerivedFrom(simpleTypeLocal, 'ID')) {
+                if (this.seenIds.has(normalizedText)) {
+                    return ValidationResult.error(
+                        'Duplicate xs:ID value "' + normalizedText + '" in element "' + element + '"'
+                    );
+                }
+                this.seenIds.add(normalizedText);
+            } else if (simpleTypeLocal === 'IDREF' || this.isTypeDerivedFrom(simpleTypeLocal, 'IDREF')) {
+                this.pendingIdrefs.push(normalizedText);
+            } else if (simpleTypeLocal === 'IDREFS') {
+                for (const token of normalizedText.split(/\s+/)) {
+                    if (token.length > 0) {
+                        this.pendingIdrefs.push(token);
+                    }
+                }
+            }
+            return ValidationResult.success();
+        }
+        const unionMemberTypes: string[] | undefined = effectiveDecl.getUnionMemberTypes();
+        if (unionMemberTypes !== undefined && unionMemberTypes.length > 0) {
+            const normalizedText: string = text.replace(/[\t\n\r ]+/g, ' ').trim();
+            let valid: boolean = false;
+            for (const memberType of unionMemberTypes) {
+                if (SchemaTypeValidator.validate(normalizedText, memberType, instanceNs)) {
+                    valid = true;
+                    break;
+                }
+            }
+            if (!valid) {
+                return ValidationResult.error(
+                    'Invalid text content "' + text + '" for element "' + element + '": does not match any union member type'
+                );
+            }
+            return ValidationResult.success();
+        }
+        const listItemType: string | undefined = effectiveDecl.getListItemType();
+        if (listItemType !== undefined) {
+            const normalizedText: string = text.replace(/[\t\n\r ]+/g, ' ').trim();
+            const tokens: string[] = normalizedText.length === 0 ? [] : normalizedText.split(/\s+/);
+            for (const token of tokens) {
+                if (!SchemaTypeValidator.validate(token, listItemType, instanceNs)) {
+                    return ValidationResult.error(
+                        'Invalid list item "' + token + '" for element "' + element + '": expected type ' + listItemType
+                    );
+                }
             }
             return ValidationResult.success();
         }
@@ -150,6 +383,30 @@ export class SchemaGrammar implements Grammar {
     }
 
     validateAttributes(element: string, attributes: Map<string, string>): ValidationResult {
+        if (this.elementPath.length === 0) {
+            this.completedKeys = new Map<string, Array<Array<string | undefined>>>();
+            this.activeScopes = [];
+            this.seenIds = new Set<string>();
+            this.pendingIdrefs = [];
+        }
+        this.elementPath.push(this.localName(element));
+        const currentDepth: number = this.elementPath.length - 1;
+        for (const scope of this.activeScopes) {
+            if (scope.pendingTuple !== undefined) {
+                continue;
+            }
+            const selectedDepth: number = scope.rootDepth + scope.selectorSegments.length;
+            if (currentDepth !== selectedDepth) {
+                continue;
+            }
+            const relativePath: string[] = this.elementPath.slice(scope.rootDepth + 1);
+            if (this.selectorMatches(scope.selectorSegments, relativePath)) {
+                scope.pendingTuple = new Array<string | undefined>(scope.constraint.fields.length).fill(undefined);
+                scope.pendingDepth = currentDepth;
+                scope.pendingTupleOverflow = false;
+                this.collectAttributeFields(scope, attributes, this.localName(element));
+            }
+        }
         // Detect xsi:type for content-model substitution and push to stack.
         let xsiTypeLocalName: string | undefined = undefined;
         for (const [attrName, attrValue] of attributes) {
@@ -168,38 +425,107 @@ export class SchemaGrammar implements Grammar {
         }
         this.xsiTypeStack.push(xsiTypeLocalName);
 
+        // Detect xsi:nil and push to nil stack.
+        let isNilTrue: boolean = false;
+        for (const [attrName, attrValue] of attributes) {
+            let isNilAttr: boolean = attrName === 'xsi:nil';
+            if (!isNilAttr && attrName.endsWith(':nil') && attrName.indexOf(':') !== -1) {
+                const nilCheckPrefix: string = attrName.substring(0, attrName.indexOf(':'));
+                const nilCheckNs: string | undefined = this.resolvePrefix(nilCheckPrefix);
+                if (nilCheckNs === 'http://www.w3.org/2001/XMLSchema-instance') {
+                    isNilAttr = true;
+                }
+            }
+            if (isNilAttr && (attrValue === 'true' || attrValue === '1')) {
+                isNilTrue = true;
+                break;
+            }
+        }
+        this.nilStack.push(isNilTrue);
+
+        // Build instance namespace scope for this element (inherits from parent scope).
+        const instanceNs: Map<string, string> = new Map<string, string>();
+        if (this.instanceNsStack.length > 0) {
+            for (const [p, u] of this.instanceNsStack[this.instanceNsStack.length - 1]) {
+                instanceNs.set(p, u);
+            }
+        }
+        for (const [attrName, attrValue] of attributes) {
+            if (attrName === 'xmlns') {
+                instanceNs.set('', attrValue);
+            } else if (attrName.startsWith('xmlns:')) {
+                instanceNs.set(attrName.substring(6), attrValue);
+            }
+        }
+        this.instanceNsStack.push(instanceNs);
+
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
+        // Per spec §2.6.2: xsi:nil="true" is only allowed when the element declaration has nillable="true".
+        if (isNilTrue && !decl.isNillable()) {
+            return ValidationResult.error(
+                'Element "' + element + '" is not nillable but xsi:nil="true" was specified'
+            );
+        }
+        if (xsiTypeLocalName === undefined) {
+            const declaredTypeName: string | undefined = decl.getDeclaredTypeName();
+            if (declaredTypeName !== undefined) {
+                const declaredTypeDecl: SchemaElementDecl | undefined = this.complexTypeDecls.get(declaredTypeName);
+                if (declaredTypeDecl !== undefined && declaredTypeDecl.isAbstractElement()) {
+                    return ValidationResult.error(
+                        'Element "' + element + '" has abstract type "' + declaredTypeName +
+                        '" and must use xsi:type to specify a concrete type'
+                    );
+                }
+            }
+        }
         // Per the spec (§3.9.4), xsi:type must name a type validly derived from the element's declared type.
         if (xsiTypeLocalName !== undefined) {
+            const xsiTypeDecl: SchemaElementDecl | undefined = this.complexTypeDecls.get(xsiTypeLocalName);
+            if (xsiTypeDecl !== undefined && xsiTypeDecl.isAbstractElement()) {
+                return ValidationResult.error(
+                    'xsi:type "' + xsiTypeLocalName + '" is abstract and cannot be used for element instantiation'
+                );
+            }
             const declaredTypeName: string | undefined = decl.getDeclaredTypeName();
-            if (declaredTypeName !== undefined && this.complexTypeDecls.has(declaredTypeName)) {
+            if (declaredTypeName !== undefined) {
                 if (!this.isTypeDerivedFrom(xsiTypeLocalName, declaredTypeName)) {
                     return ValidationResult.error(
                         'xsi:type "' + xsiTypeLocalName + '" is not derived from the declared type "' +
                         declaredTypeName + '" of element "' + element + '"'
                     );
                 }
-                // Check block constraints: the element's declared type may block certain derivations.
-                const blockConstraints: Set<string> = decl.getBlockConstraints();
-                if (blockConstraints.size > 0) {
-                    const blocksAll: boolean = blockConstraints.has('#all');
-                    if (blocksAll || blockConstraints.has('extension') || blockConstraints.has('restriction')) {
+                const finalBlockedMethod: string | undefined = this.getFinalBlockedMethod(xsiTypeLocalName, declaredTypeName);
+                if (finalBlockedMethod !== undefined) {
+                    return ValidationResult.error(
+                        'xsi:type "' + xsiTypeLocalName + '" is not validly derived: type "' +
+                        declaredTypeName + '" has final="' + finalBlockedMethod + '"'
+                    );
+                }
+                // Effective block is union of element's {disallowed substitutions} and
+                // the declared type's {prohibited substitutions} — spec §3.9.4 / §3.3.4.
+                const typeDecl: SchemaElementDecl | undefined = this.complexTypeDecls.get(declaredTypeName);
+                const elementBlock: Set<string> = decl.getBlockConstraints();
+                const typeBlock: Set<string> = typeDecl !== undefined ? typeDecl.getBlockConstraints() : new Set<string>();
+                const effectiveBlock: Set<string> = new Set<string>([...elementBlock, ...typeBlock]);
+                if (effectiveBlock.size > 0) {
+                    const blocksAll: boolean = effectiveBlock.has('#all');
+                    if (blocksAll || effectiveBlock.has('extension') || effectiveBlock.has('restriction')) {
                         const pathMethods: Set<string> = this.getPathMethods(xsiTypeLocalName, declaredTypeName);
                         if (pathMethods.size > 0) {
                             if (blocksAll) {
                                 return ValidationResult.error(
-                                    'Element "' + element + '" blocks all type derivation; xsi:type "' +
-                                    xsiTypeLocalName + '" is not permitted'
+                                    'xsi:type "' + xsiTypeLocalName + '" is blocked by type "' +
+                                    declaredTypeName + '"'
                                 );
                             }
                             for (const m of pathMethods) {
-                                if (blockConstraints.has(m)) {
+                                if (effectiveBlock.has(m)) {
                                     return ValidationResult.error(
-                                        'Element "' + element + '" blocks derivation by "' + m +
-                                        '"; xsi:type "' + xsiTypeLocalName + '" is not permitted'
+                                        'xsi:type "' + xsiTypeLocalName + '" is blocked: derivation by "' +
+                                        m + '" is prohibited'
                                     );
                                 }
                             }
@@ -251,6 +577,24 @@ export class SchemaGrammar implements Grammar {
                         'Invalid value "' + attrValue + '" for attribute "' + attrName +
                         '" of type "' + attrDecl.getType() + '" in element "' + element + '"'
                     );
+                }
+                const attrTypeLocal: string = this.localName(attrDecl.getType());
+                if (attrTypeLocal === 'ID' || this.isTypeDerivedFrom(attrTypeLocal, 'ID')) {
+                    if (this.seenIds.has(attrValue)) {
+                        return ValidationResult.error(
+                            'Duplicate xs:ID value "' + attrValue + '" on attribute "' + attrName +
+                            '" of element "' + element + '"'
+                        );
+                    }
+                    this.seenIds.add(attrValue);
+                } else if (attrTypeLocal === 'IDREF' || this.isTypeDerivedFrom(attrTypeLocal, 'IDREF')) {
+                    this.pendingIdrefs.push(attrValue);
+                } else if (attrTypeLocal === 'IDREFS') {
+                    for (const token of attrValue.trim().split(/\s+/)) {
+                        if (token.length > 0) {
+                            this.pendingIdrefs.push(token);
+                        }
+                    }
                 }
                 continue;
             }
@@ -320,6 +664,30 @@ export class SchemaGrammar implements Grammar {
                 return ValidationResult.error(
                     'Required attribute "' + declaredName + '" is missing from element "' + element + '"'
                 );
+            }
+        }
+
+        const identityConstraints: IdentityConstraint[] | undefined = decl.getIdentityConstraints();
+        if (identityConstraints !== undefined) {
+            for (const constraint of identityConstraints) {
+                const selectorSegments: string[] = this.parseSelectorSegments(constraint.selector);
+                const scope: IdentityConstraintScope = {
+                    constraint,
+                    rootDepth: currentDepth,
+                    selectorSegments,
+                    pendingTuple: undefined,
+                    lastCommittedTuple: undefined,
+                    pendingDepth: -1,
+                    pendingTupleOverflow: false,
+                    tuples: [],
+                };
+                if (selectorSegments.length === 0) {
+                    scope.pendingTuple = new Array<string | undefined>(constraint.fields.length).fill(undefined);
+                    scope.pendingDepth = currentDepth;
+                    scope.pendingTupleOverflow = false;
+                    this.collectAttributeFields(scope, attributes, this.localName(element));
+                }
+                this.activeScopes.push(scope);
             }
         }
 
@@ -514,6 +882,35 @@ export class SchemaGrammar implements Grammar {
         return undefined;
     }
 
+    private getFinalBlockedMethod(candidate: string, required: string): string | undefined {
+        const requiredDecl: SchemaElementDecl | undefined =
+            this.complexTypeDecls.get(required) ?? this.simpleTypeDecls.get(required);
+        if (requiredDecl === undefined) {
+            return undefined;
+        }
+        const finalSet: Set<string> = requiredDecl.getFinalConstraints();
+        if (finalSet.size === 0) {
+            return undefined;
+        }
+        let current: string | undefined = candidate;
+        const visited: Set<string> = new Set<string>();
+        while (current !== undefined && current !== required) {
+            if (visited.has(current)) {
+                break;
+            }
+            visited.add(current);
+            const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
+            if (!entry) {
+                break;
+            }
+            if (finalSet.has('#all') || finalSet.has(entry.method)) {
+                return entry.method;
+            }
+            current = entry.base;
+        }
+        return undefined;
+    }
+
     private isTypeDerivedFrom(candidate: string, required: string): boolean {
         if (candidate === required) {
             return true;
@@ -533,7 +930,7 @@ export class SchemaGrammar implements Grammar {
             }
             visited.add(current);
             const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
-            current = entry ? entry.base : undefined;
+            current = entry ? entry.base : BUILTIN_TYPE_HIERARCHY.get(current);
         }
         return false;
     }
@@ -554,13 +951,241 @@ export class SchemaGrammar implements Grammar {
             }
             visited.add(current);
             const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
-            if (!entry) {
-                break;
+            if (entry) {
+                methods.add(entry.method);
+                current = entry.base;
+            } else {
+                const builtinBase: string | undefined = BUILTIN_TYPE_HIERARCHY.get(current);
+                if (builtinBase) {
+                    methods.add('restriction');
+                    current = builtinBase;
+                } else {
+                    break;
+                }
             }
-            methods.add(entry.method);
-            current = entry.base;
         }
         // Did not reach required — type is not derived; return empty set.
         return new Set<string>();
+    }
+
+    private parseSelectorSegments(selector: string): string[] {
+        const trimmed: string = selector.trim();
+        const relative: string = trimmed.startsWith('./') ? trimmed.substring(2) : trimmed;
+        if (relative === '.' || relative === '') {
+            return [];
+        }
+        const steps: string[] = relative.split('/');
+        const segments: string[] = [];
+        for (const step of steps) {
+            const s: string = step.trim();
+            if (s === '' || s === '.') {
+                continue;
+            }
+            if (s === '*') {
+                segments.push('*');
+            } else {
+                const colonIdx: number = s.indexOf(':');
+                segments.push(colonIdx !== -1 ? s.substring(colonIdx + 1) : s);
+            }
+        }
+        return segments;
+    }
+
+    private selectorMatches(segments: string[], relativePath: string[]): boolean {
+        if (segments.length !== relativePath.length) {
+            return false;
+        }
+        for (let i: number = 0; i < segments.length; i++) {
+            if (segments[i] !== '*' && segments[i] !== relativePath[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private parseFieldPath(field: string): {isAttribute: boolean, localName: string} {
+        const trimmed: string = field.trim();
+        const withoutSelf: string = trimmed.startsWith('./') ? trimmed.substring(2) : (trimmed === '.' ? '' : trimmed);
+        if (withoutSelf.startsWith('@')) {
+            const atName: string = withoutSelf.substring(1);
+            const colonIdx: number = atName.indexOf(':');
+            return {isAttribute: true, localName: colonIdx !== -1 ? atName.substring(colonIdx + 1) : atName};
+        }
+        const colonIdx: number = withoutSelf.indexOf(':');
+        return {isAttribute: false, localName: colonIdx !== -1 ? withoutSelf.substring(colonIdx + 1) : withoutSelf};
+    }
+
+    private parseFieldAlternatives(field: string): Array<{isAttribute: boolean, localName: string}> {
+        return field.split('|').map((alt: string) => this.parseFieldPath(alt));
+    }
+
+    private collectAttributeFields(scope: IdentityConstraintScope, attributes: Map<string, string>, elementLocalName: string): void {
+        if (scope.pendingTuple === undefined) {
+            return;
+        }
+        const attrNs: Map<string, string> = new Map<string, string>();
+        if (this.instanceNsStack.length > 0) {
+            for (const [p, u] of this.instanceNsStack[this.instanceNsStack.length - 1]) {
+                attrNs.set(p, u);
+            }
+        }
+        for (const [attrName, attrValue] of attributes) {
+            if (attrName === 'xmlns') {
+                attrNs.set('', attrValue);
+            } else if (attrName.startsWith('xmlns:')) {
+                attrNs.set(attrName.substring(6), attrValue);
+            }
+        }
+        const elemDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
+        for (let i: number = 0; i < scope.constraint.fields.length; i++) {
+            const alternatives: Array<{isAttribute: boolean, localName: string}> = this.parseFieldAlternatives(scope.constraint.fields[i]);
+            for (const alt of alternatives) {
+                if (!alt.isAttribute) {
+                    continue;
+                }
+                for (const [attrName, attrValue] of attributes) {
+                    const attrLocal: string = this.localName(attrName);
+                    if (attrLocal === alt.localName) {
+                        const attrDecl: SchemaAttributeDecl | undefined = elemDecl?.getAttributeDecl(attrName) ?? elemDecl?.getAttributeDecl(attrLocal);
+                        const attrType: string = attrDecl !== undefined ? attrDecl.getType() : 'xs:string';
+                        scope.pendingTuple[i] = SchemaTypeValidator.canonicalize(attrValue, attrType, attrNs);
+                        break;
+                    }
+                }
+                if (scope.pendingTuple[i] !== undefined) {
+                    break;
+                }
+            }
+        }
+    }
+
+    private collectTextFields(scope: IdentityConstraintScope, elementLocalName: string, text: string, isSelf: boolean, nsMap?: Map<string, string>): void {
+        const tuple: Array<string | undefined> | undefined = isSelf ? scope.lastCommittedTuple : scope.pendingTuple;
+        if (tuple === undefined) {
+            return;
+        }
+        const fields: string[] = scope.constraint.fields;
+        for (let i: number = 0; i < fields.length; i++) {
+            const alternatives: Array<{isAttribute: boolean, localName: string}> = this.parseFieldAlternatives(fields[i]);
+            for (const alt of alternatives) {
+                if (alt.isAttribute) {
+                    continue;
+                }
+                const matches: boolean = isSelf
+                    ? (alt.localName === '' || alt.localName === '.')
+                    : (alt.localName === elementLocalName);
+                if (matches) {
+                    if (tuple[i] !== undefined) {
+                        if (!isSelf && scope.constraint.kind === 'key') {
+                            scope.pendingTupleOverflow = true;
+                        }
+                    } else {
+                        const elemDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
+                        const simpleType: string | undefined = elemDecl?.getSimpleType();
+                        const raw: string = text.trim();
+                        tuple[i] = simpleType !== undefined ? SchemaTypeValidator.canonicalize(raw, simpleType, nsMap) : raw;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    private tupleKey(tuple: Array<string | undefined>): string {
+        return tuple.map(v => v === undefined ? '\x00' : v).join('\x01');
+    }
+
+    private closeConstraintScopes(): string | undefined {
+        const closingDepth: number = this.lastClosedDepth;
+        let errorMessage: string | undefined = undefined;
+        for (const scope of this.activeScopes) {
+            if (scope.pendingTuple !== undefined && scope.pendingDepth === closingDepth) {
+                const tuple: Array<string | undefined> = scope.pendingTuple;
+                scope.lastCommittedTuple = tuple;
+                scope.pendingTuple = undefined;
+                if (scope.pendingTupleOverflow) {
+                    scope.pendingTupleOverflow = false;
+                    if (errorMessage === undefined) {
+                        errorMessage = 'xs:key "' + scope.constraint.name + '": selected node has multiple values for a field';
+                    }
+                    scope.tuples.push(tuple);
+                    continue;
+                }
+                const allAbsent: boolean = tuple.every(v => v === undefined);
+                if (allAbsent) {
+                    scope.tuples.push(tuple);
+                    continue;
+                }
+                const anyAbsent: boolean = tuple.some(v => v === undefined);
+                if (anyAbsent && scope.constraint.kind === 'key') {
+                    if (errorMessage === undefined) {
+                        errorMessage = 'xs:key "' + scope.constraint.name + '": selected node is missing one or more key field values';
+                    }
+                }
+                scope.tuples.push(tuple);
+            }
+        }
+        const removedScopes: IdentityConstraintScope[] = [];
+        let i: number = this.activeScopes.length - 1;
+        while (i >= 0) {
+            const scope: IdentityConstraintScope = this.activeScopes[i];
+            if (scope.rootDepth === closingDepth) {
+                this.activeScopes.splice(i, 1);
+                removedScopes.push(scope);
+            }
+            i--;
+        }
+        for (const scope of removedScopes) {
+            if (errorMessage !== undefined) {
+                break;
+            }
+            if (scope.constraint.kind === 'key' || scope.constraint.kind === 'unique') {
+                const seen: Set<string> = new Set<string>();
+                for (const tuple of scope.tuples) {
+                    const hasValue: boolean = tuple.some(v => v !== undefined);
+                    if (!hasValue) {
+                        continue;
+                    }
+                    const key: string = this.tupleKey(tuple);
+                    if (seen.has(key)) {
+                        errorMessage = 'xs:' + scope.constraint.kind + ' "' + scope.constraint.name + '": duplicate key value ' + JSON.stringify(key);
+                        break;
+                    }
+                    seen.add(key);
+                }
+                if (scope.constraint.kind === 'key') {
+                    this.completedKeys.set(scope.constraint.name, scope.tuples);
+                }
+            }
+        }
+        for (const scope of removedScopes) {
+            if (errorMessage !== undefined) {
+                break;
+            }
+            if (scope.constraint.kind === 'keyref') {
+                const referName: string | undefined = scope.constraint.refer;
+                if (referName !== undefined) {
+                    const keyTuples: Array<Array<string | undefined>> | undefined = this.completedKeys.get(referName);
+                    if (keyTuples !== undefined) {
+                        const keySet: Set<string> = new Set<string>();
+                        for (const kt of keyTuples) {
+                            keySet.add(this.tupleKey(kt));
+                        }
+                        for (const tuple of scope.tuples) {
+                            const hasValue: boolean = tuple.some(v => v !== undefined);
+                            if (!hasValue) {
+                                continue;
+                            }
+                            const key: string = this.tupleKey(tuple);
+                            if (!keySet.has(key)) {
+                                errorMessage = 'xs:keyref "' + scope.constraint.name + '": value ' + JSON.stringify(key) + ' has no matching xs:key "' + referName + '"';
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return errorMessage;
     }
 }

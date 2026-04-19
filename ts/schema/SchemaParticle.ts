@@ -20,9 +20,9 @@ export abstract class SchemaParticle {
         this.maxOccurs = maxOccurs;
     }
 
-    abstract matchOnce(children: string[], pos: number): number[];
+    abstract matchOnce(children: string[], pos: number, nsMap?: Map<string, string>): number[];
 
-    matchRepeated(children: string[], startPos: number): number[] {
+    matchRepeated(children: string[], startPos: number, nsMap?: Map<string, string>): number[] {
         const max: number = this.maxOccurs === 'unbounded' ? children.length + 1 : this.maxOccurs;
         let currentPositions: Set<number> = new Set<number>([startPos]);
         const results: Set<number> = new Set<number>();
@@ -34,7 +34,7 @@ export abstract class SchemaParticle {
         for (let count: number = 1; count <= max; count++) {
             const nextPositions: Set<number> = new Set<number>();
             for (const pos of currentPositions) {
-                const matched: number[] = this.matchOnce(children, pos);
+                const matched: number[] = this.matchOnce(children, pos, nsMap);
                 for (const p of matched) {
                     nextPositions.add(p);
                 }

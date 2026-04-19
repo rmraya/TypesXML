@@ -217,6 +217,16 @@ export class XMLElement implements XMLNode {
         return result;
     }
 
+    pureText(): string {
+        let result: string = '';
+        this.content.forEach((node: XMLNode) => {
+            if (node instanceof TextNode) {
+                result += node.getValue();
+            }
+        });
+        return result;
+    }
+
     getPI(target: string): ProcessingInstruction | undefined {
         let result: ProcessingInstruction | undefined = undefined;
         let length: number = this.content.length;

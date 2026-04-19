@@ -11,7 +11,11 @@
  *******************************************************************************/
 
 import { ValidationResult } from '../grammar/Grammar.js';
+import { SchemaAll } from './SchemaAll.js';
+import { SchemaChoice } from './SchemaChoice.js';
 import { SchemaParticle } from './SchemaParticle.js';
+import { SchemaSequence } from './SchemaSequence.js';
+import { SchemaWildcardParticle } from './SchemaWildcardParticle.js';
 
 export enum SchemaContentModelType {
     EMPTY = 'EMPTY',
@@ -54,7 +58,37 @@ export class SchemaContentModel {
         return new SchemaContentModel(SchemaContentModelType.ELEMENT, rootParticle);
     }
 
-    validateChildren(elementName: string, children: string[]): ValidationResult {
+    findCoveringWildcard(childName: string, nsMap?: Map<string, string>): 'strict' | 'lax' | 'skip' | undefined {
+        if (!this.rootParticle) {
+            return undefined;
+        }
+        return SchemaContentModel.walkParticleForWildcard(this.rootParticle, childName, nsMap);
+    }
+
+    private static walkParticleForWildcard(
+        particle: SchemaParticle,
+        childName: string,
+        nsMap?: Map<string, string>
+    ): 'strict' | 'lax' | 'skip' | undefined {
+        if (particle instanceof SchemaWildcardParticle) {
+            const matched: number[] = particle.matchOnce([childName], 0, nsMap);
+            if (matched.length > 0) {
+                return particle.processContents;
+            }
+            return undefined;
+        }
+        if (particle instanceof SchemaSequence || particle instanceof SchemaChoice || particle instanceof SchemaAll) {
+            for (const child of particle.particles) {
+                const result: 'strict' | 'lax' | 'skip' | undefined = SchemaContentModel.walkParticleForWildcard(child, childName, nsMap);
+                if (result !== undefined) {
+                    return result;
+                }
+            }
+        }
+        return undefined;
+    }
+
+    validateChildren(elementName: string, children: string[], nsMap?: Map<string, string>): ValidationResult {
         if (this.type === SchemaContentModelType.EMPTY) {
             if (children.length > 0) {
                 return ValidationResult.error(
@@ -88,7 +122,7 @@ export class SchemaContentModel {
 
         // Run the NFA: success when the root particle's matchRepeated can reach
         // exactly children.length (all children consumed).
-        const positions: number[] = this.rootParticle.matchRepeated(children, 0);
+        const positions: number[] = this.rootParticle.matchRepeated(children, 0, nsMap);
         for (const p of positions) {
             if (p === children.length) {
                 return ValidationResult.success();

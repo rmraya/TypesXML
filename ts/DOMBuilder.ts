@@ -91,6 +91,13 @@ export class DOMBuilder implements ContentHandler {
         this.stack.pop();
     }
 
+    getCurrentText(): string {
+        if (this.stack.length > 0) {
+            return this.stack[this.stack.length - 1].pureText();
+        }
+        return '';
+    }
+
     internalSubset(declaration: string): void {
         let docType: XMLDocumentType | undefined = this.document?.getDocumentType();
         if (docType) {

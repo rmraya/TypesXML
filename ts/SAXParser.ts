@@ -64,7 +64,6 @@ export class SAXParser {
     elementStack: number;
     elementNameStack: string[] = [];
     childrenNames: Array<string[]> = [];
-    textContentStack: string[] = [];
     characterRun: string;
     rootParsed: boolean;
     xmlVersion: string;
@@ -97,7 +96,6 @@ export class SAXParser {
         this.elementStack = 0;
         this.elementNameStack = [];
         this.childrenNames = [];
-        this.textContentStack = [];
         this.pointer = 0;
         this.rootParsed = false;
         this.xmlVersion = '1.0';
@@ -233,7 +231,6 @@ export class SAXParser {
         this.elementStack = 0;
         this.elementNameStack = [];
         this.childrenNames = [];
-        this.textContentStack = [];
         this.characterRun = '';
         this.rootParsed = false;
         this.xmlVersion = '1.0';
@@ -720,7 +717,6 @@ export class SAXParser {
             }
             // Push a new empty array for this element's children
             this.childrenNames.push([]);
-            this.textContentStack.push('');
 
             this.contentHandler?.startElement(name, attributes);
             this.elementStack++;
@@ -735,7 +731,6 @@ export class SAXParser {
                 this.elementStack--;
                 this.elementNameStack.pop();
                 this.childrenNames.pop();
-                this.textContentStack.pop();
                 if (namespacePushed && this.namespaceContextStack.length > 0) {
                     this.namespaceContextStack.pop();
                     namespacePushed = false;
@@ -819,9 +814,6 @@ export class SAXParser {
         if (this.childrenNames.length > 0) {
             this.childrenNames.pop();
         }
-        if (this.textContentStack.length > 0) {
-            this.textContentStack.pop();
-        }
         if (this.namespaceContextStack.length > 0) {
             this.namespaceContextStack.pop();
         }
@@ -840,7 +832,7 @@ export class SAXParser {
                 throw new Error('Element validation failed for element "' + name + '": ' + errorMessages);
             }
             if (this.validating) {
-                const text: string = this.textContentStack.length > 0 ? this.textContentStack[this.textContentStack.length - 1] : '';
+                const text: string = this.contentHandler ? this.contentHandler.getCurrentText() : '';
                 const textValidationResult = grammar.validateTextContent(name, text);
                 if (!textValidationResult.isValid) {
                     const errorMessages: string = textValidationResult.errors.map(e => e.message).join('; ');
@@ -1286,9 +1278,6 @@ export class SAXParser {
                     this.contentHandler?.ignorableWhitespace(this.characterRun);
                 } else {
                     // in an element
-                    if (this.textContentStack.length > 0) {
-                        this.textContentStack[this.textContentStack.length - 1] += this.characterRun;
-                    }
                     this.contentHandler?.characters(this.characterRun);
                 }
             } else {

@@ -12,6 +12,7 @@
 
 import { XMLAttribute } from '../XMLAttribute.js';
 import { XMLElement } from '../XMLElement.js';
+import { XMLUtils } from '../XMLUtils.js';
 
 const NAMED_COMPONENTS: Set<string> = new Set<string>([
     'element',
@@ -22,9 +23,6 @@ const NAMED_COMPONENTS: Set<string> = new Set<string>([
     'attributeGroup',
     'notation'
 ]);
-
-const NC_NAME_PATTERN: RegExp =
-    /^[A-Za-z_\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD][A-Za-z0-9_\-\.\u00B7\u0300-\u036F\u203F-\u2040\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD]*$/;
 
 // XML Schema built-in types whose variety is list (spec §2.5.1.2).
 const BUILT_IN_LIST_TYPES: Set<string> = new Set<string>(['IDREFS', 'NMTOKENS', 'ENTITIES']);
@@ -67,9 +65,15 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkIncludeRedefine(schemaRoot);
         XSDSemanticValidator.checkDuplicateImports(schemaRoot);
         XSDSemanticValidator.checkFacetValues(schemaRoot);
+        XSDSemanticValidator.checkAllNesting(schemaRoot, false);
         const simpleTypes: Map<string, XMLElement> = XSDSemanticValidator.collectSimpleTypes(schemaRoot);
         XSDSemanticValidator.checkSimpleTypeRestrictions(schemaRoot, simpleTypes);
         XSDSemanticValidator.checkFinalConstraints(schemaRoot, simpleTypes);
+        XSDSemanticValidator.checkElementValueConstraints(schemaRoot, simpleTypes);
+        const complexTypes: Map<string, XMLElement> = XSDSemanticValidator.collectComplexTypes(schemaRoot);
+        XSDSemanticValidator.checkComplexTypeFinalConstraints(schemaRoot, complexTypes);
+        XSDSemanticValidator.checkKeyrefReferences(schemaRoot);
+        XSDSemanticValidator.checkIdentityConstraintPlacement(schemaRoot, false);
     }
 
     private static checkNamedComponents(schemaRoot: XMLElement): void {
@@ -83,7 +87,7 @@ export class XSDSemanticValidator {
                 throw new Error('xs:' + localName + ' is missing required "name" attribute');
             }
             const value: string = nameAttr.getValue();
-            if (!XSDSemanticValidator.isNCName(value)) {
+            if (!XMLUtils.isValidNCName(value)) {
                 throw new Error('xs:' + localName + ' has invalid "name" value: "' + value + '"');
             }
         }
@@ -139,7 +143,7 @@ export class XSDSemanticValidator {
         const idAttr: XMLAttribute | undefined = el.getAttribute('id');
         if (idAttr) {
             const value: string = idAttr.getValue();
-            if (!XSDSemanticValidator.isNCName(value)) {
+            if (!XMLUtils.isValidNCName(value)) {
                 throw new Error('Invalid "id" attribute value: "' + value + '"');
             }
         }
@@ -341,6 +345,61 @@ export class XSDSemanticValidator {
         }
     }
 
+    private static collectComplexTypes(schemaRoot: XMLElement): Map<string, XMLElement> {
+        const map: Map<string, XMLElement> = new Map<string, XMLElement>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'complexType') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (nameAttr) {
+                    map.set(nameAttr.getValue(), child);
+                }
+            }
+        }
+        return map;
+    }
+
+    private static checkComplexTypeFinalConstraints(schemaRoot: XMLElement, complexTypes: Map<string, XMLElement>): void {
+        const finalDefaultAttr: XMLAttribute | undefined = schemaRoot.getAttribute('finalDefault');
+        const schemaFinalDefault: string = finalDefaultAttr ? finalDefaultAttr.getValue() : '';
+        for (const typeEl of complexTypes.values()) {
+            for (const contentChild of typeEl.getChildren()) {
+                const contentLocal: string = XSDSemanticValidator.localName(contentChild.getName());
+                if (contentLocal !== 'complexContent' && contentLocal !== 'simpleContent') {
+                    continue;
+                }
+                for (const derivChild of contentChild.getChildren()) {
+                    const derivLocal: string = XSDSemanticValidator.localName(derivChild.getName());
+                    if (derivLocal !== 'extension' && derivLocal !== 'restriction') {
+                        continue;
+                    }
+                    const baseAttr: XMLAttribute | undefined = derivChild.getAttribute('base');
+                    if (!baseAttr) {
+                        continue;
+                    }
+                    const baseLocal: string = XSDSemanticValidator.localName(baseAttr.getValue());
+                    const baseEl: XMLElement | undefined = complexTypes.get(baseLocal);
+                    if (!baseEl) {
+                        continue;
+                    }
+                    const finalAttr: XMLAttribute | undefined = baseEl.getAttribute('final');
+                    const effectiveFinal: string = finalAttr ? finalAttr.getValue() : schemaFinalDefault;
+                    if (effectiveFinal.length === 0) {
+                        continue;
+                    }
+                    const finalValues: string[] = effectiveFinal.split(/\s+/);
+                    if (finalValues.indexOf('#all') !== -1 || finalValues.indexOf(derivLocal) !== -1) {
+                        const typeName: string | undefined = typeEl.getAttribute('name')?.getValue();
+                        throw new Error(
+                            'Type "' + (typeName !== undefined ? typeName : '(anonymous)') +
+                            '" cannot derive by ' + derivLocal + ' from "' + baseLocal +
+                            '": final="' + effectiveFinal + '" prohibits it'
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // --- Simple type variety resolution ---
 
     private static collectSimpleTypes(schemaRoot: XMLElement): Map<string, XMLElement> {
@@ -470,11 +529,153 @@ export class XSDSemanticValidator {
         }
     }
 
-    private static isNCName(value: string): boolean {
-        if (value.length === 0) {
+    private static isIdType(typeName: string, simpleTypes: Map<string, XMLElement>, visited: Set<string>): boolean {
+        const local: string = XSDSemanticValidator.localName(typeName);
+        if (local === 'ID') {
+            return true;
+        }
+        const typeEl: XMLElement | undefined = simpleTypes.get(local);
+        if (!typeEl || visited.has(local)) {
             return false;
         }
-        return NC_NAME_PATTERN.test(value);
+        visited.add(local);
+        for (const child of typeEl.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'restriction') {
+                const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
+                if (baseAttr) {
+                    return XSDSemanticValidator.isIdType(baseAttr.getValue(), simpleTypes, visited);
+                }
+            }
+        }
+        return false;
+    }
+
+    private static checkElementValueConstraints(el: XMLElement, simpleTypes: Map<string, XMLElement>): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'element') {
+            const hasFixed: boolean = el.getAttribute('fixed') !== undefined;
+            const hasDefault: boolean = el.getAttribute('default') !== undefined;
+            if (hasFixed || hasDefault) {
+                const typeAttr: XMLAttribute | undefined = el.getAttribute('type');
+                if (typeAttr && XSDSemanticValidator.isIdType(typeAttr.getValue(), simpleTypes, new Set<string>())) {
+                    const constraintKind: string = hasFixed ? 'fixed' : 'default';
+                    const elemName: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+                    throw new Error('Element "' + elemName + '" with xs:ID type may not have a "' + constraintKind + '" value constraint');
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkElementValueConstraints(child, simpleTypes);
+        }
+    }
+
+    private static checkAllNesting(el: XMLElement, insideCompositor: boolean): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (insideCompositor && local === 'all') {
+            throw new Error('xs:all may not appear inside xs:sequence or xs:choice');
+        }
+        const resetsContext: boolean = local === 'element' || local === 'complexType';
+        const isCompositor: boolean = local === 'sequence' || local === 'choice';
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkAllNesting(child, resetsContext ? false : (insideCompositor || isCompositor));
+        }
+    }
+
+    private static checkKeyrefReferences(schemaRoot: XMLElement): void {
+        const allConstraintNames: Set<string> = new Set<string>();
+        const keyUniqueNames: Set<string> = new Set<string>();
+        XSDSemanticValidator.collectKeyUniqueNames(schemaRoot, allConstraintNames, keyUniqueNames);
+        XSDSemanticValidator.validateKeyrefRefer(schemaRoot, keyUniqueNames);
+    }
+
+    private static collectKeyUniqueNames(el: XMLElement, allNames: Set<string>, keyUniqueNames: Set<string>): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'key' || local === 'unique' || local === 'keyref') {
+            const nameAttr: XMLAttribute | undefined = el.getAttribute('name');
+            if (nameAttr) {
+                const constraintName: string = nameAttr.getValue();
+                if (allNames.has(constraintName)) {
+                    throw new Error('Duplicate identity constraint name: "' + constraintName + '"');
+                }
+                allNames.add(constraintName);
+                if (local === 'key' || local === 'unique') {
+                    keyUniqueNames.add(constraintName);
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.collectKeyUniqueNames(child, allNames, keyUniqueNames);
+        }
+    }
+
+    private static validateKeyrefRefer(el: XMLElement, keyUniqueNames: Set<string>): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'keyref') {
+            const referAttr: XMLAttribute | undefined = el.getAttribute('refer');
+            if (referAttr) {
+                const referValue: string = referAttr.getValue();
+                const referLocal: string = XSDSemanticValidator.localName(referValue);
+                if (!keyUniqueNames.has(referLocal)) {
+                    const nameAttr: XMLAttribute | undefined = el.getAttribute('name');
+                    const keyrefName: string = nameAttr ? nameAttr.getValue() : '(anonymous)';
+                    throw new Error('xs:keyref "' + keyrefName + '" refers to undeclared key or unique: "' + referValue + '"');
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.validateKeyrefRefer(child, keyUniqueNames);
+        }
+    }
+
+    private static checkIdentityConstraintPlacement(el: XMLElement, parentIsElement: boolean): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'key' || local === 'unique' || local === 'keyref') {
+            if (!parentIsElement) {
+                throw new Error('xs:' + local + ' must be a direct child of xs:element');
+            }
+            const nameAttr: XMLAttribute | undefined = el.getAttribute('name');
+            if (nameAttr && !XMLUtils.isValidNCName(nameAttr.getValue())) {
+                throw new Error('xs:' + local + ' "name" attribute must be a valid NCName, got: "' + nameAttr.getValue() + '"');
+            }
+            let selectorCount: number = 0;
+            let fieldCount: number = 0;
+            for (const child of el.getChildren()) {
+                const childLocal: string = XSDSemanticValidator.localName(child.getName());
+                if (childLocal === 'selector') {
+                    selectorCount++;
+                    if (!child.getAttribute('xpath')) {
+                        throw new Error('xs:selector is missing required "xpath" attribute');
+                    }
+                } else if (childLocal === 'field') {
+                    fieldCount++;
+                    if (!child.getAttribute('xpath')) {
+                        throw new Error('xs:field is missing required "xpath" attribute');
+                    }
+                } else if (childLocal !== 'annotation') {
+                    throw new Error('xs:' + local + ' contains invalid child element xs:' + childLocal);
+                }
+            }
+            if (selectorCount !== 1) {
+                throw new Error('xs:' + local + ' must have exactly one xs:selector child');
+            }
+            if (fieldCount < 1) {
+                throw new Error('xs:' + local + ' must have at least one xs:field child');
+            }
+            return;
+        }
+        if (local === 'selector' || local === 'field') {
+            throw new Error('xs:' + local + ' must appear inside xs:key, xs:unique, or xs:keyref');
+        }
+        const isElement: boolean = local === 'element';
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkIdentityConstraintPlacement(child, isElement);
+        }
     }
 
     private static localName(name: string): string {

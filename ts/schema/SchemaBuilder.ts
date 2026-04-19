@@ -19,7 +19,7 @@ import { SchemaAll } from './SchemaAll.js';
 import { SchemaAttributeDecl } from './SchemaAttributeDecl.js';
 import { SchemaChoice } from './SchemaChoice.js';
 import { SchemaContentModel } from './SchemaContentModel.js';
-import { SchemaElementDecl } from './SchemaElementDecl.js';
+import { IdentityConstraint, SchemaElementDecl } from './SchemaElementDecl.js';
 import { SchemaElementParticle } from './SchemaElementParticle.js';
 import { SchemaFacets } from './SchemaTypeValidator.js';
 import { SchemaGrammar } from './SchemaGrammar.js';
@@ -37,17 +37,26 @@ export class SchemaBuilder extends XMLSchemaParser {
 
     private modelGroupDefinitions: Map<string, XMLElement>;
     private substitutionGroups: Map<string, Set<string>>;
+    private schemaBlockDefaults: Map<string, string>;
+    private schemaFinalDefaults: Map<string, string>;
+    private earlyTypeHierarchy: Map<string, {base: string, method: string}>;
 
     constructor(catalog?: Catalog) {
         super(catalog);
         this.modelGroupDefinitions = new Map<string, XMLElement>();
         this.substitutionGroups = new Map<string, Set<string>>();
+        this.schemaBlockDefaults = new Map<string, string>();
+        this.schemaFinalDefaults = new Map<string, string>();
+        this.earlyTypeHierarchy = new Map<string, {base: string, method: string}>();
     }
 
     buildGrammar(schemaPath: string): SchemaGrammar {
         this.resetWorkingState();
         this.modelGroupDefinitions = new Map<string, XMLElement>();
         this.substitutionGroups = new Map<string, Set<string>>();
+        this.schemaBlockDefaults = new Map<string, string>();
+        this.schemaFinalDefaults = new Map<string, string>();
+        this.earlyTypeHierarchy = new Map<string, {base: string, method: string}>();
         this.walkSchema(this.normalizePath(schemaPath));
 
         // Build substitution groups map: headLocalName -> set of member localNames.
@@ -84,6 +93,32 @@ export class SchemaBuilder extends XMLSchemaParser {
                 }
                 if (members.size !== before) {
                     changed = true;
+                }
+            }
+        }
+
+        // Pre-compute type hierarchy so buildParticleList can filter substitution group members
+        // by derivation method (block="extension" / block="restriction" on the head element).
+        for (const [key, typeElement] of this.complexTypeDefinitions) {
+            const pipeIdx: number = key.indexOf('|');
+            const typeLocalName: string = pipeIdx !== -1 ? key.substring(pipeIdx + 1) : key;
+            if (!this.earlyTypeHierarchy.has(typeLocalName)) {
+                const baseTypeInfo: {base: string, method: string} | undefined = this.findTypeBase(typeElement);
+                if (baseTypeInfo) {
+                    this.earlyTypeHierarchy.set(typeLocalName, baseTypeInfo);
+                }
+            }
+        }
+        for (const [key, typeElement] of this.simpleTypeDefinitions) {
+            const pipeIdx: number = key.indexOf('|');
+            const typeLocalName: string = pipeIdx !== -1 ? key.substring(pipeIdx + 1) : key;
+            if (!this.earlyTypeHierarchy.has(typeLocalName)) {
+                const restrictionEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'restriction');
+                if (restrictionEl) {
+                    const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
+                    if (baseAttr) {
+                        this.earlyTypeHierarchy.set(typeLocalName, {base: this.getLocalName(baseAttr.getValue()), method: 'restriction'});
+                    }
                 }
             }
         }
@@ -158,6 +193,72 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (anyAttributeNamespace !== undefined) {
                 decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents);
             }
+            const typeBlockAttr: XMLAttribute | undefined = typeElement.getAttribute('block');
+            const typeBlockSet: Set<string> = new Set<string>();
+            if (typeBlockAttr) {
+                const typeBlockVal: string = typeBlockAttr.getValue().trim();
+                if (typeBlockVal === '#all') {
+                    typeBlockSet.add('#all');
+                } else {
+                    for (const token of typeBlockVal.split(/\s+/)) {
+                        if (token) {
+                            typeBlockSet.add(token);
+                        }
+                    }
+                }
+            } else {
+                const defaultKey: string = typeNamespace !== undefined ? typeNamespace : '';
+                const blockDefault: string | undefined = this.schemaBlockDefaults.get(defaultKey);
+                if (blockDefault && blockDefault.length > 0) {
+                    if (blockDefault === '#all') {
+                        typeBlockSet.add('#all');
+                    } else {
+                        for (const token of blockDefault.split(/\s+/)) {
+                            if (token) {
+                                typeBlockSet.add(token);
+                            }
+                        }
+                    }
+                }
+            }
+            if (typeBlockSet.size > 0) {
+                decl.setBlockConstraints(typeBlockSet);
+            }
+            const typeAbstractAttr: XMLAttribute | undefined = typeElement.getAttribute('abstract');
+            if (typeAbstractAttr && typeAbstractAttr.getValue() === 'true') {
+                decl.setAbstract(true);
+            }
+            const typeFinalAttr: XMLAttribute | undefined = typeElement.getAttribute('final');
+            const typeFinalSet: Set<string> = new Set<string>();
+            if (typeFinalAttr) {
+                const typeFinalVal: string = typeFinalAttr.getValue().trim();
+                if (typeFinalVal === '#all') {
+                    typeFinalSet.add('#all');
+                } else {
+                    for (const token of typeFinalVal.split(/\s+/)) {
+                        if (token) {
+                            typeFinalSet.add(token);
+                        }
+                    }
+                }
+            } else {
+                const defaultKey: string = typeNamespace !== undefined ? typeNamespace : '';
+                const finalDefault: string | undefined = this.schemaFinalDefaults.get(defaultKey);
+                if (finalDefault && finalDefault.length > 0) {
+                    if (finalDefault === '#all') {
+                        typeFinalSet.add('#all');
+                    } else {
+                        for (const token of finalDefault.split(/\s+/)) {
+                            if (token) {
+                                typeFinalSet.add(token);
+                            }
+                        }
+                    }
+                }
+            }
+            if (typeFinalSet.size > 0) {
+                decl.setFinalConstraints(typeFinalSet);
+            }
             grammar.addComplexTypeDecl(typeLocalName, decl);
         }
 
@@ -174,6 +275,70 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (baseTypeInfo) {
                 grammar.addTypeHierarchyEntry(typeLocalName, baseTypeInfo.base, baseTypeInfo.method);
             }
+        }
+        // Also build type hierarchy from simple type definitions so that xsi:type can
+        // reference a simple type derived from the element's declared simple type.
+        for (const [key, typeElement] of this.simpleTypeDefinitions) {
+            const pipeIdx: number = key.indexOf('|');
+            const typeLocalName: string = pipeIdx !== -1 ? key.substring(pipeIdx + 1) : key;
+            if (processedHierarchy.has(typeLocalName)) {
+                continue;
+            }
+            processedHierarchy.add(typeLocalName);
+            const restrictionEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'restriction');
+            if (restrictionEl) {
+                const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
+                if (baseAttr) {
+                    grammar.addTypeHierarchyEntry(typeLocalName, this.getLocalName(baseAttr.getValue()), 'restriction');
+                }
+            }
+        }
+        // Build per-named-simpleType decls so validateTextContent can apply the substitute
+        // type's facets when xsi:type references a xs:simpleType (spec §3.9.4).
+        const processedSimpleDecls: Set<string> = new Set<string>();
+        for (const [key, typeElement] of this.simpleTypeDefinitions) {
+            const pipeIdx: number = key.indexOf('|');
+            const typeLocalName: string = pipeIdx !== -1 ? key.substring(pipeIdx + 1) : key;
+            if (processedSimpleDecls.has(typeLocalName)) {
+                continue;
+            }
+            processedSimpleDecls.add(typeLocalName);
+            const simpleDecl: SchemaElementDecl = new SchemaElementDecl(typeLocalName);
+            simpleDecl.setContentModel(SchemaContentModel.empty());
+            const unionMembersDecl: string[] = this.extractUnionMemberTypeNames(typeElement);
+            if (unionMembersDecl.length > 0) {
+                simpleDecl.setUnionMemberTypes(unionMembersDecl);
+            } else {
+                const listItemDecl: string | undefined = this.extractListItemTypeName(typeElement);
+                if (listItemDecl !== undefined) {
+                    simpleDecl.setListItemType(listItemDecl);
+                } else {
+                    const resolvedBase: string | undefined = this.resolveSimpleTypeBase(typeElement);
+                    if (resolvedBase) {
+                        simpleDecl.setSimpleType(resolvedBase);
+                    }
+                }
+            }
+            const facets: SchemaFacets = this.collectFacets(typeElement);
+            simpleDecl.setTextFacets(facets);
+            const simpleFinalAttr: XMLAttribute | undefined = typeElement.getAttribute('final');
+            if (simpleFinalAttr) {
+                const simpleFinalVal: string = simpleFinalAttr.getValue().trim();
+                const simpleFinalSet: Set<string> = new Set<string>();
+                if (simpleFinalVal === '#all') {
+                    simpleFinalSet.add('#all');
+                } else {
+                    for (const token of simpleFinalVal.split(/\s+/)) {
+                        if (token) {
+                            simpleFinalSet.add(token);
+                        }
+                    }
+                }
+                if (simpleFinalSet.size > 0) {
+                    simpleDecl.setFinalConstraints(simpleFinalSet);
+                }
+            }
+            grammar.addSimpleTypeDecl(typeLocalName, simpleDecl);
         }
 
         // Register element decls for inline element declarations found in groups and complex types.
@@ -237,6 +402,20 @@ export class SchemaBuilder extends XMLSchemaParser {
 
     protected override registerSchemaComponents(schemaElement: XMLElement, targetNamespace?: string): void {
         super.registerSchemaComponents(schemaElement, targetNamespace);
+        const blockDefaultAttr: XMLAttribute | undefined = schemaElement.getAttribute('blockDefault');
+        if (blockDefaultAttr) {
+            const key: string = targetNamespace !== undefined ? targetNamespace : '';
+            if (!this.schemaBlockDefaults.has(key)) {
+                this.schemaBlockDefaults.set(key, blockDefaultAttr.getValue().trim());
+            }
+        }
+        const finalDefaultAttr: XMLAttribute | undefined = schemaElement.getAttribute('finalDefault');
+        if (finalDefaultAttr) {
+            const key: string = targetNamespace !== undefined ? targetNamespace : '';
+            if (!this.schemaFinalDefaults.has(key)) {
+                this.schemaFinalDefaults.set(key, finalDefaultAttr.getValue().trim());
+            }
+        }
         // Also collect xs:group (model group) definitions that xs:sequence/choice/all may reference.
         for (const child of schemaElement.getChildren()) {
             if (this.getLocalName(child.getName()) !== 'group') {
@@ -270,6 +449,14 @@ export class SchemaBuilder extends XMLSchemaParser {
         if (abstractAttr && abstractAttr.getValue() === 'true') {
             decl.setAbstract(true);
         }
+        const nillableAttr: XMLAttribute | undefined = info.element.getAttribute('nillable');
+        if (nillableAttr && nillableAttr.getValue() === 'true') {
+            decl.setNillable(true);
+        }
+        const elementFixedAttr: XMLAttribute | undefined = info.element.getAttribute('fixed');
+        if (elementFixedAttr) {
+            decl.setFixedValue(elementFixedAttr.getValue());
+        }
         const blockAttr: XMLAttribute | undefined = info.element.getAttribute('block');
         if (blockAttr) {
             const blockVal: string = blockAttr.getValue().trim();
@@ -285,6 +472,24 @@ export class SchemaBuilder extends XMLSchemaParser {
             }
             if (blockSet.size > 0) {
                 decl.setBlockConstraints(blockSet);
+            }
+        } else {
+            const defaultKey: string = info.namespace !== undefined ? info.namespace : '';
+            const blockDefault: string | undefined = this.schemaBlockDefaults.get(defaultKey);
+            if (blockDefault && blockDefault.length > 0) {
+                const blockSet: Set<string> = new Set<string>();
+                if (blockDefault === '#all') {
+                    blockSet.add('#all');
+                } else {
+                    for (const token of blockDefault.split(/\s+/)) {
+                        if (token) {
+                            blockSet.add(token);
+                        }
+                    }
+                }
+                if (blockSet.size > 0) {
+                    decl.setBlockConstraints(blockSet);
+                }
             }
         }
         let typeElement: XMLElement | undefined;
@@ -323,10 +528,21 @@ export class SchemaBuilder extends XMLSchemaParser {
                 const localTypeName: string = this.getLocalName(typeValue);
                 const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localTypeName);
                 if (namedSimpleType) {
-                    // Resolve base xs: type so validateTextContent can use SchemaTypeValidator.
-                    const resolvedBase: string | undefined = this.resolveSimpleTypeBase(namedSimpleType);
-                    if (resolvedBase) {
-                        decl.setSimpleType(resolvedBase);
+                    // Detect union/list types and store their member/item type instead of resolving to xs:string.
+                    const unionMembers: string[] = this.extractUnionMemberTypeNames(namedSimpleType);
+                    if (unionMembers.length > 0) {
+                        decl.setUnionMemberTypes(unionMembers);
+                    } else {
+                        const listItem: string | undefined = this.extractListItemTypeName(namedSimpleType);
+                        if (listItem !== undefined) {
+                            decl.setListItemType(listItem);
+                        } else {
+                            // Resolve base xs: type so validateTextContent can use SchemaTypeValidator.
+                            const resolvedBase: string | undefined = this.resolveSimpleTypeBase(namedSimpleType);
+                            if (resolvedBase) {
+                                decl.setSimpleType(resolvedBase);
+                            }
+                        }
                     }
                     const facets: SchemaFacets = this.collectFacets(namedSimpleType);
                     decl.setTextFacets(facets);
@@ -339,15 +555,65 @@ export class SchemaBuilder extends XMLSchemaParser {
             const simpleTypeEl: XMLElement | undefined = this.findChildByLocalName(info.element, 'simpleType');
             if (simpleTypeEl) {
                 decl.setContentModel(SchemaContentModel.empty());
-                const resolvedBase2: string | undefined = this.resolveSimpleTypeBase(simpleTypeEl);
-                if (resolvedBase2) {
-                    decl.setSimpleType(resolvedBase2);
+                const unionMembers2: string[] = this.extractUnionMemberTypeNames(simpleTypeEl);
+                if (unionMembers2.length > 0) {
+                    decl.setUnionMemberTypes(unionMembers2);
+                } else {
+                    const listItem2: string | undefined = this.extractListItemTypeName(simpleTypeEl);
+                    if (listItem2 !== undefined) {
+                        decl.setListItemType(listItem2);
+                    } else {
+                        const resolvedBase2: string | undefined = this.resolveSimpleTypeBase(simpleTypeEl);
+                        if (resolvedBase2) {
+                            decl.setSimpleType(resolvedBase2);
+                        }
+                    }
                 }
                 const facets: SchemaFacets = this.collectFacets(simpleTypeEl);
                 decl.setTextFacets(facets);
             }
         }
         // No type, no inline complexType, no simpleType → leave the default ANY content model.
+
+        for (const child of info.element.getChildren()) {
+            const childLocal: string = this.getLocalName(child.getName());
+            if (childLocal !== 'key' && childLocal !== 'keyref' && childLocal !== 'unique') {
+                continue;
+            }
+            const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+            const selectorEl: XMLElement | undefined = this.findChildByLocalName(child, 'selector');
+            if (!nameAttr || !selectorEl) {
+                continue;
+            }
+            const xpathAttr: XMLAttribute | undefined = selectorEl.getAttribute('xpath');
+            if (!xpathAttr) {
+                continue;
+            }
+            const fields: string[] = [];
+            for (const fieldEl of child.getChildren()) {
+                if (this.getLocalName(fieldEl.getName()) === 'field') {
+                    const fieldXpathAttr: XMLAttribute | undefined = fieldEl.getAttribute('xpath');
+                    if (fieldXpathAttr) {
+                        fields.push(fieldXpathAttr.getValue().trim());
+                    }
+                }
+            }
+            const constraint: IdentityConstraint = {
+                name: nameAttr.getValue().trim(),
+                kind: childLocal as 'key' | 'keyref' | 'unique',
+                selector: xpathAttr.getValue().trim(),
+                fields,
+            };
+            if (childLocal === 'keyref') {
+                const referAttr: XMLAttribute | undefined = child.getAttribute('refer');
+                if (referAttr) {
+                    const referVal: string = referAttr.getValue().trim();
+                    const colonIdx: number = referVal.indexOf(':');
+                    constraint.refer = colonIdx !== -1 ? referVal.substring(colonIdx + 1) : referVal;
+                }
+            }
+            decl.addIdentityConstraint(constraint);
+        }
 
         return decl;
     }
@@ -472,9 +738,14 @@ export class SchemaBuilder extends XMLSchemaParser {
                     ? this.getLocalName(refAttr.getValue())
                     : nameAttr ? nameAttr.getValue() : undefined;
                 if (particleName) {
-                    const members: Set<string> | undefined = this.isSubstitutionBlocked(particleName)
-                        ? undefined
-                        : this.substitutionGroups.get(particleName);
+                    const headBlockSet: Set<string> = this.getElementBlockSet(particleName);
+                    let members: Set<string> | undefined;
+                    if (!headBlockSet.has('#all') && !headBlockSet.has('substitution')) {
+                        const allMembers: Set<string> | undefined = this.substitutionGroups.get(particleName);
+                        if (allMembers !== undefined) {
+                            members = this.filterMembersByBlock(particleName, headBlockSet, allMembers);
+                        }
+                    }
                     particles.push(new SchemaElementParticle(particleName, min, max, members));
                 }
             } else if (localName === 'any') {
@@ -484,7 +755,7 @@ export class SchemaBuilder extends XMLSchemaParser {
                 const pc: 'strict' | 'lax' | 'skip' = pcAttr
                     ? (pcAttr.getValue() as 'strict' | 'lax' | 'skip')
                     : 'strict';
-                particles.push(new SchemaWildcardParticle(ns, pc, min, max));
+                particles.push(new SchemaWildcardParticle(ns, pc, min, max, namespace));
             } else if (localName === 'sequence') {
                 particles.push(new SchemaSequence(this.buildParticleList(child, namespace), min, max));
             } else if (localName === 'choice') {
@@ -960,6 +1231,47 @@ export class SchemaBuilder extends XMLSchemaParser {
         return undefined;
     }
 
+    private extractUnionMemberTypeNames(simpleTypeEl: XMLElement): string[] {
+        const unionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'union');
+        if (!unionEl) {
+            return [];
+        }
+        const names: string[] = [];
+        const memberTypesAttr: XMLAttribute | undefined = unionEl.getAttribute('memberTypes');
+        if (memberTypesAttr) {
+            for (const name of memberTypesAttr.getValue().trim().split(/\s+/)) {
+                if (name) {
+                    names.push(name);
+                }
+            }
+        }
+        for (const child of unionEl.getChildren()) {
+            if (this.getLocalName(child.getName()) === 'simpleType') {
+                const base: string | undefined = this.resolveSimpleTypeBase(child);
+                if (base) {
+                    names.push(base);
+                }
+            }
+        }
+        return names;
+    }
+
+    private extractListItemTypeName(simpleTypeEl: XMLElement): string | undefined {
+        const listEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'list');
+        if (!listEl) {
+            return undefined;
+        }
+        const itemTypeAttr: XMLAttribute | undefined = listEl.getAttribute('itemType');
+        if (itemTypeAttr) {
+            return itemTypeAttr.getValue();
+        }
+        const inlineSimpleType: XMLElement | undefined = this.findChildByLocalName(listEl, 'simpleType');
+        if (inlineSimpleType) {
+            return this.resolveSimpleTypeBase(inlineSimpleType);
+        }
+        return undefined;
+    }
+
     private findTypeBase(typeElement: XMLElement): {base: string, method: string} | undefined {
         const complexContentEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'complexContent');
         if (complexContentEl) {
@@ -998,17 +1310,99 @@ export class SchemaBuilder extends XMLSchemaParser {
         return undefined;
     }
 
-    private isSubstitutionBlocked(elementLocalName: string): boolean {
-        for (const [, info] of this.elementDefinitions) {
+    private getElementBlockSet(elementLocalName: string): Set<string> {
+        for (const [namespace, info] of this.elementDefinitions) {
             if (info.localName === elementLocalName) {
                 const blockAttr: XMLAttribute | undefined = info.element.getAttribute('block');
-                if (!blockAttr) {
-                    return false;
+                let val: string;
+                if (blockAttr) {
+                    val = blockAttr.getValue().trim();
+                } else {
+                    const defaultKey: string = namespace !== undefined ? namespace : '';
+                    val = this.schemaBlockDefaults.get(defaultKey) ?? '';
                 }
-                const val: string = blockAttr.getValue().trim();
-                return val === '#all' || val.split(/\s+/).indexOf('substitution') !== -1;
+                const result: Set<string> = new Set<string>();
+                if (val === '#all') {
+                    result.add('#all');
+                } else {
+                    for (const token of val.split(/\s+/)) {
+                        if (token) {
+                            result.add(token);
+                        }
+                    }
+                }
+                return result;
             }
         }
+        return new Set<string>();
+    }
+
+    private getElementDeclaredType(localName: string): string | undefined {
+        for (const [, info] of this.elementDefinitions) {
+            if (info.localName === localName) {
+                const typeAttr: XMLAttribute | undefined = info.element.getAttribute('type');
+                if (typeAttr) {
+                    return this.getLocalName(typeAttr.getValue());
+                }
+                return undefined;
+            }
+        }
+        return undefined;
+    }
+
+    private isMemberTypeBlocked(
+        memberType: string,
+        headType: string,
+        blocksExtension: boolean,
+        blocksRestriction: boolean
+    ): boolean {
+        let current: string | undefined = memberType;
+        const visited: Set<string> = new Set<string>();
+        while (current !== undefined && current !== headType) {
+            if (visited.has(current)) {
+                break;
+            }
+            visited.add(current);
+            const entry: {base: string, method: string} | undefined = this.earlyTypeHierarchy.get(current);
+            if (!entry) {
+                break;
+            }
+            if (blocksExtension && entry.method === 'extension') {
+                return true;
+            }
+            if (blocksRestriction && entry.method === 'restriction') {
+                return true;
+            }
+            current = entry.base;
+        }
         return false;
+    }
+
+    private filterMembersByBlock(
+        headLocalName: string,
+        blockSet: Set<string>,
+        allMembers: Set<string>
+    ): Set<string> {
+        const blocksExtension: boolean = blockSet.has('#all') || blockSet.has('extension');
+        const blocksRestriction: boolean = blockSet.has('#all') || blockSet.has('restriction');
+        if (!blocksExtension && !blocksRestriction) {
+            return allMembers;
+        }
+        const headType: string | undefined = this.getElementDeclaredType(headLocalName);
+        if (headType === undefined) {
+            return allMembers;
+        }
+        const filtered: Set<string> = new Set<string>();
+        for (const member of allMembers) {
+            const memberType: string | undefined = this.getElementDeclaredType(member);
+            if (memberType === undefined) {
+                filtered.add(member);
+                continue;
+            }
+            if (!this.isMemberTypeBlocked(memberType, headType, blocksExtension, blocksRestriction)) {
+                filtered.add(member);
+            }
+        }
+        return filtered;
     }
 }

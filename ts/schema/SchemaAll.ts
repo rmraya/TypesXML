@@ -21,15 +21,15 @@ export class SchemaAll extends SchemaParticle {
         this.particles = particles;
     }
 
-    matchOnce(children: string[], pos: number): number[] {
+    matchOnce(children: string[], pos: number, nsMap?: Map<string, string>): number[] {
         const indices: number[] = [];
         for (let i: number = 0; i < this.particles.length; i++) {
             indices.push(i);
         }
-        return this.matchRemaining(children, pos, indices);
+        return this.matchRemaining(children, pos, indices, nsMap);
     }
 
-    private matchRemaining(children: string[], pos: number, remaining: number[]): number[] {
+    private matchRemaining(children: string[], pos: number, remaining: number[], nsMap?: Map<string, string>): number[] {
         const results: Set<number> = new Set<number>();
 
         // All remaining particles optional → current position is a valid end.
@@ -51,7 +51,7 @@ export class SchemaAll extends SchemaParticle {
         for (let i: number = 0; i < remaining.length; i++) {
             const idx: number = remaining[i];
             const particle: SchemaParticle = this.particles[idx];
-            const matched: number[] = particle.matchRepeated(children, pos);
+            const matched: number[] = particle.matchRepeated(children, pos, nsMap);
             for (const nextPos of matched) {
                 if (nextPos > pos) {
                     // Remove slot i from remaining and recurse.
@@ -61,7 +61,7 @@ export class SchemaAll extends SchemaParticle {
                             newRemaining.push(remaining[j]);
                         }
                     }
-                    const further: number[] = this.matchRemaining(children, nextPos, newRemaining);
+                    const further: number[] = this.matchRemaining(children, nextPos, newRemaining, nsMap);
                     for (const p of further) {
                         results.add(p);
                     }

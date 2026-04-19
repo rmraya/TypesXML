@@ -21,10 +21,10 @@ export class SchemaChoice extends SchemaParticle {
         this.particles = particles;
     }
 
-    matchOnce(children: string[], pos: number): number[] {
+    matchOnce(children: string[], pos: number, nsMap?: Map<string, string>): number[] {
         const results: Set<number> = new Set<number>();
         for (const particle of this.particles) {
-            const matched: number[] = particle.matchRepeated(children, pos);
+            const matched: number[] = particle.matchRepeated(children, pos, nsMap);
             for (const p of matched) {
                 results.add(p);
             }

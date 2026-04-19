@@ -10,6 +10,8 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
+import { XMLUtils } from '../XMLUtils.js';
+
 export interface SchemaFacets {
     enumeration?: string[];
     patterns?: string[][];
@@ -44,7 +46,7 @@ export class SchemaTypeValidator {
                 const group: string[] = facets.patterns[g];
                 let groupMatched: boolean = false;
                 for (let i: number = 0; i < group.length; i++) {
-                    if (new RegExp('^(?:' + SchemaTypeValidator.translateXsdPattern(group[i]) + ')$').test(value)) {
+                    if (new RegExp('^(?:' + SchemaTypeValidator.translateXsdPattern(group[i]) + ')$', 'u').test(value)) {
                         groupMatched = true;
                         break;
                     }
@@ -142,13 +144,17 @@ export class SchemaTypeValidator {
         return true;
     }
 
-    static validate(value: string, typeName: string): boolean {
+    static validate(value: string, typeName: string, instanceNs?: Map<string, string>): boolean {
         const colonIndex: number = typeName.indexOf(':');
         const localType: string = colonIndex !== -1 ? typeName.substring(colonIndex + 1) : typeName;
 
         switch (localType) {
             case 'string':
+                return true;
+            case 'error':
+                return false;
             case 'anyURI':
+                return SchemaTypeValidator.isAnyURI(value);
             case 'anySimpleType':
             case 'anyAtomicType':
                 return true;
@@ -200,12 +206,18 @@ export class SchemaTypeValidator {
             // Date/time primitives
             case 'dateTime':
                 return SchemaTypeValidator.isDateTime(value);
+            case 'dateTimeStamp':
+                return SchemaTypeValidator.isDateTimeStamp(value);
             case 'date':
                 return SchemaTypeValidator.isDate(value);
             case 'time':
                 return SchemaTypeValidator.isTime(value);
             case 'duration':
                 return SchemaTypeValidator.isDuration(value);
+            case 'dayTimeDuration':
+                return SchemaTypeValidator.isDayTimeDuration(value);
+            case 'yearMonthDuration':
+                return SchemaTypeValidator.isYearMonthDuration(value);
             case 'gYear':
                 return SchemaTypeValidator.isGYear(value);
             case 'gYearMonth':
@@ -219,24 +231,24 @@ export class SchemaTypeValidator {
 
             // Name / token types
             case 'Name':
-                return SchemaTypeValidator.isName(value);
+                return XMLUtils.isValidXMLName(value);
             case 'NCName':
             case 'ID':
             case 'IDREF':
             case 'ENTITY':
-                return SchemaTypeValidator.isNCName(value);
+                return XMLUtils.isValidNCName(value);
             case 'IDREFS':
             case 'ENTITIES':
-                return SchemaTypeValidator.isWhitespaceList(value, SchemaTypeValidator.isNCName);
+                return SchemaTypeValidator.isWhitespaceList(value, XMLUtils.isValidNCName);
             case 'NMTOKEN':
-                return SchemaTypeValidator.isNMTOKEN(value);
+                return XMLUtils.isValidNMTOKEN(value);
             case 'NMTOKENS':
-                return SchemaTypeValidator.isWhitespaceList(value, SchemaTypeValidator.isNMTOKEN);
+                return SchemaTypeValidator.isWhitespaceList(value, XMLUtils.isValidNMTOKEN);
             case 'language':
                 return SchemaTypeValidator.isLanguage(value);
             case 'QName':
             case 'NOTATION':
-                return SchemaTypeValidator.isQName(value);
+                return SchemaTypeValidator.isQName(value, instanceNs);
 
             default:
                 return true;
@@ -257,7 +269,81 @@ export class SchemaTypeValidator {
             .replace(/\\i/g, SchemaTypeValidator.XSD_I)
             .replace(/\\I/g, SchemaTypeValidator.XSD_NOT_I)
             .replace(/\\c/g, SchemaTypeValidator.XSD_C)
-            .replace(/\\C/g, SchemaTypeValidator.XSD_NOT_C);
+            .replace(/\\C/g, SchemaTypeValidator.XSD_NOT_C)
+            .replace(/\\p\{Is([^}]+)\}/g, (_m, name) => '\\p{Script=' + name + '}')
+            .replace(/\\P\{Is([^}]+)\}/g, (_m, name) => '\\P{Script=' + name + '}')
+            .replace(/\\p\{([^}]+)\}/g, (_m, name) => SchemaTypeValidator.xsdUnicodeCategory(name, false))
+            .replace(/\\P\{([^}]+)\}/g, (_m, name) => SchemaTypeValidator.xsdUnicodeCategory(name, true))
+            // Convert \X where X is not a valid JS Unicode-mode escape character to \xNN.
+            // Valid JS Unicode escapes after \: d D w W s S n r t f v b B u x p P 0-9
+            // and the syntax characters: ^ $ . | ? * + ( ) [ ] { } / \
+            .replace(/\\([^\\dDwWsSnrtfvbBuxpP0-9\^$.|?*+()[\]{}/])/g, (_m, ch) => {
+                return '\\x' + ch.charCodeAt(0).toString(16).padStart(2, '0');
+            });
+    }
+
+    private static xsdUnicodeCategory(name: string, negate: boolean): string {
+        const prefix: string = negate ? '\\P' : '\\p';
+        switch (name) {
+            case 'L': return prefix + '{L}';
+            case 'Lu': return prefix + '{Lu}';
+            case 'Ll': return prefix + '{Ll}';
+            case 'Lt': return prefix + '{Lt}';
+            case 'Lm': return prefix + '{Lm}';
+            case 'Lo': return prefix + '{Lo}';
+            case 'M': return prefix + '{M}';
+            case 'Mn': return prefix + '{Mn}';
+            case 'Mc': return prefix + '{Mc}';
+            case 'Me': return prefix + '{Me}';
+            case 'N': return prefix + '{N}';
+            case 'Nd': return prefix + '{Nd}';
+            case 'Nl': return prefix + '{Nl}';
+            case 'No': return prefix + '{No}';
+            case 'P': return prefix + '{P}';
+            case 'Pc': return prefix + '{Pc}';
+            case 'Pd': return prefix + '{Pd}';
+            case 'Ps': return prefix + '{Ps}';
+            case 'Pe': return prefix + '{Pe}';
+            case 'Pi': return prefix + '{Pi}';
+            case 'Pf': return prefix + '{Pf}';
+            case 'Po': return prefix + '{Po}';
+            case 'Z': return prefix + '{Z}';
+            case 'Zs': return prefix + '{Zs}';
+            case 'Zl': return prefix + '{Zl}';
+            case 'Zp': return prefix + '{Zp}';
+            case 'S': return prefix + '{S}';
+            case 'Sm': return prefix + '{Sm}';
+            case 'Sc': return prefix + '{Sc}';
+            case 'Sk': return prefix + '{Sk}';
+            case 'So': return prefix + '{So}';
+            case 'C': return prefix + '{C}';
+            case 'Cc': return prefix + '{Cc}';
+            case 'Cf': return prefix + '{Cf}';
+            case 'Co': return prefix + '{Co}';
+            case 'Cn': return prefix + '{Cn}';
+            default: return prefix + '{' + name + '}';
+        }
+    }
+
+    private static isAnyURI(value: string): boolean {
+        // XSD anyURI lexical space: any string that is a valid IRI reference per RFC 3987.
+        // Reject control characters (U+0000-U+001F, U+007F) which are never allowed in an IRI.
+        // Reject unbalanced brackets and fragment-invalid sequences.
+        if (/[\x00-\x1F\x7F]/.test(value)) {
+            return false;
+        }
+        // Check balanced square brackets (used only in IPv6 host).
+        const opens: number = (value.match(/\[/g) || []).length;
+        const closes: number = (value.match(/\]/g) || []).length;
+        if (opens !== closes) {
+            return false;
+        }
+        // Percent-encoded octets must be well-formed: %XX where X is hex.
+        const pct: RegExp = /%(?![0-9A-Fa-f]{2})/;
+        if (pct.test(value)) {
+            return false;
+        }
+        return true;
     }
 
     private static isBoolean(value: string): boolean {
@@ -269,7 +355,7 @@ export class SchemaTypeValidator {
     }
 
     private static isFloat(value: string): boolean {
-        if (value === 'INF' || value === '-INF' || value === 'NaN') {
+        if (value === 'INF' || value === '+INF' || value === '-INF' || value === 'NaN') {
             return true;
         }
         return /^[+-]?([0-9]+\.?[0-9]*|[0-9]*\.[0-9]+)([eE][+-]?[0-9]+)?$/.test(value);
@@ -349,11 +435,54 @@ export class SchemaTypeValidator {
         return days[month];
     }
 
+    private static isDateTimeStamp(value: string): boolean {
+        const m: RegExpMatchArray | null = value.match(
+            /^(-?)([0-9]{4,})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$/
+        );
+        if (!m) { return false; }
+        if (parseInt(m[2], 10) === 0) { return false; }
+        const year: number = parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
+        const month: number = parseInt(m[3], 10);
+        const day: number = parseInt(m[4], 10);
+        const hour: number = parseInt(m[5], 10);
+        const minute: number = parseInt(m[6], 10);
+        const second: number = parseFloat(m[7]);
+        if (month < 1 || month > 12) { return false; }
+        if (day < 1 || day > SchemaTypeValidator.daysInMonth(year, month)) { return false; }
+        if (hour === 24) {
+            if (minute !== 0 || second !== 0) { return false; }
+        } else if (hour > 23) {
+            return false;
+        }
+        if (minute > 59 || second >= 60) { return false; }
+        return SchemaTypeValidator.isValidTimezone(m[9]);
+    }
+
+    private static isDayTimeDuration(value: string): boolean {
+        if (value === 'P' || value === '-P') { return false; }
+        const m: RegExpMatchArray | null = value.match(
+            /^-?P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+(\.?[0-9]+)?S)?)?$/
+        );
+        if (!m) { return false; }
+        if (m[2] !== undefined && !m[3] && !m[4] && !m[5]) { return false; }
+        if (!m[1] && !m[2]) { return false; }
+        return true;
+    }
+
+    private static isYearMonthDuration(value: string): boolean {
+        if (value === 'P' || value === '-P') { return false; }
+        const m: RegExpMatchArray | null = value.match(/^-?P([0-9]+Y)?([0-9]+M)?$/);
+        if (!m) { return false; }
+        if (!m[1] && !m[2]) { return false; }
+        return true;
+    }
+
     private static isDateTime(value: string): boolean {
         const m: RegExpMatchArray | null = value.match(
             /^(-?)([0-9]{4,})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})?$/
         );
         if (!m) { return false; }
+        if (parseInt(m[2], 10) === 0) { return false; }
         const year: number = parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
         const month: number = parseInt(m[3], 10);
         const day: number = parseInt(m[4], 10);
@@ -377,6 +506,7 @@ export class SchemaTypeValidator {
             /^(-?)([0-9]{4,})-([0-9]{2})-([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?$/
         );
         if (!m) { return false; }
+        if (parseInt(m[2], 10) === 0) { return false; }
         const year: number = parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
         const month: number = parseInt(m[3], 10);
         const day: number = parseInt(m[4], 10);
@@ -417,14 +547,16 @@ export class SchemaTypeValidator {
     }
 
     private static isGYear(value: string): boolean {
-        const m: RegExpMatchArray | null = value.match(/^-?[0-9]{4,}(Z|[+-][0-9]{2}:[0-9]{2})?$/);
+        const m: RegExpMatchArray | null = value.match(/^(-?)([0-9]{4,})(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
-        return SchemaTypeValidator.isValidTimezone(m[1]);
+        if (parseInt(m[2], 10) === 0) { return false; }
+        return SchemaTypeValidator.isValidTimezone(m[3]);
     }
 
     private static isGYearMonth(value: string): boolean {
         const m: RegExpMatchArray | null = value.match(/^(-?)([0-9]{4,})-([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
+        if (parseInt(m[2], 10) === 0) { return false; }
         const month: number = parseInt(m[3], 10);
         if (month < 1 || month > 12) { return false; }
         return SchemaTypeValidator.isValidTimezone(m[4]);
@@ -456,30 +588,23 @@ export class SchemaTypeValidator {
         return SchemaTypeValidator.isValidTimezone(m[2]);
     }
 
-    private static isName(value: string): boolean {
-        return /^[:A-Za-z_\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD][:\-\.0-9A-Za-z_\u00B7\u0300-\u036F\u203F-\u2040\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD]*$/.test(value);
-    }
-
-    private static isNCName(value: string): boolean {
-        return /^[A-Za-z_\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD][A-Za-z0-9_\-\.\u00B7\u0300-\u036F\u203F-\u2040\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD]*$/.test(value);
-    }
-
-    private static isNMTOKEN(value: string): boolean {
-        if (value.length === 0) { return false; }
-        return new RegExp('^' + SchemaTypeValidator.XSD_C + '+$').test(value);
-    }
-
     private static isLanguage(value: string): boolean {
         return /^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$/.test(value);
     }
 
-    private static isQName(value: string): boolean {
+    private static isQName(value: string, instanceNs?: Map<string, string>): boolean {
         const parts: string[] = value.split(':');
         if (parts.length === 1) {
-            return SchemaTypeValidator.isNCName(parts[0]);
+            return XMLUtils.isValidNCName(parts[0]);
         }
         if (parts.length === 2) {
-            return SchemaTypeValidator.isNCName(parts[0]) && SchemaTypeValidator.isNCName(parts[1]);
+            if (!XMLUtils.isValidNCName(parts[0]) || !XMLUtils.isValidNCName(parts[1])) {
+                return false;
+            }
+            if (instanceNs !== undefined && !instanceNs.has(parts[0])) {
+                return false;
+            }
+            return true;
         }
         return false;
     }
@@ -777,5 +902,135 @@ export class SchemaTypeValidator {
             return numA < numB ? -1 : numA > numB ? 1 : 0;
         }
         return a < b ? -1 : a > b ? 1 : 0;
+    }
+
+    static canonicalize(value: string, typeName: string, nsMap?: Map<string, string>): string {
+        const colonIndex: number = typeName.indexOf(':');
+        const localType: string = colonIndex !== -1 ? typeName.substring(colonIndex + 1) : typeName;
+        switch (localType) {
+            case 'decimal':
+                return SchemaTypeValidator.canonicalDecimal(value);
+            case 'integer':
+            case 'long':
+            case 'int':
+            case 'short':
+            case 'byte':
+            case 'nonNegativeInteger':
+            case 'positiveInteger':
+            case 'unsignedLong':
+            case 'unsignedInt':
+            case 'unsignedShort':
+            case 'unsignedByte':
+            case 'nonPositiveInteger':
+            case 'negativeInteger':
+                return SchemaTypeValidator.canonicalInteger(value);
+            case 'float':
+            case 'double':
+                return SchemaTypeValidator.canonicalFloat(value);
+            case 'boolean':
+                if (value === '1') { return 'true'; }
+                if (value === '0') { return 'false'; }
+                return value;
+            case 'normalizedString':
+                return value.replace(/[\t\n\r]/g, ' ');
+            case 'token':
+            case 'language':
+            case 'Name':
+            case 'NCName':
+            case 'ID':
+            case 'IDREF':
+            case 'ENTITY':
+            case 'NMTOKEN':
+            case 'anyURI':
+            case 'IDREFS':
+            case 'ENTITIES':
+            case 'NMTOKENS':
+                return value.replace(/[\t\n\r ]+/g, ' ').trim();
+            case 'QName': {
+                const normalized: string = value.replace(/[\t\n\r ]+/g, ' ').trim();
+                if (nsMap !== undefined) {
+                    const qColon: number = normalized.indexOf(':');
+                    if (qColon !== -1) {
+                        const prefix: string = normalized.substring(0, qColon);
+                        const localPart: string = normalized.substring(qColon + 1);
+                        const nsUri: string | undefined = nsMap.get(prefix);
+                        if (nsUri !== undefined) {
+                            return '{' + nsUri + '}' + localPart;
+                        }
+                    } else {
+                        const defaultNs: string | undefined = nsMap.get('');
+                        if (defaultNs !== undefined) {
+                            return '{' + defaultNs + '}' + normalized;
+                        }
+                    }
+                }
+                return normalized;
+            }
+            case 'hexBinary':
+                return value.replace(/\s/g, '').toUpperCase();
+            case 'base64Binary':
+                return value.replace(/\s/g, '');
+            case 'dateTime':
+            case 'date':
+            case 'time':
+            case 'gYear':
+            case 'gYearMonth':
+            case 'gMonth':
+            case 'gMonthDay':
+            case 'gDay':
+            case 'dateTimeStamp':
+            case 'duration':
+            case 'dayTimeDuration':
+            case 'yearMonthDuration':
+                return SchemaTypeValidator.canonicalizeTemporal(value);
+            default:
+                return value;
+        }
+    }
+
+    private static canonicalDecimal(value: string): string {
+        const s: string = value.trim();
+        const negative: boolean = s.startsWith('-');
+        const unsigned: string = (s.startsWith('+') || s.startsWith('-')) ? s.substring(1) : s;
+        const dotIndex: number = unsigned.indexOf('.');
+        let intPart: string = dotIndex === -1 ? unsigned : unsigned.substring(0, dotIndex);
+        let fracPart: string = dotIndex === -1 ? '0' : unsigned.substring(dotIndex + 1);
+        intPart = intPart.replace(/^0+/, '') || '0';
+        fracPart = fracPart.replace(/0+$/, '') || '0';
+        const isZero: boolean = intPart === '0' && /^0*$/.test(fracPart);
+        if (isZero) {
+            return '0.0';
+        }
+        return (negative ? '-' : '') + intPart + '.' + fracPart;
+    }
+
+    private static canonicalInteger(value: string): string {
+        const s: string = value.trim();
+        const negative: boolean = s.startsWith('-');
+        const unsigned: string = (s.startsWith('+') || s.startsWith('-')) ? s.substring(1) : s;
+        const stripped: string = unsigned.replace(/^0+/, '') || '0';
+        if (stripped === '0') {
+            return '0';
+        }
+        return (negative ? '-' : '') + stripped;
+    }
+
+    private static canonicalFloat(value: string): string {
+        const trimmed: string = value.trim();
+        if (trimmed === 'INF' || trimmed === '+INF') { return 'INF'; }
+        if (trimmed === '-INF') { return '-INF'; }
+        if (trimmed === 'NaN') { return 'NaN'; }
+        return String(parseFloat(trimmed));
+    }
+
+    private static canonicalizeTemporal(value: string): string {
+        // Normalize timezone: +00:00 → Z.
+        let v: string = value.trim().replace(/\+00:00$/, 'Z');
+        // Strip trailing zeros from fractional seconds, e.g. .100 → .1, .000 → remove.
+        v = v.replace(/(\.[0-9]*?)0+(Z|[+-][0-9]{2}:[0-9]{2}|T|$)/, (_, frac, suffix) => {
+            const trimmed: string = frac.replace(/\.?0+$/, '');
+            return (trimmed === '.' ? '' : trimmed) + suffix;
+        });
+        return v;
     }
 }
