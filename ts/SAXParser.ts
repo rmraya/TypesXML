@@ -63,7 +63,6 @@ export class SAXParser {
     buffer: string = '';
     elementStack: number;
     elementNameStack: string[] = [];
-    nilStack: boolean[] = [];
     childrenNames: Array<string[]> = [];
     textContentStack: string[] = [];
     characterRun: string;
@@ -233,7 +232,6 @@ export class SAXParser {
         this.buffer = '';
         this.elementStack = 0;
         this.elementNameStack = [];
-        this.nilStack = [];
         this.childrenNames = [];
         this.textContentStack = [];
         this.characterRun = '';
@@ -727,7 +725,6 @@ export class SAXParser {
             this.contentHandler?.startElement(name, attributes);
             this.elementStack++;
             this.elementNameStack.push(name);
-            this.nilStack.push(this.isNilled(attributesMap, namespaceContext));
             if (!this.rootParsed) {
                 this.rootParsed = true;
             }
@@ -737,7 +734,6 @@ export class SAXParser {
                 this.contentHandler?.endElement(name);
                 this.elementStack--;
                 this.elementNameStack.pop();
-                this.nilStack.pop();
                 this.childrenNames.pop();
                 this.textContentStack.pop();
                 if (namespacePushed && this.namespaceContextStack.length > 0) {
@@ -826,9 +822,6 @@ export class SAXParser {
         if (this.textContentStack.length > 0) {
             this.textContentStack.pop();
         }
-        if (this.nilStack.length > 0) {
-            this.nilStack.pop();
-        }
         if (this.namespaceContextStack.length > 0) {
             this.namespaceContextStack.pop();
         }
@@ -838,9 +831,6 @@ export class SAXParser {
     }
 
     validateElement(name: string): void {
-        if (this.nilStack.length > 0 && this.nilStack[this.nilStack.length - 1]) {
-            return;
-        }
         const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
         if (grammar) {
             const actualChildrenNames: string[] = this.childrenNames.length > 0 ? this.childrenNames[this.childrenNames.length - 1] : [];
@@ -858,19 +848,6 @@ export class SAXParser {
                 }
             }
         }
-    }
-
-    private isNilled(attributes: Map<string, string>, namespaceContext: Map<string, string>): boolean {
-        for (const [prefix, uri] of namespaceContext) {
-            if (uri === Constants.XML_SCHEMA_INSTANCE_NS_URI) {
-                const nilKey: string = prefix ? prefix + ':nil' : 'nil';
-                const val: string | undefined = attributes.get(nilKey);
-                if (val === 'true' || val === '1') {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     getDefaultAttributes(elementName: string, attributes: Array<XMLAttribute>): Array<XMLAttribute> {
