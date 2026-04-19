@@ -35,13 +35,9 @@ export class SchemaTypeValidator {
         if (facets.patterns && facets.patterns.length > 0) {
             let matched: boolean = false;
             for (let i: number = 0; i < facets.patterns.length; i++) {
-                try {
-                    if (new RegExp('^(?:' + facets.patterns[i] + ')$').test(value)) {
-                        matched = true;
-                        break;
-                    }
-                } catch (e) {
-                    // Skip unrecognised XSD regex syntax.
+                if (new RegExp('^(?:' + SchemaTypeValidator.translateXsdPattern(facets.patterns[i]) + ')$').test(value)) {
+                    matched = true;
+                    break;
                 }
             }
             if (!matched) {
@@ -49,35 +45,49 @@ export class SchemaTypeValidator {
             }
         }
         if (facets.minExclusive !== undefined || facets.maxExclusive !== undefined ||
-                facets.minInclusive !== undefined || facets.maxInclusive !== undefined) {
-            const numValue: number = parseFloat(value);
-            const compare = (bound: string): number => {
-                const numBound: number = parseFloat(bound);
-                if (!isNaN(numValue) && !isNaN(numBound)) {
-                    // Use BigInt for integers that exceed JavaScript's safe integer range.
-                    if (/^-?[0-9]+$/.test(value) && /^-?[0-9]+$/.test(bound)) {
-                        try {
-                            const bigValue: bigint = BigInt(value);
-                            const bigBound: bigint = BigInt(bound);
-                            return bigValue < bigBound ? -1 : bigValue > bigBound ? 1 : 0;
-                        } catch (e) {
-                            // Fall through to float comparison.
-                        }
+            facets.minInclusive !== undefined || facets.maxInclusive !== undefined) {
+            const compare = (a: string, b: string): number => {
+                const decimalPattern: RegExp = /^-?[0-9]+(\.[0-9]+)?$/;
+                if (decimalPattern.test(a) && decimalPattern.test(b)) {
+                    try {
+                        const parseDecimal = (s: string): { negative: boolean; integer: bigint; fraction: string } => {
+                            const negative: boolean = s.startsWith('-');
+                            const abs: string = negative ? s.substring(1) : s;
+                            const dotIndex: number = abs.indexOf('.');
+                            const intPart: string = dotIndex === -1 ? abs : abs.substring(0, dotIndex);
+                            const fracPart: string = dotIndex === -1 ? '' : abs.substring(dotIndex + 1);
+                            return { negative, integer: BigInt(intPart), fraction: fracPart };
+                        };
+                        const padFraction = (frac: string, len: number): bigint => BigInt(frac.padEnd(len, '0').substring(0, len));
+                        const dA = parseDecimal(a);
+                        const dB = parseDecimal(b);
+                        const fracLen: number = Math.max(dA.fraction.length, dB.fraction.length);
+                        const scaleA: bigint = dA.integer * BigInt(10 ** fracLen) + padFraction(dA.fraction, fracLen);
+                        const scaleB: bigint = dB.integer * BigInt(10 ** fracLen) + padFraction(dB.fraction, fracLen);
+                        const signedA: bigint = dA.negative ? -scaleA : scaleA;
+                        const signedB: bigint = dB.negative ? -scaleB : scaleB;
+                        return signedA < signedB ? -1 : signedA > signedB ? 1 : 0;
+                    } catch (e) {
+                        // Fall through to float comparison.
                     }
-                    return numValue < numBound ? -1 : numValue > numBound ? 1 : 0;
                 }
-                return value < bound ? -1 : value > bound ? 1 : 0;
+                const numA: number = parseFloat(a);
+                const numB: number = parseFloat(b);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return numA < numB ? -1 : numA > numB ? 1 : 0;
+                }
+                return a < b ? -1 : a > b ? 1 : 0;
             };
-            if (facets.minExclusive !== undefined && compare(facets.minExclusive) <= 0) {
+            if (facets.minExclusive !== undefined && compare(value, facets.minExclusive) <= 0) {
                 return false;
             }
-            if (facets.maxExclusive !== undefined && compare(facets.maxExclusive) >= 0) {
+            if (facets.maxExclusive !== undefined && compare(value, facets.maxExclusive) >= 0) {
                 return false;
             }
-            if (facets.minInclusive !== undefined && compare(facets.minInclusive) < 0) {
+            if (facets.minInclusive !== undefined && compare(value, facets.minInclusive) < 0) {
                 return false;
             }
-            if (facets.maxInclusive !== undefined && compare(facets.maxInclusive) > 0) {
+            if (facets.maxInclusive !== undefined && compare(value, facets.maxInclusive) > 0) {
                 return false;
             }
         }
@@ -189,6 +199,19 @@ export class SchemaTypeValidator {
             default:
                 return true;
         }
+    }
+
+    private static readonly XSD_I: string = '[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:]';
+    private static readonly XSD_C: string = '[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:\\.\\-0-9\u00B7\u0300-\u036F\u203F-\u2040]';
+    private static readonly XSD_NOT_I: string = '[^A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:]';
+    private static readonly XSD_NOT_C: string = '[^A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:\\.\\-0-9\u00B7\u0300-\u036F\u203F-\u2040]';
+
+    private static translateXsdPattern(pattern: string): string {
+        return pattern
+            .replace(/\\i/g, SchemaTypeValidator.XSD_I)
+            .replace(/\\I/g, SchemaTypeValidator.XSD_NOT_I)
+            .replace(/\\c/g, SchemaTypeValidator.XSD_C)
+            .replace(/\\C/g, SchemaTypeValidator.XSD_NOT_C);
     }
 
     private static isBoolean(value: string): boolean {
