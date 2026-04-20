@@ -31,6 +31,8 @@ export class SchemaElementDecl {
     private anyAttribute: boolean = false;
     private anyAttributeNamespace: string = '##any';
     private anyAttributeProcessContents: string = 'strict';
+    private anyAttributeOwnerNs: string | undefined;
+    private anyAttributeExcludedNamespaces: string[] | undefined;
     private simpleType: string | undefined;
     private textFacets: SchemaFacets | undefined;
     private declaredTypeName: string | undefined;
@@ -42,6 +44,7 @@ export class SchemaElementDecl {
     private listItemType: string | undefined;
     private identityConstraints: IdentityConstraint[] | undefined;
     private fixedValue: string | undefined;
+    private defaultValue: string | undefined;
 
     constructor(name: string, namespace?: string, contentModel?: SchemaContentModel) {
         this.name = name;
@@ -101,10 +104,12 @@ export class SchemaElementDecl {
         return this.textFacets !== undefined;
     }
 
-    setAnyAttribute(namespace: string = '##any', processContents: string = 'strict'): void {
+    setAnyAttribute(namespace: string = '##any', processContents: string = 'strict', ownerNs?: string, excludedNamespaces?: string[]): void {
         this.anyAttribute = true;
         this.anyAttributeNamespace = namespace;
         this.anyAttributeProcessContents = processContents;
+        this.anyAttributeOwnerNs = ownerNs;
+        this.anyAttributeExcludedNamespaces = excludedNamespaces;
     }
 
     allowsAnyAttribute(): boolean {
@@ -117,6 +122,14 @@ export class SchemaElementDecl {
 
     getAnyAttributeProcessContents(): string {
         return this.anyAttributeProcessContents;
+    }
+
+    getAnyAttributeOwnerNs(): string | undefined {
+        return this.anyAttributeOwnerNs;
+    }
+
+    getAnyAttributeExcludedNamespaces(): string[] | undefined {
+        return this.anyAttributeExcludedNamespaces;
     }
 
     setDeclaredTypeName(typeName: string): void {
@@ -192,6 +205,14 @@ export class SchemaElementDecl {
 
     getFixedValue(): string | undefined {
         return this.fixedValue;
+    }
+
+    setDefaultValue(value: string): void {
+        this.defaultValue = value;
+    }
+
+    getDefaultValue(): string | undefined {
+        return this.defaultValue;
     }
 }
 

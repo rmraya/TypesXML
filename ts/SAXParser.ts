@@ -675,6 +675,12 @@ export class SAXParser {
                 let attribute: XMLAttribute = new XMLAttribute(key, value);
                 attributes.push(attribute);
             });
+            attributes = this.getDefaultAttributes(name, attributes);
+            attributes.forEach((attr: XMLAttribute) => {
+                if (!attributesMap.has(attr.getName())) {
+                    attributesMap.set(attr.getName(), attr.getValue());
+                }
+            });
             if (this.validating) {
                 attributes.forEach((attr: XMLAttribute) => {
                     if (!XMLUtils.isValidXMLName(attr.getName())) {
@@ -693,7 +699,6 @@ export class SAXParser {
                     }
                 }
             }
-            attributes = this.getDefaultAttributes(name, attributes);
 
             this.ensureLookahead(1);
             let isSelfClosing: boolean = false;
@@ -824,20 +829,13 @@ export class SAXParser {
 
     validateElement(name: string): void {
         const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
-        if (grammar) {
+        if (grammar && this.validating) {
+            const text: string = this.contentHandler ? this.contentHandler.getCurrentText() : '';
             const actualChildrenNames: string[] = this.childrenNames.length > 0 ? this.childrenNames[this.childrenNames.length - 1] : [];
-            const elementValidationResult = grammar.validateElement(name, actualChildrenNames);
+            const elementValidationResult = grammar.validateElement(name, actualChildrenNames, text);
             if (!elementValidationResult.isValid) {
                 const errorMessages: string = elementValidationResult.errors.map(e => e.message).join('; ');
                 throw new Error('Element validation failed for element "' + name + '": ' + errorMessages);
-            }
-            if (this.validating) {
-                const text: string = this.contentHandler ? this.contentHandler.getCurrentText() : '';
-                const textValidationResult = grammar.validateTextContent(name, text);
-                if (!textValidationResult.isValid) {
-                    const errorMessages: string = textValidationResult.errors.map(e => e.message).join('; ');
-                    throw new Error('Text content validation failed for element "' + name + '": ' + errorMessages);
-                }
             }
         }
     }

@@ -40,6 +40,7 @@ export class SchemaBuilder extends XMLSchemaParser {
     private schemaBlockDefaults: Map<string, string>;
     private schemaFinalDefaults: Map<string, string>;
     private earlyTypeHierarchy: Map<string, {base: string, method: string}>;
+    private schemaPrefixMaps: Map<string, Map<string, string>>;
 
     constructor(catalog?: Catalog) {
         super(catalog);
@@ -48,6 +49,7 @@ export class SchemaBuilder extends XMLSchemaParser {
         this.schemaBlockDefaults = new Map<string, string>();
         this.schemaFinalDefaults = new Map<string, string>();
         this.earlyTypeHierarchy = new Map<string, {base: string, method: string}>();
+        this.schemaPrefixMaps = new Map<string, Map<string, string>>();
     }
 
     buildGrammar(schemaPath: string): SchemaGrammar {
@@ -57,6 +59,7 @@ export class SchemaBuilder extends XMLSchemaParser {
         this.schemaBlockDefaults = new Map<string, string>();
         this.schemaFinalDefaults = new Map<string, string>();
         this.earlyTypeHierarchy = new Map<string, {base: string, method: string}>();
+        this.schemaPrefixMaps = new Map<string, Map<string, string>>();
         this.walkSchema(this.normalizePath(schemaPath));
 
         // Build substitution groups map: headLocalName -> set of member localNames.
@@ -186,12 +189,12 @@ export class SchemaBuilder extends XMLSchemaParser {
             const typeNamespace: string | undefined = pipeIdx !== -1 ? key.substring(0, pipeIdx) : undefined;
             const decl: SchemaElementDecl = new SchemaElementDecl(typeLocalName, typeNamespace);
             decl.setContentModel(this.buildContentModel(typeElement, typeNamespace));
-            const { attrs, anyAttributeNamespace, anyAttributeProcessContents } = this.collectAllAttributes(typeElement, typeNamespace);
+            const { attrs, anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces } = this.collectAllAttributes(typeElement, typeNamespace);
             for (const attrDecl of attrs.values()) {
                 decl.addAttributeDecl(attrDecl);
             }
             if (anyAttributeNamespace !== undefined) {
-                decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents);
+                decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces);
             }
             const typeBlockAttr: XMLAttribute | undefined = typeElement.getAttribute('block');
             const typeBlockSet: Set<string> = new Set<string>();
@@ -402,6 +405,20 @@ export class SchemaBuilder extends XMLSchemaParser {
 
     protected override registerSchemaComponents(schemaElement: XMLElement, targetNamespace?: string): void {
         super.registerSchemaComponents(schemaElement, targetNamespace);
+        const nsKey: string = targetNamespace !== undefined ? targetNamespace : '';
+        let prefixMap: Map<string, string> | undefined = this.schemaPrefixMaps.get(nsKey);
+        if (!prefixMap) {
+            prefixMap = new Map<string, string>();
+            this.schemaPrefixMaps.set(nsKey, prefixMap);
+        }
+        for (const attr of schemaElement.getAttributes()) {
+            const attrName: string = attr.getName();
+            if (attrName === 'xmlns') {
+                prefixMap.set('', attr.getValue());
+            } else if (attrName.length > 6 && attrName.substring(0, 6) === 'xmlns:') {
+                prefixMap.set(attrName.substring(6), attr.getValue());
+            }
+        }
         const blockDefaultAttr: XMLAttribute | undefined = schemaElement.getAttribute('blockDefault');
         if (blockDefaultAttr) {
             const key: string = targetNamespace !== undefined ? targetNamespace : '';
@@ -457,6 +474,10 @@ export class SchemaBuilder extends XMLSchemaParser {
         if (elementFixedAttr) {
             decl.setFixedValue(elementFixedAttr.getValue());
         }
+        const elementDefaultAttr: XMLAttribute | undefined = info.element.getAttribute('default');
+        if (elementDefaultAttr) {
+            decl.setDefaultValue(elementDefaultAttr.getValue());
+        }
         const blockAttr: XMLAttribute | undefined = info.element.getAttribute('block');
         if (blockAttr) {
             const blockVal: string = blockAttr.getValue().trim();
@@ -502,12 +523,12 @@ export class SchemaBuilder extends XMLSchemaParser {
 
         if (typeElement) {
             decl.setContentModel(this.buildContentModel(typeElement, info.namespace));
-            const { attrs, anyAttributeNamespace, anyAttributeProcessContents } = this.collectAllAttributes(typeElement, info.namespace);
+            const { attrs, anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces } = this.collectAllAttributes(typeElement, info.namespace);
             for (const attrDecl of attrs.values()) {
                 decl.addAttributeDecl(attrDecl);
             }
             if (anyAttributeNamespace !== undefined) {
-                decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents);
+                decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces);
             }
             // xs:complexType with xs:simpleContent — text element with a simple base type.
             const simpleContentEl: XMLElement | undefined = this.findChildByLocalName(typeElement, 'simpleContent');
@@ -598,8 +619,9 @@ export class SchemaBuilder extends XMLSchemaParser {
                     }
                 }
             }
+            const constraintLocalName: string = nameAttr.getValue().trim();
             const constraint: IdentityConstraint = {
-                name: nameAttr.getValue().trim(),
+                name: info.namespace ? info.namespace + '|' + constraintLocalName : constraintLocalName,
                 kind: childLocal as 'key' | 'keyref' | 'unique',
                 selector: xpathAttr.getValue().trim(),
                 fields,
@@ -609,7 +631,16 @@ export class SchemaBuilder extends XMLSchemaParser {
                 if (referAttr) {
                     const referVal: string = referAttr.getValue().trim();
                     const colonIdx: number = referVal.indexOf(':');
-                    constraint.refer = colonIdx !== -1 ? referVal.substring(colonIdx + 1) : referVal;
+                    if (colonIdx !== -1) {
+                        const prefix: string = referVal.substring(0, colonIdx);
+                        const localPart: string = referVal.substring(colonIdx + 1);
+                        const pKey: string = info.namespace !== undefined ? info.namespace : '';
+                        const pMap: Map<string, string> | undefined = this.schemaPrefixMaps.get(pKey);
+                        const resolvedNs: string | undefined = pMap ? pMap.get(prefix) : undefined;
+                        constraint.refer = resolvedNs ? resolvedNs + '|' + localPart : localPart;
+                    } else {
+                        constraint.refer = info.namespace ? info.namespace + '|' + referVal : referVal;
+                    }
                 }
             }
             decl.addIdentityConstraint(constraint);
@@ -798,16 +829,207 @@ export class SchemaBuilder extends XMLSchemaParser {
         return inner;
     }
 
-    private collectAllAttributes(typeElement: XMLElement, namespace?: string): { attrs: Map<string, SchemaAttributeDecl>; anyAttributeNamespace: string | undefined; anyAttributeProcessContents: string } {
+    private collectAllAttributes(typeElement: XMLElement, namespace?: string): { attrs: Map<string, SchemaAttributeDecl>; anyAttributeNamespace: string | undefined; anyAttributeProcessContents: string; anyAttributeOwnerNs: string | undefined; anyAttributeExcludedNamespaces: string[] | undefined } {
         const attrs: Map<string, SchemaAttributeDecl> = new Map<string, SchemaAttributeDecl>();
         const visitedTypes: Set<string> = new Set<string>();
+        const wildcards: Array<{ ns: string; pc: string; ownerNs: string | undefined; excluded: string[] | undefined }> = [];
+        this.gatherAttributes(typeElement, attrs, visitedTypes, namespace, (ns, pc, ownerNs, excluded) => {
+            wildcards.push({ ns, pc, ownerNs, excluded });
+        });
         let anyAttributeNamespace: string | undefined = undefined;
         let anyAttributeProcessContents: string = 'strict';
-        this.gatherAttributes(typeElement, attrs, visitedTypes, namespace, (ns, pc) => { anyAttributeNamespace = ns; anyAttributeProcessContents = pc || 'strict'; });
-        return { attrs, anyAttributeNamespace, anyAttributeProcessContents };
+        let anyAttributeOwnerNs: string | undefined = undefined;
+        let anyAttributeExcludedNamespaces: string[] | undefined = undefined;
+        if (wildcards.length > 0) {
+            anyAttributeNamespace = wildcards[0].ns;
+            anyAttributeProcessContents = wildcards[0].pc;
+            anyAttributeOwnerNs = wildcards[0].ownerNs;
+            anyAttributeExcludedNamespaces = wildcards[0].excluded;
+            for (let i: number = 1; i < wildcards.length; i++) {
+                const curr: { ns: string; pc: string; ownerNs: string | undefined; excluded: string[] | undefined } = wildcards[i];
+                const combined: string = this.intersectNamespaceConstraints(anyAttributeNamespace, anyAttributeOwnerNs, curr.ns, curr.ownerNs);
+                const ownerInfo: { ownerNs: string | undefined; excluded: string[] | undefined } = this.combineOwnerNsAfterIntersect(combined, anyAttributeOwnerNs, anyAttributeExcludedNamespaces, curr.ownerNs, curr.excluded);
+                anyAttributeNamespace = combined;
+                anyAttributeOwnerNs = ownerInfo.ownerNs;
+                anyAttributeExcludedNamespaces = ownerInfo.excluded;
+                anyAttributeProcessContents = this.intersectProcessContents(anyAttributeProcessContents, curr.pc);
+            }
+        }
+        return { attrs, anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces };
     }
 
-    private gatherAttributes(el: XMLElement, result: Map<string, SchemaAttributeDecl>, visitedTypes: Set<string>, namespace?: string, onAnyAttribute?: (ns: string, pc?: string) => void): void {
+    private parseWildcardTokens(ns: string, targetNamespace: string | undefined): Set<string> | 'other' {
+        if (ns === '##other') {
+            return 'other';
+        }
+        const result: Set<string> = new Set<string>();
+        for (const token of ns.split(/\s+/)) {
+            if (token === '##local') {
+                result.add('');
+            } else if (token === '##targetNamespace') {
+                result.add(targetNamespace || '');
+            } else {
+                result.add(token);
+            }
+        }
+        return result;
+    }
+
+    private intersectNamespaceConstraints(a: string, ownerNsA: string | undefined, b: string, ownerNsB: string | undefined): string {
+        if (a === '##any') {
+            return b;
+        }
+        if (b === '##any') {
+            return a;
+        }
+        if (a === '##empty' || b === '##empty') {
+            return '##empty';
+        }
+        const parsedA: Set<string> | 'other' = this.parseWildcardTokens(a, ownerNsA);
+        const parsedB: Set<string> | 'other' = this.parseWildcardTokens(b, ownerNsB);
+        let result: Set<string>;
+        if (parsedA === 'other' && parsedB === 'other') {
+            return '##other';
+        }
+        if (parsedA === 'other') {
+            result = new Set<string>();
+            for (const u of parsedB as Set<string>) {
+                if (u !== '' && u !== (ownerNsA || '')) {
+                    result.add(u);
+                }
+            }
+        } else if (parsedB === 'other') {
+            result = new Set<string>();
+            for (const u of parsedA) {
+                if (u !== '' && u !== (ownerNsB || '')) {
+                    result.add(u);
+                }
+            }
+        } else {
+            result = new Set<string>();
+            for (const u of parsedA) {
+                if (parsedB.has(u)) {
+                    result.add(u);
+                }
+            }
+        }
+        if (result.size === 0) {
+            return '##empty';
+        }
+        const tokens: string[] = [];
+        for (const u of result) {
+            tokens.push(u === '' ? '##local' : u);
+        }
+        return tokens.join(' ');
+    }
+
+    private intersectProcessContents(a: string, b: string): string {
+        if (a === 'strict' || b === 'strict') {
+            return 'strict';
+        }
+        if (a === 'lax' || b === 'lax') {
+            return 'lax';
+        }
+        return 'skip';
+    }
+
+    private unionProcessContents(a: string, b: string): string {
+        if (a === 'skip' || b === 'skip') {
+            return 'skip';
+        }
+        if (a === 'lax' || b === 'lax') {
+            return 'lax';
+        }
+        return 'strict';
+    }
+
+    private unionNamespaceConstraints(a: string, ownerNsA: string | undefined, b: string, ownerNsB: string | undefined): string {
+        if (a === '##any' || b === '##any') {
+            return '##any';
+        }
+        if (a === '##empty') {
+            return b;
+        }
+        if (b === '##empty') {
+            return a;
+        }
+        const parsedA: Set<string> | 'other' = this.parseWildcardTokens(a, ownerNsA);
+        const parsedB: Set<string> | 'other' = this.parseWildcardTokens(b, ownerNsB);
+        if (parsedA === 'other' && parsedB === 'other') {
+            if (ownerNsA !== ownerNsB) {
+                return '##any';
+            }
+            return '##other';
+        }
+        if (parsedA === 'other') {
+            for (const u of parsedB as Set<string>) {
+                if (u === '' || u === (ownerNsA || '')) {
+                    return '##any';
+                }
+            }
+            return '##other';
+        }
+        if (parsedB === 'other') {
+            for (const u of parsedA) {
+                if (u === '' || u === (ownerNsB || '')) {
+                    return '##any';
+                }
+            }
+            return '##other';
+        }
+        const result: Set<string> = new Set<string>([...parsedA, ...parsedB]);
+        const tokens: string[] = [];
+        for (const u of result) {
+            tokens.push(u === '' ? '##local' : u);
+        }
+        return tokens.join(' ');
+    }
+
+    private combineOwnerNsAfterIntersect(
+        resultNs: string,
+        prevOwner: string | undefined,
+        prevExcluded: string[] | undefined,
+        currOwner: string | undefined,
+        currExcluded: string[] | undefined
+    ): { ownerNs: string | undefined; excluded: string[] | undefined } {
+        if (resultNs !== '##other') {
+            return { ownerNs: undefined, excluded: undefined };
+        }
+        const excl: Set<string> = new Set<string>();
+        if (prevExcluded !== undefined && prevExcluded.length > 0) {
+            for (const n of prevExcluded) {
+                excl.add(n);
+            }
+        } else if (prevOwner !== undefined) {
+            excl.add(prevOwner);
+        }
+        if (currExcluded !== undefined && currExcluded.length > 0) {
+            for (const n of currExcluded) {
+                excl.add(n);
+            }
+        } else if (currOwner !== undefined) {
+            excl.add(currOwner);
+        }
+        if (excl.size === 0) {
+            return { ownerNs: undefined, excluded: undefined };
+        }
+        if (excl.size === 1) {
+            return { ownerNs: Array.from(excl)[0], excluded: undefined };
+        }
+        return { ownerNs: undefined, excluded: Array.from(excl) };
+    }
+
+    private combineOwnerNsAfterUnion(
+        resultNs: string,
+        prevOwner: string | undefined
+    ): { ownerNs: string | undefined; excluded: string[] | undefined } {
+        if (resultNs !== '##other') {
+            return { ownerNs: undefined, excluded: undefined };
+        }
+        return { ownerNs: prevOwner, excluded: undefined };
+    }
+
+    private gatherAttributes(el: XMLElement, result: Map<string, SchemaAttributeDecl>, visitedTypes: Set<string>, namespace?: string, onAnyAttribute?: (ns: string, pc: string, ownerNs: string | undefined, excluded?: string[]) => void): void {
         for (const child of el.getChildren()) {
             const localName: string = this.getLocalName(child.getName());
             if (localName === 'attribute') {
@@ -819,14 +1041,14 @@ export class SchemaBuilder extends XMLSchemaParser {
                 if (onAnyAttribute) {
                     const nsAttr: XMLAttribute | undefined = child.getAttribute('namespace');
                     const pcAttr: XMLAttribute | undefined = child.getAttribute('processContents');
-                    onAnyAttribute(nsAttr ? nsAttr.getValue() : '##any', pcAttr ? pcAttr.getValue() : 'strict');
+                    onAnyAttribute(nsAttr ? nsAttr.getValue() : '##any', pcAttr ? pcAttr.getValue() : 'strict', namespace);
                 }
             } else if (localName === 'attributeGroup') {
                 const refAttr: XMLAttribute | undefined = child.getAttribute('ref');
                 if (refAttr) {
-                    const groupEl: XMLElement | undefined = this.lookupAttributeGroup(refAttr.getValue());
-                    if (groupEl) {
-                        this.gatherAttributes(groupEl, result, visitedTypes, namespace, onAnyAttribute);
+                    const groupInfo: { element: XMLElement; namespace: string | undefined } | undefined = this.lookupAttributeGroupWithNamespace(refAttr.getValue());
+                    if (groupInfo) {
+                        this.gatherAttributes(groupInfo.element, result, visitedTypes, groupInfo.namespace, onAnyAttribute);
                     } else {
                         throw new Error('Reference to undeclared attribute group: "' + refAttr.getValue() + '"');
                     }
@@ -834,18 +1056,72 @@ export class SchemaBuilder extends XMLSchemaParser {
             } else if (localName === 'complexContent' || localName === 'simpleContent') {
                 this.gatherAttributes(child, result, visitedTypes, namespace, onAnyAttribute);
             } else if (localName === 'extension' || localName === 'restriction') {
+                const isExtension: boolean = localName === 'extension';
                 const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
+                let baseNs: string | undefined;
+                let baseNsOwner: string | undefined;
+                let baseNsExcluded: string[] | undefined;
+                let basePc: string = 'strict';
                 if (baseAttr) {
                     const baseLocalName: string = this.getLocalName(baseAttr.getValue());
                     if (!visitedTypes.has(baseLocalName)) {
                         visitedTypes.add(baseLocalName);
-                        const baseTypeEl: XMLElement | undefined = this.lookupComplexType(baseAttr.getValue());
-                        if (baseTypeEl) {
-                            this.gatherAttributes(baseTypeEl, result, visitedTypes, namespace, onAnyAttribute);
+                        const baseTypeInfo: { element: XMLElement; namespace: string | undefined } | undefined = this.lookupComplexTypeWithNamespace(baseAttr.getValue());
+                        if (baseTypeInfo) {
+                            this.gatherAttributes(baseTypeInfo.element, result, visitedTypes, baseTypeInfo.namespace, (ns, pc, ownerNs, excluded) => {
+                                if (baseNs === undefined) {
+                                    baseNs = ns;
+                                    baseNsOwner = ownerNs;
+                                    baseNsExcluded = excluded;
+                                    basePc = pc;
+                                } else {
+                                    const combined: string = this.intersectNamespaceConstraints(baseNs, baseNsOwner, ns, ownerNs);
+                                    const ownerInfo: { ownerNs: string | undefined; excluded: string[] | undefined } = this.combineOwnerNsAfterIntersect(combined, baseNsOwner, baseNsExcluded, ownerNs, excluded);
+                                    baseNs = combined;
+                                    baseNsOwner = ownerInfo.ownerNs;
+                                    baseNsExcluded = ownerInfo.excluded;
+                                    basePc = this.intersectProcessContents(basePc, pc);
+                                }
+                            });
                         }
                     }
                 }
-                this.gatherAttributes(child, result, visitedTypes, namespace, onAnyAttribute);
+                let derivedNs: string | undefined;
+                let derivedNsOwner: string | undefined;
+                let derivedNsExcluded: string[] | undefined;
+                let derivedPc: string = 'strict';
+                this.gatherAttributes(child, result, visitedTypes, namespace, (ns, pc, ownerNs, excluded) => {
+                    if (derivedNs === undefined) {
+                        derivedNs = ns;
+                        derivedNsOwner = ownerNs;
+                        derivedNsExcluded = excluded;
+                        derivedPc = pc;
+                    } else {
+                        const combined: string = this.intersectNamespaceConstraints(derivedNs, derivedNsOwner, ns, ownerNs);
+                        const ownerInfo: { ownerNs: string | undefined; excluded: string[] | undefined } = this.combineOwnerNsAfterIntersect(combined, derivedNsOwner, derivedNsExcluded, ownerNs, excluded);
+                        derivedNs = combined;
+                        derivedNsOwner = ownerInfo.ownerNs;
+                        derivedNsExcluded = ownerInfo.excluded;
+                        derivedPc = this.intersectProcessContents(derivedPc, pc);
+                    }
+                });
+                if (onAnyAttribute) {
+                    if (baseNs !== undefined && derivedNs !== undefined) {
+                        if (isExtension) {
+                            const combined: string = this.unionNamespaceConstraints(baseNs, baseNsOwner, derivedNs, derivedNsOwner);
+                            const ownerInfo: { ownerNs: string | undefined; excluded: string[] | undefined } = this.combineOwnerNsAfterUnion(combined, baseNsOwner);
+                            onAnyAttribute(combined, this.unionProcessContents(basePc, derivedPc), ownerInfo.ownerNs, ownerInfo.excluded);
+                        } else {
+                            const combined: string = this.intersectNamespaceConstraints(baseNs, baseNsOwner, derivedNs, derivedNsOwner);
+                            const ownerInfo: { ownerNs: string | undefined; excluded: string[] | undefined } = this.combineOwnerNsAfterIntersect(combined, baseNsOwner, baseNsExcluded, derivedNsOwner, derivedNsExcluded);
+                            onAnyAttribute(combined, this.intersectProcessContents(basePc, derivedPc), ownerInfo.ownerNs, ownerInfo.excluded);
+                        }
+                    } else if (baseNs !== undefined) {
+                        onAnyAttribute(baseNs, basePc, baseNsOwner, baseNsExcluded);
+                    } else if (derivedNs !== undefined) {
+                        onAnyAttribute(derivedNs, derivedPc, derivedNsOwner, derivedNsExcluded);
+                    }
+                }
             } else if (localName === 'complexType') {
                 this.gatherAttributes(child, result, visitedTypes, namespace, onAnyAttribute);
             }

@@ -4,8 +4,6 @@ dist/
 .vscode/
 .scannerwork/
 .github/
-ts/test*.ts
-test.xml
 tests/
 benchmarks/
 catalog/

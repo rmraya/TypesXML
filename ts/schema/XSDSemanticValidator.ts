@@ -64,6 +64,10 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkDuplicateIds(schemaRoot);
         XSDSemanticValidator.checkIncludeRedefine(schemaRoot);
         XSDSemanticValidator.checkDuplicateImports(schemaRoot);
+        XSDSemanticValidator.checkDuplicateTopLevelElements(schemaRoot);
+        XSDSemanticValidator.checkDuplicateTopLevelComplexTypes(schemaRoot);
+        XSDSemanticValidator.checkDuplicateTopLevelAttributeGroups(schemaRoot);
+        XSDSemanticValidator.checkDuplicateTopLevelGroups(schemaRoot);
         XSDSemanticValidator.checkFacetValues(schemaRoot);
         XSDSemanticValidator.checkAllNesting(schemaRoot, false);
         const simpleTypes: Map<string, XMLElement> = XSDSemanticValidator.collectSimpleTypes(schemaRoot);
@@ -72,8 +76,10 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkElementValueConstraints(schemaRoot, simpleTypes);
         const complexTypes: Map<string, XMLElement> = XSDSemanticValidator.collectComplexTypes(schemaRoot);
         XSDSemanticValidator.checkComplexTypeFinalConstraints(schemaRoot, complexTypes);
+        XSDSemanticValidator.checkComplexRestrictionAttributes(schemaRoot, complexTypes);
         XSDSemanticValidator.checkKeyrefReferences(schemaRoot);
         XSDSemanticValidator.checkIdentityConstraintPlacement(schemaRoot, false);
+        XSDSemanticValidator.checkElementRefConstraints(schemaRoot);
     }
 
     private static checkNamedComponents(schemaRoot: XMLElement): void {
@@ -242,20 +248,121 @@ export class XSDSemanticValidator {
         }
     }
 
+    private static checkDuplicateTopLevelGroups(schemaRoot: XMLElement): void {
+        const seen: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) !== 'group') {
+                continue;
+            }
+            const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+            if (!nameAttr) {
+                continue;
+            }
+            const name: string = nameAttr.getValue();
+            if (seen.has(name)) {
+                throw new Error('Duplicate top-level xs:group name: "' + name + '"');
+            }
+            seen.add(name);
+        }
+    }
+
+    private static checkDuplicateTopLevelAttributeGroups(schemaRoot: XMLElement): void {
+        const seen: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) !== 'attributeGroup') {
+                continue;
+            }
+            const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+            if (!nameAttr) {
+                continue;
+            }
+            const name: string = nameAttr.getValue();
+            if (seen.has(name)) {
+                throw new Error('Duplicate top-level xs:attributeGroup name: "' + name + '"');
+            }
+            seen.add(name);
+        }
+    }
+
+    private static checkDuplicateTopLevelComplexTypes(schemaRoot: XMLElement): void {
+        const seen: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) !== 'complexType') {
+                continue;
+            }
+            const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+            if (!nameAttr) {
+                continue;
+            }
+            const name: string = nameAttr.getValue();
+            if (seen.has(name)) {
+                throw new Error('Duplicate top-level xs:complexType name: "' + name + '"');
+            }
+            seen.add(name);
+        }
+    }
+
+    private static checkDuplicateTopLevelElements(schemaRoot: XMLElement): void {
+        const seen: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) !== 'element') {
+                continue;
+            }
+            const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+            if (!nameAttr) {
+                continue;
+            }
+            const name: string = nameAttr.getValue();
+            if (seen.has(name)) {
+                throw new Error('Duplicate top-level xs:element name: "' + name + '"');
+            }
+            seen.add(name);
+        }
+    }
+
     private static checkDuplicateImports(schemaRoot: XMLElement): void {
+        const schemaTargetNs: string | undefined = schemaRoot.getAttribute('targetNamespace')?.getValue();
         const seenNamespaces: Set<string> = new Set<string>();
+        let seenAbsentNamespace: boolean = false;
         for (const child of schemaRoot.getChildren()) {
             if (XSDSemanticValidator.localName(child.getName()) !== 'import') {
                 continue;
             }
             const nsAttr: XMLAttribute | undefined = child.getAttribute('namespace');
+            const importNs: string | undefined = nsAttr ? nsAttr.getValue() : undefined;
+            if (importNs === schemaTargetNs) {
+                throw new Error(
+                    'xs:import ' + (importNs !== undefined ? 'namespace "' + importNs + '"' : 'with absent namespace') +
+                    ' must differ from the schema\'s own target namespace'
+                );
+            }
             if (nsAttr) {
                 const ns: string = nsAttr.getValue();
                 if (seenNamespaces.has(ns)) {
                     throw new Error('Duplicate xs:import for namespace: "' + ns + '"');
                 }
                 seenNamespaces.add(ns);
+            } else {
+                if (seenAbsentNamespace) {
+                    throw new Error('Duplicate xs:import for absent namespace');
+                }
+                seenAbsentNamespace = true;
             }
+        }
+    }
+
+    static checkIncludedNamespace(includedRoot: XMLElement, includingNamespace: string | undefined): void {
+        const includedNsAttr: XMLAttribute | undefined = includedRoot.getAttribute('targetNamespace');
+        if (includedNsAttr === undefined) {
+            return;
+        }
+        const includedNs: string = includedNsAttr.getValue();
+        if (includedNs !== includingNamespace) {
+            throw new Error(
+                'xs:include: included schema target namespace "' + includedNs +
+                '" does not match including schema target namespace ' +
+                (includingNamespace !== undefined ? '"' + includingNamespace + '"' : '(absent)')
+            );
         }
     }
 
@@ -550,8 +657,28 @@ export class XSDSemanticValidator {
         return false;
     }
 
-    private static checkElementValueConstraints(el: XMLElement, simpleTypes: Map<string, XMLElement>): void {
+    private static checkElementRefConstraints(el: XMLElement): void {
         const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'element') {
+            const refAttr: XMLAttribute | undefined = el.getAttribute('ref');
+            if (refAttr !== undefined) {
+                const forbidden: string[] = ['name', 'type', 'nillable', 'default', 'fixed', 'abstract'];
+                for (const attr of forbidden) {
+                    if (el.getAttribute(attr) !== undefined) {
+                        throw new Error('xs:element with "ref" cannot also have "' + attr + '"');
+                    }
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkElementRefConstraints(child);
+        }
+    }
+
+    private static checkElementValueConstraints(el: XMLElement, simpleTypes: Map<string, XMLElement>): void {        const local: string = XSDSemanticValidator.localName(el.getName());
         if (local === 'element') {
             const hasFixed: boolean = el.getAttribute('fixed') !== undefined;
             const hasDefault: boolean = el.getAttribute('default') !== undefined;
@@ -587,11 +714,22 @@ export class XSDSemanticValidator {
     private static checkKeyrefReferences(schemaRoot: XMLElement): void {
         const allConstraintNames: Set<string> = new Set<string>();
         const keyUniqueNames: Set<string> = new Set<string>();
-        XSDSemanticValidator.collectKeyUniqueNames(schemaRoot, allConstraintNames, keyUniqueNames);
-        XSDSemanticValidator.validateKeyrefRefer(schemaRoot, keyUniqueNames);
+        const fieldCounts: Map<string, number> = new Map<string, number>();
+        XSDSemanticValidator.collectKeyUniqueNames(schemaRoot, allConstraintNames, keyUniqueNames, fieldCounts);
+        XSDSemanticValidator.validateKeyrefRefer(schemaRoot, keyUniqueNames, fieldCounts);
     }
 
-    private static collectKeyUniqueNames(el: XMLElement, allNames: Set<string>, keyUniqueNames: Set<string>): void {
+    private static countFields(el: XMLElement): number {
+        let count: number = 0;
+        for (const child of el.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'field') {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static collectKeyUniqueNames(el: XMLElement, allNames: Set<string>, keyUniqueNames: Set<string>, fieldCounts: Map<string, number>): void {
         const local: string = XSDSemanticValidator.localName(el.getName());
         if (local === 'key' || local === 'unique' || local === 'keyref') {
             const nameAttr: XMLAttribute | undefined = el.getAttribute('name');
@@ -603,15 +741,16 @@ export class XSDSemanticValidator {
                 allNames.add(constraintName);
                 if (local === 'key' || local === 'unique') {
                     keyUniqueNames.add(constraintName);
+                    fieldCounts.set(constraintName, XSDSemanticValidator.countFields(el));
                 }
             }
         }
         for (const child of el.getChildren()) {
-            XSDSemanticValidator.collectKeyUniqueNames(child, allNames, keyUniqueNames);
+            XSDSemanticValidator.collectKeyUniqueNames(child, allNames, keyUniqueNames, fieldCounts);
         }
     }
 
-    private static validateKeyrefRefer(el: XMLElement, keyUniqueNames: Set<string>): void {
+    private static validateKeyrefRefer(el: XMLElement, keyUniqueNames: Set<string>, fieldCounts: Map<string, number>): void {
         const local: string = XSDSemanticValidator.localName(el.getName());
         if (local === 'keyref') {
             const referAttr: XMLAttribute | undefined = el.getAttribute('refer');
@@ -623,10 +762,17 @@ export class XSDSemanticValidator {
                     const keyrefName: string = nameAttr ? nameAttr.getValue() : '(anonymous)';
                     throw new Error('xs:keyref "' + keyrefName + '" refers to undeclared key or unique: "' + referValue + '"');
                 }
+                const keyrefFieldCount: number = XSDSemanticValidator.countFields(el);
+                const targetFieldCount: number | undefined = fieldCounts.get(referLocal);
+                if (targetFieldCount !== undefined && keyrefFieldCount !== targetFieldCount) {
+                    const nameAttr: XMLAttribute | undefined = el.getAttribute('name');
+                    const keyrefName: string = nameAttr ? nameAttr.getValue() : '(anonymous)';
+                    throw new Error('xs:keyref "' + keyrefName + '" has ' + keyrefFieldCount + ' field(s) but referred constraint "' + referValue + '" has ' + targetFieldCount);
+                }
             }
         }
         for (const child of el.getChildren()) {
-            XSDSemanticValidator.validateKeyrefRefer(child, keyUniqueNames);
+            XSDSemanticValidator.validateKeyrefRefer(child, keyUniqueNames, fieldCounts);
         }
     }
 
@@ -649,14 +795,18 @@ export class XSDSemanticValidator {
                 const childLocal: string = XSDSemanticValidator.localName(child.getName());
                 if (childLocal === 'selector') {
                     selectorCount++;
-                    if (!child.getAttribute('xpath')) {
+                    const selectorXpathAttr: XMLAttribute | undefined = child.getAttribute('xpath');
+                    if (!selectorXpathAttr) {
                         throw new Error('xs:selector is missing required "xpath" attribute');
                     }
+                    XSDSemanticValidator.validateSelectorXPath(selectorXpathAttr.getValue());
                 } else if (childLocal === 'field') {
                     fieldCount++;
-                    if (!child.getAttribute('xpath')) {
+                    const fieldXpathAttr: XMLAttribute | undefined = child.getAttribute('xpath');
+                    if (!fieldXpathAttr) {
                         throw new Error('xs:field is missing required "xpath" attribute');
                     }
+                    XSDSemanticValidator.validateFieldXPath(fieldXpathAttr.getValue());
                 } else if (childLocal !== 'annotation') {
                     throw new Error('xs:' + local + ' contains invalid child element xs:' + childLocal);
                 }
@@ -675,6 +825,288 @@ export class XSDSemanticValidator {
         const isElement: boolean = local === 'element';
         for (const child of el.getChildren()) {
             XSDSemanticValidator.checkIdentityConstraintPlacement(child, isElement);
+        }
+    }
+
+    private static gatherAttributeNames(el: XMLElement, names: Set<string>): void {
+        for (const child of el.getChildren()) {
+            const childLocal: string = XSDSemanticValidator.localName(child.getName());
+            if (childLocal === 'attribute') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (nameAttr) {
+                    names.add(nameAttr.getValue());
+                }
+            }
+            XSDSemanticValidator.gatherAttributeNames(child, names);
+        }
+    }
+
+    private static collectBaseAttributeNames(
+        typeName: string,
+        complexTypes: Map<string, XMLElement>,
+        visited: Set<string>
+    ): Set<string> {
+        const names: Set<string> = new Set<string>();
+        const local: string = XSDSemanticValidator.localName(typeName);
+        if (visited.has(local)) {
+            return names;
+        }
+        visited.add(local);
+        const typeEl: XMLElement | undefined = complexTypes.get(local);
+        if (!typeEl) {
+            return names;
+        }
+        XSDSemanticValidator.gatherAttributeNames(typeEl, names);
+        for (const contentChild of typeEl.getChildren()) {
+            const contentLocal: string = XSDSemanticValidator.localName(contentChild.getName());
+            if (contentLocal !== 'complexContent' && contentLocal !== 'simpleContent') {
+                continue;
+            }
+            for (const derivChild of contentChild.getChildren()) {
+                const baseAttr: XMLAttribute | undefined = derivChild.getAttribute('base');
+                if (baseAttr) {
+                    const inherited: Set<string> = XSDSemanticValidator.collectBaseAttributeNames(
+                        baseAttr.getValue(), complexTypes, visited
+                    );
+                    for (const n of inherited) {
+                        names.add(n);
+                    }
+                }
+            }
+        }
+        return names;
+    }
+
+    private static findAnyAttributeConstraint(el: XMLElement): string | undefined {
+        for (const child of el.getChildren()) {
+            const ln: string = XSDSemanticValidator.localName(child.getName());
+            if (ln === 'anyAttribute') {
+                const nsAttr: XMLAttribute | undefined = child.getAttribute('namespace');
+                return nsAttr ? nsAttr.getValue() : '##any';
+            }
+            if (ln === 'complexContent' || ln === 'simpleContent' || ln === 'extension' || ln === 'restriction' || ln === 'complexType') {
+                const found: string | undefined = XSDSemanticValidator.findAnyAttributeConstraint(child);
+                if (found !== undefined) {
+                    return found;
+                }
+            }
+        }
+        return undefined;
+    }
+
+    private static expandWildcardTokens(ns: string, targetNs: string): Set<string> | 'other' {
+        if (ns === '##other') {
+            return 'other';
+        }
+        const result: Set<string> = new Set<string>();
+        for (const token of ns.split(/\s+/)) {
+            if (token === '##local') {
+                result.add('');
+            } else if (token === '##targetNamespace') {
+                result.add(targetNs);
+            } else {
+                result.add(token);
+            }
+        }
+        return result;
+    }
+
+    private static isAnyAttributeSubset(derived: string, base: string, targetNs: string): boolean {
+        if (base === '##any') {
+            return true;
+        }
+        if (derived === '##any') {
+            return false;
+        }
+        const parsedDerived: Set<string> | 'other' = XSDSemanticValidator.expandWildcardTokens(derived, targetNs);
+        const parsedBase: Set<string> | 'other' = XSDSemanticValidator.expandWildcardTokens(base, targetNs);
+        if (parsedDerived === 'other' && parsedBase === 'other') {
+            return true;
+        }
+        if (parsedDerived === 'other') {
+            return false;
+        }
+        if (parsedBase === 'other') {
+            for (const u of parsedDerived) {
+                if (u === '' || u === targetNs) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        for (const u of parsedDerived) {
+            if (!parsedBase.has(u)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static checkComplexRestrictionAttributes(schemaRoot: XMLElement, complexTypes: Map<string, XMLElement>): void {
+        const targetNsAttr: XMLAttribute | undefined = schemaRoot.getAttribute('targetNamespace');
+        const targetNs: string = targetNsAttr ? targetNsAttr.getValue() : '';
+        for (const typeEl of complexTypes.values()) {
+            for (const contentChild of typeEl.getChildren()) {
+                const contentLocal: string = XSDSemanticValidator.localName(contentChild.getName());
+                if (contentLocal !== 'complexContent' && contentLocal !== 'simpleContent') {
+                    continue;
+                }
+                for (const derivChild of contentChild.getChildren()) {
+                    if (XSDSemanticValidator.localName(derivChild.getName()) !== 'restriction') {
+                        continue;
+                    }
+                    const baseAttr: XMLAttribute | undefined = derivChild.getAttribute('base');
+                    if (!baseAttr) {
+                        continue;
+                    }
+                    const baseLocal: string = XSDSemanticValidator.localName(baseAttr.getValue());
+                    const baseEl: XMLElement | undefined = complexTypes.get(baseLocal);
+                    if (!baseEl) {
+                        continue;
+                    }
+                    const baseWildcard: string | undefined = XSDSemanticValidator.findAnyAttributeConstraint(baseEl);
+                    const derivedWildcard: string | undefined = XSDSemanticValidator.findAnyAttributeConstraint(derivChild);
+                    if (derivedWildcard !== undefined) {
+                        const typeName: string = typeEl.getAttribute('name')?.getValue() ?? '(anonymous)';
+                        if (baseWildcard === undefined) {
+                            throw new Error(
+                                'xs:complexType "' + typeName + '" restriction adds an xs:anyAttribute wildcard not present in base type "' + baseLocal + '"'
+                            );
+                        }
+                        if (!XSDSemanticValidator.isAnyAttributeSubset(derivedWildcard, baseWildcard, targetNs)) {
+                            throw new Error(
+                                'xs:complexType "' + typeName + '" restriction xs:anyAttribute "' + derivedWildcard +
+                                '" is not a subset of base type "' + baseLocal + '" xs:anyAttribute "' + baseWildcard + '"'
+                            );
+                        }
+                    }
+                    if (baseWildcard !== undefined) {
+                        continue;
+                    }
+                    const baseAttrs: Set<string> = XSDSemanticValidator.collectBaseAttributeNames(
+                        baseLocal, complexTypes, new Set<string>()
+                    );
+                    for (const restrictionChild of derivChild.getChildren()) {
+                        if (XSDSemanticValidator.localName(restrictionChild.getName()) !== 'attribute') {
+                            continue;
+                        }
+                        const nameAttr: XMLAttribute | undefined = restrictionChild.getAttribute('name');
+                        if (nameAttr && !baseAttrs.has(nameAttr.getValue())) {
+                            const typeName: string = typeEl.getAttribute('name')?.getValue() ?? '(anonymous)';
+                            throw new Error(
+                                'xs:complexType "' + typeName + '" restriction adds attribute "' +
+                                nameAttr.getValue() + '" not present in base type "' + baseLocal + '"'
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static isValidNameTest(token: string): boolean {
+        if (token === '*') {
+            return true;
+        }
+        const colonIdx: number = token.indexOf(':');
+        if (colonIdx !== -1) {
+            const prefix: string = token.substring(0, colonIdx);
+            const local: string = token.substring(colonIdx + 1);
+            if (!XMLUtils.isValidNCName(prefix)) {
+                return false;
+            }
+            if (local === '*') {
+                return true;
+            }
+            return XMLUtils.isValidNCName(local);
+        }
+        return XMLUtils.isValidNCName(token);
+    }
+
+    private static validateSelectorXPath(xpath: string): void {
+        const alternatives: string[] = xpath.split('|');
+        for (const raw of alternatives) {
+            const alt: string = raw.trim();
+            if (alt.length === 0) {
+                throw new Error('xs:selector xpath contains empty path alternative: "' + xpath + '"');
+            }
+            let rest: string = alt;
+            if (rest.startsWith('.//')) {
+                rest = rest.substring(3);
+                if (rest.length === 0) {
+                    throw new Error('xs:selector xpath ".//" has no step after descendant axis in: "' + xpath + '"');
+                }
+            }
+            if (rest.indexOf('//') !== -1) {
+                throw new Error('xs:selector xpath contains "//" in invalid position in: "' + xpath + '"');
+            }
+            const steps: string[] = rest.split('/');
+            for (const rawStep of steps) {
+                const step: string = rawStep.trim();
+                if (step.length === 0) {
+                    throw new Error('xs:selector xpath contains empty step in: "' + xpath + '"');
+                }
+                if (step === '.') {
+                    continue;
+                }
+                if (step.startsWith('@') || step.startsWith('attribute::')) {
+                    throw new Error('xs:selector xpath must not contain attribute steps in: "' + xpath + '"');
+                }
+                const nameTest: string = step.startsWith('child::') ? step.substring(7) : step;
+                if (!XSDSemanticValidator.isValidNameTest(nameTest)) {
+                    throw new Error('xs:selector xpath contains invalid step "' + step + '" in: "' + xpath + '"');
+                }
+            }
+        }
+    }
+
+    private static validateFieldXPath(xpath: string): void {
+        const alternatives: string[] = xpath.split('|');
+        for (const raw of alternatives) {
+            const alt: string = raw.trim();
+            if (alt.length === 0) {
+                throw new Error('xs:field xpath contains empty path alternative: "' + xpath + '"');
+            }
+            if (alt === '.') {
+                continue;
+            }
+            let rest: string = alt;
+            if (rest.startsWith('.//')) {
+                rest = rest.substring(3);
+                if (rest.length === 0) {
+                    throw new Error('xs:field xpath ".//" has no step after descendant axis in: "' + xpath + '"');
+                }
+            } else if (rest.startsWith('./')) {
+                rest = rest.substring(2);
+            }
+            if (rest.indexOf('//') !== -1) {
+                throw new Error('xs:field xpath contains "//" in invalid position in: "' + xpath + '"');
+            }
+            const steps: string[] = rest.split('/');
+            for (let si: number = 0; si < steps.length; si++) {
+                const step: string = steps[si].trim();
+                if (step.length === 0) {
+                    throw new Error('xs:field xpath contains empty step in: "' + xpath + '"');
+                }
+                const isLast: boolean = si === steps.length - 1;
+                if (step.startsWith('@') || step.startsWith('attribute::')) {
+                    if (!isLast) {
+                        throw new Error('xs:field xpath contains attribute step in non-final position "' + step + '" in: "' + xpath + '"');
+                    }
+                    const nameTest: string = step.startsWith('attribute::') ? step.substring(11) : step.substring(1);
+                    if (!XSDSemanticValidator.isValidNameTest(nameTest)) {
+                        throw new Error('xs:field xpath contains invalid attribute step "' + step + '" in: "' + xpath + '"');
+                    }
+                } else {
+                    if (step === '.') {
+                        continue;
+                    }
+                    const nameTest: string = step.startsWith('child::') ? step.substring(7) : step;
+                    if (!XSDSemanticValidator.isValidNameTest(nameTest)) {
+                        throw new Error('xs:field xpath contains invalid step "' + step + '" in: "' + xpath + '"');
+                    }
+                }
+            }
         }
     }
 

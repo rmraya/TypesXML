@@ -407,6 +407,50 @@ export class XMLSchemaParser {
         return undefined;
     }
 
+    protected lookupAttributeGroupWithNamespace(groupName: string): { element: XMLElement; namespace: string | undefined } | undefined {
+        const localName: string = this.getLocalName(groupName);
+        const entries: Array<[string, XMLElement]> = Array.from(this.attributeGroupDefinitions.entries());
+        for (const entry of entries) {
+            const key: string = entry[0];
+            const pipeIdx: number = key.lastIndexOf('|');
+            if (pipeIdx !== -1 && key.substring(pipeIdx + 1) === localName) {
+                const ns: string = key.substring(0, pipeIdx);
+                return { element: entry[1], namespace: ns.length > 0 ? ns : undefined };
+            }
+        }
+        const direct: XMLElement | undefined = this.attributeGroupDefinitions.get(groupName);
+        if (direct) {
+            return { element: direct, namespace: undefined };
+        }
+        const byLocal: XMLElement | undefined = this.attributeGroupDefinitions.get(localName);
+        if (byLocal) {
+            return { element: byLocal, namespace: undefined };
+        }
+        return undefined;
+    }
+
+    protected lookupComplexTypeWithNamespace(typeName: string): { element: XMLElement; namespace: string | undefined } | undefined {
+        const localName: string = this.getLocalName(typeName);
+        const entries: Array<[string, XMLElement]> = Array.from(this.complexTypeDefinitions.entries());
+        for (const entry of entries) {
+            const key: string = entry[0];
+            const pipeIdx: number = key.lastIndexOf('|');
+            if (pipeIdx !== -1 && key.substring(pipeIdx + 1) === localName) {
+                const ns: string = key.substring(0, pipeIdx);
+                return { element: entry[1], namespace: ns.length > 0 ? ns : undefined };
+            }
+        }
+        const direct: XMLElement | undefined = this.complexTypeDefinitions.get(typeName);
+        if (direct) {
+            return { element: direct, namespace: undefined };
+        }
+        const byLocal: XMLElement | undefined = this.complexTypeDefinitions.get(localName);
+        if (byLocal) {
+            return { element: byLocal, namespace: undefined };
+        }
+        return undefined;
+    }
+
     protected lookupAttribute(name: string, namespace?: string): AttributeDefinitionInfo | undefined {
         const direct: AttributeDefinitionInfo | undefined = this.attributeDefinitions.get(name);
         if (direct) {
@@ -439,7 +483,7 @@ export class XMLSchemaParser {
         });
     }
 
-    protected walkSchema(schemaPath: string): void {
+    protected walkSchema(schemaPath: string, includingTargetNamespace?: string | null): void {
         const normalizedPath: string = this.normalizePath(schemaPath);
         if (this.visitedSchemas.has(normalizedPath)) {
             return;
@@ -466,6 +510,9 @@ export class XMLSchemaParser {
         }
         const targetNamespaceAttribute: XMLAttribute | undefined = root.getAttribute("targetNamespace");
         const targetNamespace: string | undefined = targetNamespaceAttribute ? targetNamespaceAttribute.getValue() : undefined;
+        if (includingTargetNamespace !== undefined) {
+            XSDSemanticValidator.checkIncludedNamespace(root, includingTargetNamespace !== null ? includingTargetNamespace : undefined);
+        }
         XSDSemanticValidator.validate(root);
         this.registerSchemaComponents(root, targetNamespace);
         this.processSchemaReferences(root, dirname(normalizedPath));
@@ -488,7 +535,12 @@ export class XMLSchemaParser {
             }
             const resolved: string | undefined = this.resolveReference(location, baseDir, namespaceValue);
             if (resolved) {
-                this.walkSchema(resolved);
+                if (localName === 'include') {
+                    const includingNsAttr: XMLAttribute | undefined = schemaElement.getAttribute('targetNamespace');
+                    this.walkSchema(resolved, includingNsAttr !== undefined ? includingNsAttr.getValue() : null);
+                } else {
+                    this.walkSchema(resolved);
+                }
             }
             // For xs:redefine, after loading the base schema apply the redefined components (force-overwrite).
             if (localName === 'redefine') {
