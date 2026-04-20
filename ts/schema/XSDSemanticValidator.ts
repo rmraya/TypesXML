@@ -14,6 +14,7 @@ import { XMLAttribute } from '../XMLAttribute.js';
 import { XMLElement } from '../XMLElement.js';
 import { XMLUtils } from '../XMLUtils.js';
 import { SchemaFacets, SchemaTypeValidator } from './SchemaTypeValidator.js';
+import { XsdRegexTranslator } from './XsdRegexTranslator.js';
 
 const NAMED_COMPONENTS: Set<string> = new Set<string>([
     'element',
@@ -111,7 +112,6 @@ export class XSDSemanticValidator {
             XSDSemanticValidator.checkComplexRestrictionAttributes(root, allComplexTypes);
             XSDSemanticValidator.checkListUnionTypeReferences(root, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
         }
-        XSDSemanticValidator.checkCrossFileIds(roots);
     }
 
     private static checkListUnionTypeReferences(
@@ -177,29 +177,6 @@ export class XSDSemanticValidator {
                     throw new Error(context + '="' + qname + '" refers to undeclared simple type "' + localPart + '"');
                 }
             }
-        }
-    }
-
-    private static checkCrossFileIds(roots: Array<XMLElement>): void {
-        const seen: Map<string, number> = new Map<string, number>();
-        for (const root of roots) {
-            XSDSemanticValidator.collectCrossFileIds(root, seen);
-        }
-        for (const [value, count] of seen) {
-            if (count > 1) {
-                throw new Error('Duplicate id value across schema files: "' + value + '"');
-            }
-        }
-    }
-
-    private static collectCrossFileIds(el: XMLElement, seen: Map<string, number>): void {
-        const idAttr: XMLAttribute | undefined = el.getAttribute('id');
-        if (idAttr) {
-            const value: string = idAttr.getValue();
-            seen.set(value, (seen.get(value) ?? 0) + 1);
-        }
-        for (const child of el.getChildren()) {
-            XSDSemanticValidator.collectCrossFileIds(child, seen);
         }
     }
 
@@ -505,7 +482,35 @@ export class XSDSemanticValidator {
                     throw new Error('xs:totalDigits value must be a positive integer, got: "' + raw + '"');
                 }
             }
+        } else if (localEl === 'pattern') {
+            const valAttr: XMLAttribute | undefined = el.getAttribute('value');
+            if (valAttr) {
+                XsdRegexTranslator.toRegExp(valAttr.getValue());
+            }
         } else if (localEl === 'restriction') {
+            const baseAttr: XMLAttribute | undefined = el.getAttribute('base');
+            const baseLocal: string = baseAttr ? XSDSemanticValidator.localName(baseAttr.getValue()) : '';
+            const numericBases: Set<string> = new Set([
+                'decimal', 'integer', 'long', 'int', 'short', 'byte',
+                'unsignedLong', 'unsignedInt', 'unsignedShort', 'unsignedByte',
+                'nonNegativeInteger', 'nonPositiveInteger', 'positiveInteger', 'negativeInteger',
+                'float', 'double',
+            ]);
+            const floatBases: Set<string> = new Set(['float', 'double']);
+            const floatSpecials: Set<string> = new Set(['INF', '+INF', '-INF', 'NaN']);
+            const isNumericBase: boolean = numericBases.has(baseLocal);
+            const isFloatBase: boolean = floatBases.has(baseLocal);
+            const isInvalidNumericValue = (val: string): boolean => {
+                if (isFloatBase && floatSpecials.has(val)) {
+                    return false;
+                }
+                return isNaN(parseFloat(val));
+            };
+            let hasLength: boolean = false;
+            let hasMinLength: boolean = false;
+            let hasMaxLength: boolean = false;
+            let minLengthVal: number | undefined;
+            let maxLengthVal: number | undefined;
             let minExclusive: string | undefined;
             let maxExclusive: string | undefined;
             let minInclusive: string | undefined;
@@ -518,12 +523,40 @@ export class XSDSemanticValidator {
                 else if (facetLocal === 'maxExclusive') { maxExclusive = val; }
                 else if (facetLocal === 'minInclusive') { minInclusive = val; }
                 else if (facetLocal === 'maxInclusive') { maxInclusive = val; }
+                else if (facetLocal === 'length') { hasLength = true; }
+                else if (facetLocal === 'minLength') { hasMinLength = true; minLengthVal = parseInt(val, 10); }
+                else if (facetLocal === 'maxLength') { hasMaxLength = true; maxLengthVal = parseInt(val, 10); }
+                else if (facetLocal === 'enumeration' && isNumericBase && isInvalidNumericValue(val)) {
+                    throw new Error('xs:enumeration value "' + val + '" is not valid for numeric base type "' + baseLocal + '"');
+                }
+            }
+            if (hasLength && hasMinLength) {
+                throw new Error('xs:restriction cannot have both xs:length and xs:minLength');
+            }
+            if (hasLength && hasMaxLength) {
+                throw new Error('xs:restriction cannot have both xs:length and xs:maxLength');
+            }
+            if (hasMinLength && hasMaxLength && minLengthVal !== undefined && maxLengthVal !== undefined && minLengthVal > maxLengthVal) {
+                throw new Error('xs:restriction has minLength (' + minLengthVal + ') greater than maxLength (' + maxLengthVal + ')');
             }
             if (minExclusive !== undefined && minInclusive !== undefined) {
                 throw new Error('xs:restriction cannot have both minExclusive and minInclusive');
             }
             if (maxExclusive !== undefined && maxInclusive !== undefined) {
                 throw new Error('xs:restriction cannot have both maxExclusive and maxInclusive');
+            }
+            if (isNumericBase) {
+                const rangeFacets: Array<[string, string | undefined]> = [
+                    ['minExclusive', minExclusive],
+                    ['maxExclusive', maxExclusive],
+                    ['minInclusive', minInclusive],
+                    ['maxInclusive', maxInclusive],
+                ];
+                for (const [facetName, val] of rangeFacets) {
+                    if (val !== undefined && isInvalidNumericValue(val)) {
+                        throw new Error('xs:' + facetName + ' value "' + val + '" is not valid for numeric base type "' + baseLocal + '"');
+                    }
+                }
             }
             const lo: number | undefined = minExclusive !== undefined ? parseFloat(minExclusive) : (minInclusive !== undefined ? parseFloat(minInclusive) : undefined);
             const loExclusive: boolean = minExclusive !== undefined;

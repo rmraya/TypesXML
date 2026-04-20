@@ -156,6 +156,15 @@ export class XsdRegexTranslator {
         'ArabicPresentationForms-B': '\uFE70-\uFEFF',
         Specials: '\uFFF0-\uFFFF',
         HalfwidthandFullwidthForms: '\uFF00-\uFFEF',
+        OldItalic: '\u{10300}-\u{1032F}',
+        Gothic: '\u{10330}-\u{1034F}',
+        Deseret: '\u{10400}-\u{1044F}',
+        ByzantineMusicalSymbols: '\u{1D000}-\u{1D0FF}',
+        MusicalSymbols: '\u{1D100}-\u{1D1FF}',
+        MathematicalAlphanumericSymbols: '\u{1D400}-\u{1D7FF}',
+        CJKUnifiedIdeographsExtensionB: '\u{20000}-\u{2A6DF}',
+        CJKCompatibilityIdeographsSupplement: '\u{2F800}-\u{2FA1F}',
+        Tags: '\u{E0000}-\u{E007F}',
     };
 
     public static toRegExp(xsdPattern: string): RegExp {
@@ -205,15 +214,28 @@ export class XsdRegexTranslator {
             }
 
             if (ch === '(') {
-                // Groups — XSD only supports non-capturing-style grouping
-                // (no lookahead, no named groups) but we pass through
-                // standard grouping and alternation unchanged, just
-                // recursing to handle the interior.
-                const inner = XsdRegexTranslator.parseExpression(src, i + 1, ')');
+                // Inline .NET flag groups: (?flags:...) where flags may include
+                // n (explicit capture — no-op for matching), i, m, s.
+                // Map (?n:...) → (?:...) since "n" only suppresses capture numbering.
+                // All other inline-flag prefixes are passed through as-is (JS supports them).
+                let prefix = '(';
+                let bodyStart = i + 1;
+                if (src[i + 1] === '?') {
+                    const flagEnd = src.indexOf(':', i + 2);
+                    if (flagEnd !== -1) {
+                        const flags = src.substring(i + 2, flagEnd);
+                        if (/^[nimsx]+$/.test(flags)) {
+                            const jsFlags = flags.replace(/n/g, '');
+                            prefix = jsFlags.length > 0 ? '(?' + jsFlags + ':' : '(?:';
+                            bodyStart = flagEnd + 1;
+                        }
+                    }
+                }
+                const inner = XsdRegexTranslator.parseExpression(src, bodyStart, ')');
                 if (src[inner.end] !== ')') {
                     throw new Error('XsdRegexTranslator: unmatched \'(\' at position ' + i);
                 }
-                out += '(' + inner.result + ')';
+                out += prefix + inner.result + ')';
                 i = inner.end + 1;
                 continue;
             }
@@ -245,9 +267,9 @@ export class XsdRegexTranslator {
             case 's': return { result: '[\\x20\\t\\n\\r]', end: i + 2 };
             case 'S': return { result: '[^\\x20\\t\\n\\r]', end: i + 2 };
 
-            // XSD \d is [0-9] only (no Unicode digits)
-            case 'd': return { result: '[0-9]', end: i + 2 };
-            case 'D': return { result: '[^0-9]', end: i + 2 };
+            // XSD \d is any Unicode decimal digit (\p{Nd})
+            case 'd': return { result: '\\p{Nd}', end: i + 2 };
+            case 'D': return { result: '\\P{Nd}', end: i + 2 };
 
             // XSD \w excludes the characters that \i and \c cover;
             // per spec it is [#x0000-#x10FFFF]-[\p{P}\p{Z}\p{C}] which is
@@ -378,8 +400,8 @@ export class XsdRegexTranslator {
             case 'C': return { item: new CharClassItem(true,  XsdRegexTranslator.NAME_CHAR), end: i + 2 };
             case 's': return { item: new CharClassItem(false, '\\x20\\t\\n\\r'), end: i + 2 };
             case 'S': return { item: new CharClassItem(true,  '\\x20\\t\\n\\r'), end: i + 2 };
-            case 'd': return { item: new CharClassItem(false, '0-9'), end: i + 2 };
-            case 'D': return { item: new CharClassItem(true,  '0-9'), end: i + 2 };
+            case 'd': return { item: new CharClassItem(false, '\\p{Nd}'), end: i + 2 };
+            case 'D': return { item: new CharClassItem(true,  '\\p{Nd}'), end: i + 2 };
             case 'w': return { item: new CharClassItem(false, '\\p{L}\\p{M}\\p{N}\\p{S}'), end: i + 2 };
             case 'W': return { item: new CharClassItem(true,  '\\p{L}\\p{M}\\p{N}\\p{S}'), end: i + 2 };
             case 'p': {

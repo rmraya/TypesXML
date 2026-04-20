@@ -664,9 +664,12 @@ export class SAXParser {
             this.handleNamespaceDeclarations(attributesMap, namespaceContext, previousContext);
             const grammarForEntities: Grammar | undefined = this.contentHandler?.getGrammar();
             const dtdGrammarForEntities: DTDGrammar | undefined = grammarForEntities instanceof DTDGrammar ? grammarForEntities : undefined;
-            attributesMap.forEach((value: string) => {
+            attributesMap.forEach((value: string, key: string) => {
                 const decoded: string = this.decodeAttributeEntities(value, dtdGrammarForEntities);
                 XMLUtils.ensureValidXmlCharacters(this.xmlVersion, decoded, 'attribute value');
+                if (!dtdGrammarForEntities) {
+                    attributesMap.set(key, decoded);
+                }
             });
             attributesMap = this.normalizeDTDAttributes(name, attributesMap);
             let attributes: Array<XMLAttribute> = [];

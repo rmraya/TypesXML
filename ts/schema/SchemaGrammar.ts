@@ -408,6 +408,7 @@ export class SchemaGrammar implements Grammar {
         this.elementPath.push(this.localName(element));
         const currentDepth: number = this.elementPath.length - 1;
         let isNilTrue: boolean = false;
+        let isNilPresent: boolean = false;
         for (const [attrName, attrValue] of attributes) {
             let isNilAttr: boolean = attrName === 'xsi:nil';
             if (!isNilAttr && attrName.endsWith(':nil') && attrName.indexOf(':') !== -1) {
@@ -417,8 +418,11 @@ export class SchemaGrammar implements Grammar {
                     isNilAttr = true;
                 }
             }
-            if (isNilAttr && (attrValue === 'true' || attrValue === '1')) {
-                isNilTrue = true;
+            if (isNilAttr) {
+                isNilPresent = true;
+                if (attrValue === 'true' || attrValue === '1') {
+                    isNilTrue = true;
+                }
                 break;
             }
         }
@@ -542,10 +546,10 @@ export class SchemaGrammar implements Grammar {
                 );
             }
         }
-        // Per spec §2.6.2: xsi:nil="true" is only allowed when the element declaration has nillable="true".
-        if (isNilTrue && !decl.isNillable()) {
+        // Per spec §3.3.4 cvc-elt 3.2.1: xsi:nil is only allowed when the element declaration has nillable="true".
+        if (isNilPresent && !decl.isNillable()) {
             return ValidationResult.error(
-                'Element "' + element + '" is not nillable but xsi:nil="true" was specified'
+                'Element "' + element + '" is not nillable but xsi:nil was specified'
             );
         }
         if (xsiTypeLocalName === undefined) {

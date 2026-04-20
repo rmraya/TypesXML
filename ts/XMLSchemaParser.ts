@@ -43,6 +43,7 @@ type AttributeDefinitionInfo = {
 export class XMLSchemaParser {
 
     private static instance: XMLSchemaParser | undefined;
+    private static readonly XML_NS: string = 'http://www.w3.org/XML/1998/namespace';
     private static readonly IGNORED_NAMESPACES: Set<string> = new Set<string>([
         Constants.XML_SCHEMA_INSTANCE_NS_URI
     ]);
@@ -130,6 +131,25 @@ export class XMLSchemaParser {
         this.complexTypeDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.attributeGroupDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.parsedSchemaRoots = [];
+        this.injectXmlNamespaceAttributes();
+    }
+
+    private injectXmlNamespaceAttributes(): void {
+        const xmlAttrs: Array<[string, string]> = [
+            ['lang',  'xs:language'],
+            ['space', 'xs:NCName'],
+            ['base',  'xs:anyURI'],
+            ['id',    'xs:ID']
+        ];
+        for (const [localName, type] of xmlAttrs) {
+            const el: XMLElement = new XMLElement('xs:attribute');
+            el.setAttribute(new XMLAttribute('name', localName));
+            el.setAttribute(new XMLAttribute('type', type));
+            const info: AttributeDefinitionInfo = { element: el, namespace: XMLSchemaParser.XML_NS };
+            const key: string = XMLSchemaParser.XML_NS + '|' + localName;
+            this.attributeDefinitions.set(key, info);
+            this.attributeDefinitions.set('xml:' + localName, info);
+        }
     }
 
     protected cloneDefaults(source: Map<string, Map<string, AttributeDefault>>): Map<string, Map<string, AttributeDefault>> {
