@@ -59,6 +59,7 @@ export class XMLSchemaParser {
     collectedDefaults: Map<string, Map<string, AttributeDefault>>;
     complexTypeDefaultCache: Map<string, Map<string, AttributeDefault>>;
     attributeGroupDefaultCache: Map<string, Map<string, AttributeDefault>>;
+    parsedSchemaRoots: Array<XMLElement>;
 
     protected constructor(catalog?: Catalog) {
         this.catalog = catalog;
@@ -74,6 +75,7 @@ export class XMLSchemaParser {
         this.collectedDefaults = new Map<string, Map<string, AttributeDefault>>();
         this.complexTypeDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.attributeGroupDefaultCache = new Map<string, Map<string, AttributeDefault>>();
+        this.parsedSchemaRoots = [];
     }
 
     static getInstance(catalog?: Catalog): XMLSchemaParser {
@@ -127,6 +129,7 @@ export class XMLSchemaParser {
         this.collectedDefaults = new Map<string, Map<string, AttributeDefault>>();
         this.complexTypeDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.attributeGroupDefaultCache = new Map<string, Map<string, AttributeDefault>>();
+        this.parsedSchemaRoots = [];
     }
 
     protected cloneDefaults(source: Map<string, Map<string, AttributeDefault>>): Map<string, Map<string, AttributeDefault>> {
@@ -513,7 +516,7 @@ export class XMLSchemaParser {
         if (includingTargetNamespace !== undefined) {
             XSDSemanticValidator.checkIncludedNamespace(root, includingTargetNamespace !== null ? includingTargetNamespace : undefined);
         }
-        XSDSemanticValidator.validate(root);
+        this.parsedSchemaRoots.push(root);
         this.registerSchemaComponents(root, targetNamespace);
         this.processSchemaReferences(root, dirname(normalizedPath));
     }

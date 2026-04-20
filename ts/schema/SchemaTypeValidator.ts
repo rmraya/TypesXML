@@ -563,11 +563,11 @@ export class SchemaTypeValidator {
     }
 
     private static isGMonth(value: string): boolean {
-        const m: RegExpMatchArray | null = value.match(/^--([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?$/);
+        const m: RegExpMatchArray | null = value.match(/^--([0-9]{2})(--)?(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
         const month: number = parseInt(m[1], 10);
         if (month < 1 || month > 12) { return false; }
-        return SchemaTypeValidator.isValidTimezone(m[2]);
+        return SchemaTypeValidator.isValidTimezone(m[3]);
     }
 
     private static isGMonthDay(value: string): boolean {

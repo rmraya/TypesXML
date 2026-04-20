@@ -13,6 +13,7 @@
 import { XMLAttribute } from '../XMLAttribute.js';
 import { XMLElement } from '../XMLElement.js';
 import { XMLUtils } from '../XMLUtils.js';
+import { SchemaFacets, SchemaTypeValidator } from './SchemaTypeValidator.js';
 
 const NAMED_COMPONENTS: Set<string> = new Set<string>([
     'element',
@@ -53,6 +54,16 @@ const RESTRICTION_NON_FACET_CHILDREN: Set<string> = new Set<string>([
     'annotation', 'simpleType'
 ]);
 
+const XSD_BUILT_IN_TYPE_NAMES: Set<string> = new Set<string>([
+    'string', 'boolean', 'decimal', 'float', 'double', 'duration', 'dateTime', 'time', 'date',
+    'gYearMonth', 'gYear', 'gMonthDay', 'gDay', 'gMonth', 'hexBinary', 'base64Binary', 'anyURI',
+    'QName', 'NOTATION', 'normalizedString', 'token', 'language', 'NMTOKEN', 'NMTOKENS',
+    'Name', 'NCName', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'integer',
+    'nonPositiveInteger', 'negativeInteger', 'long', 'int', 'short', 'byte',
+    'nonNegativeInteger', 'unsignedLong', 'unsignedInt', 'unsignedShort', 'unsignedByte',
+    'positiveInteger', 'anySimpleType', 'anyType'
+]);
+
 export class XSDSemanticValidator {
 
     static validate(schemaRoot: XMLElement): void {
@@ -70,13 +81,6 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkDuplicateTopLevelGroups(schemaRoot);
         XSDSemanticValidator.checkFacetValues(schemaRoot);
         XSDSemanticValidator.checkAllNesting(schemaRoot, false);
-        const simpleTypes: Map<string, XMLElement> = XSDSemanticValidator.collectSimpleTypes(schemaRoot);
-        XSDSemanticValidator.checkSimpleTypeRestrictions(schemaRoot, simpleTypes);
-        XSDSemanticValidator.checkFinalConstraints(schemaRoot, simpleTypes);
-        XSDSemanticValidator.checkElementValueConstraints(schemaRoot, simpleTypes);
-        const complexTypes: Map<string, XMLElement> = XSDSemanticValidator.collectComplexTypes(schemaRoot);
-        XSDSemanticValidator.checkComplexTypeFinalConstraints(schemaRoot, complexTypes);
-        XSDSemanticValidator.checkComplexRestrictionAttributes(schemaRoot, complexTypes);
         XSDSemanticValidator.checkKeyrefReferences(schemaRoot);
         XSDSemanticValidator.checkIdentityConstraintPlacement(schemaRoot, false);
         XSDSemanticValidator.checkElementRefConstraints(schemaRoot);
@@ -85,6 +89,117 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkSimpleTypeChildren(schemaRoot);
         XSDSemanticValidator.checkListUnionConstraints(schemaRoot);
         XSDSemanticValidator.checkComplexTypeContentModel(schemaRoot);
+    }
+
+    static validateCrossReferences(
+        roots: Array<XMLElement>,
+        allComplexTypes: Map<string, XMLElement>,
+        allSimpleTypes: Map<string, XMLElement>,
+        allTopLevelElements: Set<string>
+    ): void {
+        for (const root of roots) {
+            const schemaTargetNs: string = root.getAttribute('targetNamespace')?.getValue() ?? '';
+            const schemaDefaultNs: string = XSDSemanticValidator.getDefaultNs(root);
+            const schemaPrefixMap: Map<string, string> = XSDSemanticValidator.buildPrefixMap(root);
+            XSDSemanticValidator.checkComplexTypeBaseReferences(root, allComplexTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
+            XSDSemanticValidator.checkElementRefAndTypeReferences(root, allTopLevelElements, allComplexTypes, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
+            XSDSemanticValidator.checkSimpleTypeRestrictions(root, allSimpleTypes);
+            XSDSemanticValidator.checkFinalConstraints(root, allSimpleTypes);
+            XSDSemanticValidator.checkElementValueConstraints(root, allSimpleTypes);
+            XSDSemanticValidator.checkComplexTypeFinalConstraints(root, allComplexTypes);
+            XSDSemanticValidator.checkComplexRestrictionAttributes(root, allComplexTypes);
+            XSDSemanticValidator.checkListUnionTypeReferences(root, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
+        }
+        XSDSemanticValidator.checkCrossFileIds(roots);
+    }
+
+    private static checkListUnionTypeReferences(
+        el: XMLElement,
+        allSimpleTypes: Map<string, XMLElement>,
+        targetNs: string,
+        defaultNs: string,
+        prefixMap: Map<string, string>
+    ): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'list') {
+            const itemTypeAttr: XMLAttribute | undefined = el.getAttribute('itemType');
+            if (itemTypeAttr) {
+                XSDSemanticValidator.checkQNameSimpleTypeRef(itemTypeAttr.getValue(), 'xs:list itemType', allSimpleTypes, targetNs, defaultNs, prefixMap);
+            }
+        } else if (local === 'union') {
+            const memberTypesAttr: XMLAttribute | undefined = el.getAttribute('memberTypes');
+            if (memberTypesAttr) {
+                const tokens: string[] = memberTypesAttr.getValue().trim().split(/\s+/);
+                for (const token of tokens) {
+                    if (token.length > 0) {
+                        XSDSemanticValidator.checkQNameSimpleTypeRef(token, 'xs:union memberTypes', allSimpleTypes, targetNs, defaultNs, prefixMap);
+                    }
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkListUnionTypeReferences(child, allSimpleTypes, targetNs, defaultNs, prefixMap);
+        }
+    }
+
+    private static checkQNameSimpleTypeRef(
+        qname: string,
+        context: string,
+        allSimpleTypes: Map<string, XMLElement>,
+        targetNs: string,
+        defaultNs: string,
+        prefixMap: Map<string, string>
+    ): void {
+        const xsdNs: string = 'http://www.w3.org/2001/XMLSchema';
+        if (qname.indexOf(':') === -1) {
+            if (defaultNs === xsdNs && targetNs.length > 0) {
+                if (!XSD_BUILT_IN_TYPE_NAMES.has(qname)) {
+                    throw new Error(context + '="' + qname + '" does not resolve to a declared simple type');
+                }
+            } else if (!allSimpleTypes.has(qname) && !XSD_BUILT_IN_TYPE_NAMES.has(qname)) {
+                throw new Error(context + '="' + qname + '" refers to undeclared simple type "' + qname + '"');
+            }
+        } else {
+            const colon: number = qname.indexOf(':');
+            const prefix: string = qname.substring(0, colon);
+            const localPart: string = qname.substring(colon + 1);
+            const resolvedNs: string | undefined = prefixMap.get(prefix);
+            if (resolvedNs === xsdNs) {
+                if (!XSD_BUILT_IN_TYPE_NAMES.has(localPart)) {
+                    throw new Error(context + '="' + qname + '" refers to unknown XSD built-in type "' + localPart + '"');
+                }
+            } else if (resolvedNs === targetNs) {
+                if (!allSimpleTypes.has(localPart)) {
+                    throw new Error(context + '="' + qname + '" refers to undeclared simple type "' + localPart + '"');
+                }
+            }
+        }
+    }
+
+    private static checkCrossFileIds(roots: Array<XMLElement>): void {
+        const seen: Map<string, number> = new Map<string, number>();
+        for (const root of roots) {
+            XSDSemanticValidator.collectCrossFileIds(root, seen);
+        }
+        for (const [value, count] of seen) {
+            if (count > 1) {
+                throw new Error('Duplicate id value across schema files: "' + value + '"');
+            }
+        }
+    }
+
+    private static collectCrossFileIds(el: XMLElement, seen: Map<string, number>): void {
+        const idAttr: XMLAttribute | undefined = el.getAttribute('id');
+        if (idAttr) {
+            const value: string = idAttr.getValue();
+            seen.set(value, (seen.get(value) ?? 0) + 1);
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.collectCrossFileIds(child, seen);
+        }
     }
 
     private static checkNamedComponents(schemaRoot: XMLElement): void {
@@ -512,6 +627,178 @@ export class XSDSemanticValidator {
         }
     }
 
+    private static getDefaultNs(schemaRoot: XMLElement): string {
+        const xmlns: XMLAttribute | undefined = schemaRoot.getAttribute('xmlns');
+        return xmlns ? xmlns.getValue() : '';
+    }
+
+    private static checkComplexTypeBaseReferences(
+        el: XMLElement,
+        complexTypes: Map<string, XMLElement>,
+        targetNs: string,
+        defaultNs: string,
+        prefixMap: Map<string, string>
+    ): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'complexContent') {
+            for (const derivChild of el.getChildren()) {
+                const derivLocal: string = XSDSemanticValidator.localName(derivChild.getName());
+                if (derivLocal !== 'extension' && derivLocal !== 'restriction') {
+                    continue;
+                }
+                const baseAttr: XMLAttribute | undefined = derivChild.getAttribute('base');
+                if (!baseAttr) {
+                    continue;
+                }
+                const baseValue: string = baseAttr.getValue();
+                if (baseValue.indexOf(':') === -1) {
+                    const xsdNs: string = 'http://www.w3.org/2001/XMLSchema';
+                    if (defaultNs === xsdNs && targetNs.length > 0) {
+                        if (baseValue !== 'anyType') {
+                            throw new Error(
+                                'xs:' + derivLocal + ' base="' + baseValue +
+                                '" does not resolve to a declared type in namespace "' + targetNs + '"'
+                            );
+                        }
+                    } else if (!complexTypes.has(baseValue) && baseValue !== 'anyType') {
+                        throw new Error(
+                            'xs:' + derivLocal + ' base="' + baseValue +
+                            '" refers to undeclared complex type "' + baseValue + '"'
+                        );
+                    }
+                } else {
+                    const colon: number = baseValue.indexOf(':');
+                    const prefix: string = baseValue.substring(0, colon);
+                    const localPart: string = baseValue.substring(colon + 1);
+                    const resolvedNs: string | undefined = prefixMap.get(prefix);
+                    if (resolvedNs === targetNs) {
+                        if (!complexTypes.has(localPart) && localPart !== 'anyType') {
+                            throw new Error(
+                                'xs:' + derivLocal + ' base="' + baseValue +
+                                '" refers to undeclared complex type "' + localPart + '"'
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkComplexTypeBaseReferences(child, complexTypes, targetNs, defaultNs, prefixMap);
+        }
+    }
+
+    private static buildPrefixMap(schemaRoot: XMLElement): Map<string, string> {
+        const map: Map<string, string> = new Map<string, string>();
+        for (const attr of schemaRoot.getAttributes()) {
+            const attrName: string = attr.getName();
+            if (attrName.length > 6 && attrName.substring(0, 6) === 'xmlns:') {
+                map.set(attrName.substring(6), attr.getValue());
+            }
+        }
+        return map;
+    }
+
+    private static collectTopLevelElements(schemaRoot: XMLElement): Set<string> {
+        const set: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'element') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (nameAttr) {
+                    set.add(nameAttr.getValue());
+                }
+            }
+        }
+        return set;
+    }
+
+    private static checkElementRefAndTypeReferences(
+        el: XMLElement,
+        topLevelElements: Set<string>,
+        complexTypes: Map<string, XMLElement>,
+        simpleTypes: Map<string, XMLElement>,
+        targetNs: string,
+        defaultNs: string,
+        prefixMap: Map<string, string>
+    ): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'element') {
+            const refAttr: XMLAttribute | undefined = el.getAttribute('ref');
+            if (refAttr) {
+                const refValue: string = refAttr.getValue();
+                XSDSemanticValidator.checkQNameElementRef(refValue, topLevelElements, targetNs, defaultNs, prefixMap);
+            }
+            const typeAttr: XMLAttribute | undefined = el.getAttribute('type');
+            if (typeAttr) {
+                const typeValue: string = typeAttr.getValue();
+                XSDSemanticValidator.checkQNameTypeRef(typeValue, complexTypes, simpleTypes, targetNs, defaultNs, prefixMap);
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkElementRefAndTypeReferences(child, topLevelElements, complexTypes, simpleTypes, targetNs, defaultNs, prefixMap);
+        }
+    }
+
+    private static checkQNameElementRef(
+        qname: string,
+        topLevelElements: Set<string>,
+        targetNs: string,
+        defaultNs: string,
+        prefixMap: Map<string, string>
+    ): void {
+        if (qname.indexOf(':') === -1) {
+            if (!topLevelElements.has(qname)) {
+                throw new Error('xs:element ref="' + qname + '" refers to undeclared element "' + qname + '"');
+            }
+        } else {
+            const colon: number = qname.indexOf(':');
+            const prefix: string = qname.substring(0, colon);
+            const localPart: string = qname.substring(colon + 1);
+            const resolvedNs: string | undefined = prefixMap.get(prefix);
+            if (resolvedNs !== undefined) {
+                const lookupKey: string = resolvedNs.length > 0 ? resolvedNs + '|' + localPart : localPart;
+                if (!topLevelElements.has(lookupKey)) {
+                    throw new Error('xs:element ref="' + qname + '" refers to undeclared element "' + localPart + '"');
+                }
+            }
+        }
+    }
+
+    private static checkQNameTypeRef(
+        qname: string,
+        complexTypes: Map<string, XMLElement>,
+        simpleTypes: Map<string, XMLElement>,
+        targetNs: string,
+        defaultNs: string,
+        prefixMap: Map<string, string>
+    ): void {
+        const xsdNs: string = 'http://www.w3.org/2001/XMLSchema';
+        if (qname.indexOf(':') === -1) {
+            if (defaultNs === xsdNs && targetNs.length > 0) {
+                if (!XSD_BUILT_IN_TYPE_NAMES.has(qname)) {
+                    throw new Error('xs:element type="' + qname + '" does not resolve to a declared type');
+                }
+            } else if (!complexTypes.has(qname) && !simpleTypes.has(qname) && !XSD_BUILT_IN_TYPE_NAMES.has(qname)) {
+                throw new Error('xs:element type="' + qname + '" refers to undeclared type "' + qname + '"');
+            }
+        } else {
+            const colon: number = qname.indexOf(':');
+            const prefix: string = qname.substring(0, colon);
+            const localPart: string = qname.substring(colon + 1);
+            const resolvedNs: string | undefined = prefixMap.get(prefix);
+            if (resolvedNs === targetNs) {
+                if (!complexTypes.has(localPart) && !simpleTypes.has(localPart)) {
+                    throw new Error('xs:element type="' + qname + '" refers to undeclared type "' + localPart + '"');
+                }
+            }
+        }
+    }
+
     // --- Simple type variety resolution ---
 
     private static collectSimpleTypes(schemaRoot: XMLElement): Map<string, XMLElement> {
@@ -687,16 +974,196 @@ export class XSDSemanticValidator {
         }
     }
 
-    private static checkElementValueConstraints(el: XMLElement, simpleTypes: Map<string, XMLElement>): void {        const local: string = XSDSemanticValidator.localName(el.getName());
-        if (local === 'element') {
-            const hasFixed: boolean = el.getAttribute('fixed') !== undefined;
-            const hasDefault: boolean = el.getAttribute('default') !== undefined;
-            if (hasFixed || hasDefault) {
+    private static collectFacetsFromSimpleType(typeEl: XMLElement, simpleTypes: Map<string, XMLElement>, visited: Set<string>): SchemaFacets {
+        const facets: SchemaFacets = {};
+        for (const child of typeEl.getChildren()) {
+            const childLocal: string = XSDSemanticValidator.localName(child.getName());
+            if (childLocal === 'list') {
+                facets.isList = true;
+                return facets;
+            }
+            if (childLocal === 'restriction') {
+                const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
+                let parentFacets: SchemaFacets | undefined;
+                if (baseAttr) {
+                    const baseLocal: string = XSDSemanticValidator.localName(baseAttr.getValue());
+                    const baseEl: XMLElement | undefined = simpleTypes.get(baseLocal);
+                    if (baseEl && !visited.has(baseLocal)) {
+                        visited.add(baseLocal);
+                        parentFacets = XSDSemanticValidator.collectFacetsFromSimpleType(baseEl, simpleTypes, visited);
+                    }
+                }
+                const currentPatterns: string[] = [];
+                for (const facetChild of child.getChildren()) {
+                    const facetLocal: string = XSDSemanticValidator.localName(facetChild.getName());
+                    const valueAttr: XMLAttribute | undefined = facetChild.getAttribute('value');
+                    if (!valueAttr) {
+                        continue;
+                    }
+                    const val: string = valueAttr.getValue();
+                    if (facetLocal === 'enumeration') {
+                        if (!facets.enumeration) { facets.enumeration = []; }
+                        facets.enumeration.push(val);
+                    } else if (facetLocal === 'pattern') {
+                        currentPatterns.push(val);
+                    } else if (facetLocal === 'minExclusive') {
+                        facets.minExclusive = val;
+                    } else if (facetLocal === 'maxExclusive') {
+                        facets.maxExclusive = val;
+                    } else if (facetLocal === 'minInclusive') {
+                        facets.minInclusive = val;
+                    } else if (facetLocal === 'maxInclusive') {
+                        facets.maxInclusive = val;
+                    } else if (facetLocal === 'length') {
+                        facets.length = parseInt(val, 10);
+                    } else if (facetLocal === 'minLength') {
+                        facets.minLength = parseInt(val, 10);
+                    } else if (facetLocal === 'maxLength') {
+                        facets.maxLength = parseInt(val, 10);
+                    } else if (facetLocal === 'totalDigits') {
+                        facets.totalDigits = parseInt(val, 10);
+                    } else if (facetLocal === 'fractionDigits') {
+                        facets.fractionDigits = parseInt(val, 10);
+                    } else if (facetLocal === 'whiteSpace') {
+                        facets.whiteSpace = val;
+                    }
+                }
+                const patternGroups: string[][] = parentFacets && parentFacets.patterns ? parentFacets.patterns.slice() : [];
+                if (currentPatterns.length > 0) {
+                    patternGroups.push(currentPatterns);
+                }
+                if (patternGroups.length > 0) {
+                    facets.patterns = patternGroups;
+                }
+                if (parentFacets) {
+                    if (facets.enumeration === undefined && parentFacets.enumeration !== undefined) { facets.enumeration = parentFacets.enumeration; }
+                    if (facets.minExclusive === undefined && parentFacets.minExclusive !== undefined) { facets.minExclusive = parentFacets.minExclusive; }
+                    if (facets.maxExclusive === undefined && parentFacets.maxExclusive !== undefined) { facets.maxExclusive = parentFacets.maxExclusive; }
+                    if (facets.minInclusive === undefined && parentFacets.minInclusive !== undefined) { facets.minInclusive = parentFacets.minInclusive; }
+                    if (facets.maxInclusive === undefined && parentFacets.maxInclusive !== undefined) { facets.maxInclusive = parentFacets.maxInclusive; }
+                    if (facets.length === undefined && parentFacets.length !== undefined) { facets.length = parentFacets.length; }
+                    if (facets.minLength === undefined && parentFacets.minLength !== undefined) { facets.minLength = parentFacets.minLength; }
+                    if (facets.maxLength === undefined && parentFacets.maxLength !== undefined) { facets.maxLength = parentFacets.maxLength; }
+                    if (facets.totalDigits === undefined && parentFacets.totalDigits !== undefined) { facets.totalDigits = parentFacets.totalDigits; }
+                    if (facets.fractionDigits === undefined && parentFacets.fractionDigits !== undefined) { facets.fractionDigits = parentFacets.fractionDigits; }
+                    if (facets.whiteSpace === undefined && parentFacets.whiteSpace !== undefined) { facets.whiteSpace = parentFacets.whiteSpace; }
+                    if (facets.isList === undefined && parentFacets.isList !== undefined) { facets.isList = parentFacets.isList; }
+                }
+                return facets;
+            }
+        }
+        return facets;
+    }
+
+    private static resolveSimpleType(
+        typeName: string,
+        simpleTypes: Map<string, XMLElement>,
+        visited: Set<string>
+    ): { baseType: string, facets: SchemaFacets, variety: 'atomic' | 'list' | 'union', memberTypes: string[] } {
+        const local: string = XSDSemanticValidator.localName(typeName);
+        const typeEl: XMLElement | undefined = simpleTypes.get(local);
+        if (!typeEl || visited.has(local)) {
+            return { baseType: typeName, facets: {}, variety: 'atomic', memberTypes: [] };
+        }
+        visited.add(local);
+        for (const child of typeEl.getChildren()) {
+            const childLocal: string = XSDSemanticValidator.localName(child.getName());
+            if (childLocal === 'list') {
+                const itemTypeAttr: XMLAttribute | undefined = child.getAttribute('itemType');
+                const itemType: string = itemTypeAttr ? itemTypeAttr.getValue() : 'xsd:string';
+                return { baseType: itemType, facets: { isList: true }, variety: 'list', memberTypes: [] };
+            }
+            if (childLocal === 'union') {
+                const members: string[] = [];
+                const memberTypesAttr: XMLAttribute | undefined = child.getAttribute('memberTypes');
+                if (memberTypesAttr) {
+                    const names: string[] = memberTypesAttr.getValue().trim().split(/\s+/);
+                    for (let i: number = 0; i < names.length; i++) {
+                        members.push(names[i]);
+                    }
+                }
+                for (const unionChild of child.getChildren()) {
+                    if (XSDSemanticValidator.localName(unionChild.getName()) === 'simpleType') {
+                        members.push('__inline__');
+                    }
+                }
+                return { baseType: typeName, facets: {}, variety: 'union', memberTypes: members };
+            }
+            if (childLocal === 'restriction') {
+                const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
+                if (baseAttr) {
+                    const baseLocal: string = XSDSemanticValidator.localName(baseAttr.getValue());
+                    if (!simpleTypes.has(baseLocal)) {
+                        const facets: SchemaFacets = XSDSemanticValidator.collectFacetsFromSimpleType(typeEl, simpleTypes, new Set<string>());
+                        return { baseType: baseAttr.getValue(), facets, variety: 'atomic', memberTypes: [] };
+                    }
+                    const result: { baseType: string, facets: SchemaFacets, variety: 'atomic' | 'list' | 'union', memberTypes: string[] } =
+                        XSDSemanticValidator.resolveSimpleType(baseAttr.getValue(), simpleTypes, visited);
+                    const myFacets: SchemaFacets = XSDSemanticValidator.collectFacetsFromSimpleType(typeEl, simpleTypes, new Set<string>());
+                    const merged: SchemaFacets = Object.assign({}, result.facets, myFacets);
+                    if (result.facets.patterns && myFacets.patterns) {
+                        merged.patterns = result.facets.patterns.concat(myFacets.patterns);
+                    }
+                    return { baseType: result.baseType, facets: merged, variety: result.variety, memberTypes: result.memberTypes };
+                }
+            }
+        }
+        return { baseType: typeName, facets: {}, variety: 'atomic', memberTypes: [] };
+    }
+
+    private static isValidForResolvedType(value: string, typeName: string, simpleTypes: Map<string, XMLElement>): boolean {
+        const local: string = XSDSemanticValidator.localName(typeName);
+        if (!simpleTypes.has(local)) {
+            return SchemaTypeValidator.validate(value, typeName);
+        }
+        const resolved: { baseType: string, facets: SchemaFacets, variety: 'atomic' | 'list' | 'union', memberTypes: string[] } =
+            XSDSemanticValidator.resolveSimpleType(typeName, simpleTypes, new Set<string>());
+        if (resolved.variety === 'list') {
+            const items: string[] = value.trim().length === 0 ? [] : value.trim().split(/\s+/);
+            for (let i: number = 0; i < items.length; i++) {
+                if (!XSDSemanticValidator.isValidForResolvedType(items[i], resolved.baseType, simpleTypes)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (resolved.variety === 'union') {
+            for (let i: number = 0; i < resolved.memberTypes.length; i++) {
+                const member: string = resolved.memberTypes[i];
+                if (member === '__inline__') {
+                    continue;
+                }
+                if (XSDSemanticValidator.isValidForResolvedType(value, member, simpleTypes)) {
+                    return true;
+                }
+            }
+            return resolved.memberTypes.length === 0;
+        }
+        if (!SchemaTypeValidator.validate(value, resolved.baseType)) {
+            return false;
+        }
+        return SchemaTypeValidator.validateFacets(value, resolved.facets, resolved.baseType);
+    }
+
+    private static checkElementValueConstraints(el: XMLElement, simpleTypes: Map<string, XMLElement>): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'element' || local === 'attribute') {
+            const fixedAttr: XMLAttribute | undefined = el.getAttribute('fixed');
+            const defaultAttr: XMLAttribute | undefined = el.getAttribute('default');
+            const constraintAttr: XMLAttribute | undefined = fixedAttr ?? defaultAttr;
+            if (constraintAttr !== undefined) {
+                const constraintKind: string = fixedAttr !== undefined ? 'fixed' : 'default';
+                const declName: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
                 const typeAttr: XMLAttribute | undefined = el.getAttribute('type');
-                if (typeAttr && XSDSemanticValidator.isIdType(typeAttr.getValue(), simpleTypes, new Set<string>())) {
-                    const constraintKind: string = hasFixed ? 'fixed' : 'default';
-                    const elemName: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
-                    throw new Error('Element "' + elemName + '" with xs:ID type may not have a "' + constraintKind + '" value constraint');
+                if (typeAttr) {
+                    if (local === 'element' && XSDSemanticValidator.isIdType(typeAttr.getValue(), simpleTypes, new Set<string>())) {
+                        throw new Error('Element "' + declName + '" with xs:ID type may not have a "' + constraintKind + '" value constraint');
+                    }
+                    const value: string = constraintAttr.getValue();
+                    if (!XSDSemanticValidator.isValidForResolvedType(value, typeAttr.getValue(), simpleTypes)) {
+                        const kind: string = local === 'element' ? 'Element' : 'Attribute';
+                        throw new Error(kind + ' "' + declName + '" has invalid ' + constraintKind + ' value "' + value + '" for type "' + typeAttr.getValue() + '"');
+                    }
                 }
             }
         }

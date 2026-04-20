@@ -340,7 +340,7 @@ export class SchemaGrammar implements Grammar {
                     const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
                     let valid: boolean = false;
                     for (const memberType of unionMemberTypes) {
-                        if (SchemaTypeValidator.validate(normalizedText, memberType, instanceNs)) {
+                        if (this.validateTokenForType(normalizedText, memberType, instanceNs)) {
                             valid = true;
                             break;
                         }
@@ -354,7 +354,7 @@ export class SchemaGrammar implements Grammar {
                         const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
                         const tokens: string[] = normalizedText.length === 0 ? [] : normalizedText.split(/\s+/);
                         for (const token of tokens) {
-                            if (!SchemaTypeValidator.validate(token, listItemType, instanceNs)) {
+                            if (!this.validateTokenForType(token, listItemType, instanceNs)) {
                                 textError = 'Invalid list item "' + token + '" for element "' + element + '": expected type ' + listItemType;
                                 break;
                             }
@@ -881,6 +881,24 @@ export class SchemaGrammar implements Grammar {
             return namespace + '|' + name;
         }
         return name;
+    }
+
+    private validateTokenForType(token: string, typeName: string, instanceNs?: Map<string, string>): boolean {
+        const localTypeName: string = this.localName(typeName);
+        const typeDecl: SchemaElementDecl | undefined = this.simpleTypeDecls.get(localTypeName);
+        if (typeDecl !== undefined) {
+            const baseType: string | undefined = typeDecl.getSimpleType();
+            if (baseType !== undefined) {
+                if (!SchemaTypeValidator.validate(token, baseType, instanceNs)) {
+                    return false;
+                }
+                if (typeDecl.hasTextFacets() && !typeDecl.validateText(token)) {
+                    return false;
+                }
+                return true;
+            }
+        }
+        return SchemaTypeValidator.validate(token, typeName, instanceNs);
     }
 
     private localName(qname: string): string {

@@ -26,6 +26,7 @@ import { SchemaGrammar } from './SchemaGrammar.js';
 import { SchemaParticle } from './SchemaParticle.js';
 import { SchemaSequence } from './SchemaSequence.js';
 import { SchemaWildcardParticle } from './SchemaWildcardParticle.js';
+import { XSDSemanticValidator } from './XSDSemanticValidator.js';
 
 type ElementInfo = {
     element: XMLElement;
@@ -71,6 +72,27 @@ export class SchemaBuilder extends XMLSchemaParser {
         this.earlyTypeHierarchy = new Map<string, {base: string, method: string}>();
         this.schemaPrefixMaps = new Map<string, Map<string, string>>();
         this.walkSchema(this.normalizePath(schemaPath));
+
+        for (const root of this.parsedSchemaRoots) {
+            XSDSemanticValidator.validate(root);
+        }
+        const allComplexTypes: Map<string, XMLElement> = new Map<string, XMLElement>();
+        for (const [key, el] of this.complexTypeDefinitions) {
+            if (key.indexOf('|') === -1) {
+                allComplexTypes.set(key, el);
+            }
+        }
+        const allSimpleTypes: Map<string, XMLElement> = new Map<string, XMLElement>();
+        for (const [key, el] of this.simpleTypeDefinitions) {
+            if (key.indexOf('|') === -1) {
+                allSimpleTypes.set(key, el);
+            }
+        }
+        const allTopLevelElements: Set<string> = new Set<string>();
+        for (const [key] of this.elementDefinitions) {
+            allTopLevelElements.add(key);
+        }
+        XSDSemanticValidator.validateCrossReferences(this.parsedSchemaRoots, allComplexTypes, allSimpleTypes, allTopLevelElements);
 
         // Build substitution groups map: headLocalName -> set of member localNames.
         for (const [, info] of this.elementDefinitions) {
@@ -359,7 +381,7 @@ export class SchemaBuilder extends XMLSchemaParser {
         // (e.g. elements declared inside xs:group or inside anonymous/named xs:complexType).
         const inlineNameProcessed: Set<string> = new Set<string>();
         const inlineContainerProcessed: Set<XMLElement> = new Set<XMLElement>();
-        const walkInlineElements = (container: XMLElement): void => {
+        const walkInlineElements = (container: XMLElement, namespace?: string): void => {
             for (const child of container.getChildren()) {
                 if (inlineContainerProcessed.has(child)) {
                     continue;
@@ -372,32 +394,38 @@ export class SchemaBuilder extends XMLSchemaParser {
                         const elName: string = nameAttr.getValue();
                         if (!inlineNameProcessed.has(elName)) {
                             inlineNameProcessed.add(elName);
-                            const info: ElementInfo = { element: child, namespace: undefined, localName: elName };
+                            const info: ElementInfo = { element: child, namespace: namespace, localName: elName };
                             grammar.addElementDecl(this.buildElementDecl(info));
                         }
                     }
                 }
-                walkInlineElements(child);
+                walkInlineElements(child, namespace);
             }
         };
         const containerProcessed: Set<XMLElement> = new Set<XMLElement>();
-        for (const [, groupEl] of this.modelGroupDefinitions) {
+        for (const [groupKey, groupEl] of this.modelGroupDefinitions) {
             if (!containerProcessed.has(groupEl)) {
                 containerProcessed.add(groupEl);
-                walkInlineElements(groupEl);
+                const pipeIdx: number = groupKey.indexOf('|');
+                const groupNs: string | undefined = pipeIdx !== -1 ? groupKey.substring(0, pipeIdx) : undefined;
+                walkInlineElements(groupEl, groupNs);
             }
         }
-        for (const [, typeEl] of this.complexTypeDefinitions) {
+        for (const [typeKey, typeEl] of this.complexTypeDefinitions) {
             if (!containerProcessed.has(typeEl)) {
                 containerProcessed.add(typeEl);
-                walkInlineElements(typeEl);
+                const pipeIdx: number = typeKey.indexOf('|');
+                const typeNs: string | undefined = pipeIdx !== -1 ? typeKey.substring(0, pipeIdx) : undefined;
+                walkInlineElements(typeEl, typeNs);
             }
         }
         // Also walk original types saved by xs:redefine so their inline elements remain registered.
-        for (const [, typeEl] of this.redefineOriginals) {
+        for (const [redefineKey, typeEl] of this.redefineOriginals) {
             if (!containerProcessed.has(typeEl)) {
                 containerProcessed.add(typeEl);
-                walkInlineElements(typeEl);
+                const pipeIdx: number = redefineKey.indexOf('|');
+                const redefineNs: string | undefined = pipeIdx !== -1 ? redefineKey.substring(0, pipeIdx) : undefined;
+                walkInlineElements(typeEl, redefineNs);
             }
         }
         // Walk the anonymous xs:complexType children of top-level element declarations.
@@ -406,7 +434,7 @@ export class SchemaBuilder extends XMLSchemaParser {
             const inlineComplexType: XMLElement | undefined = this.findChildByLocalName(info.element, 'complexType');
             if (inlineComplexType && !containerProcessed.has(inlineComplexType)) {
                 containerProcessed.add(inlineComplexType);
-                walkInlineElements(inlineComplexType);
+                walkInlineElements(inlineComplexType, info.namespace);
             }
         }
 
@@ -1403,30 +1431,37 @@ export class SchemaBuilder extends XMLSchemaParser {
     }
 
 
-    private collectUnionAlternatives(simpleTypeEl: XMLElement): Array<{enumerations: string[], patterns: string[][]}>  {
-        const alternatives: Array<{enumerations: string[], patterns: string[][]}>  = [];
+    private collectUnionAlternatives(simpleTypeEl: XMLElement): Array<{facets: SchemaFacets, baseType: string}> {
+        const alternatives: Array<{facets: SchemaFacets, baseType: string}> = [];
         const unionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'union');
         if (!unionEl) {
             return alternatives;
         }
-        // Inline simpleType children of the union element.
         for (const child of unionEl.getChildren()) {
             if (this.getLocalName(child.getName()) === 'simpleType') {
-                alternatives.push({enumerations: this.collectEnumeration(child), patterns: this.collectPatterns(child)});
+                const facets: SchemaFacets = this.collectFacets(child);
+                const rawBase: string | undefined = this.resolveSimpleTypeBase(child);
+                const baseType: string = rawBase !== undefined ? this.getLocalName(rawBase) : 'string';
+                alternatives.push({facets, baseType});
             }
         }
-        // Named member types from the memberTypes attribute.
         const memberTypesAttr: XMLAttribute | undefined = unionEl.getAttribute('memberTypes');
         if (memberTypesAttr) {
             const memberTypeNames: string[] = memberTypesAttr.getValue().trim().split(/\s+/);
             for (let i: number = 0; i < memberTypeNames.length; i++) {
                 const localName: string = this.getLocalName(memberTypeNames[i]);
-                const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localName);
-                if (namedSimpleType) {
-                    alternatives.push({enumerations: this.collectEnumeration(namedSimpleType), patterns: this.collectPatterns(namedSimpleType)});
+                if (SchemaBuilder.XSD_BUILT_IN_TYPES.has(localName)) {
+                    alternatives.push({facets: {}, baseType: localName});
                 } else {
-                    // Unknown member type — treat as always-valid to avoid false positives.
-                    alternatives.push({enumerations: [], patterns: []});
+                    const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localName);
+                    if (namedSimpleType) {
+                        const facets: SchemaFacets = this.collectFacets(namedSimpleType);
+                        const rawBase: string | undefined = this.resolveSimpleTypeBase(namedSimpleType);
+                        const baseType: string = rawBase !== undefined ? this.getLocalName(rawBase) : 'string';
+                        alternatives.push({facets, baseType});
+                    } else {
+                        alternatives.push({facets: {}, baseType: 'anySimpleType'});
+                    }
                 }
             }
         }
@@ -1434,7 +1469,7 @@ export class SchemaBuilder extends XMLSchemaParser {
     }
 
     private applySimpleTypeConstraints(decl: SchemaAttributeDecl, simpleTypeEl: XMLElement): void {
-        const unionAlts: Array<{enumerations: string[], patterns: string[][]}> = this.collectUnionAlternatives(simpleTypeEl);
+        const unionAlts: Array<{facets: SchemaFacets, baseType: string}> = this.collectUnionAlternatives(simpleTypeEl);
         if (unionAlts.length > 0) {
             decl.setUnionAlternatives(unionAlts);
             return;
@@ -1717,7 +1752,28 @@ export class SchemaBuilder extends XMLSchemaParser {
         for (const member of allMembers) {
             const memberType: string | undefined = this.getElementDeclaredType(member);
             if (memberType === undefined) {
-                filtered.add(member);
+                let blocked: boolean = false;
+                for (const [, info] of this.elementDefinitions) {
+                    if (info.localName === member) {
+                        const inlineType: XMLElement | undefined = this.findChildByLocalName(info.element, 'complexType');
+                        if (inlineType !== undefined) {
+                            const baseInfo: {base: string, method: string} | undefined = this.findTypeBase(inlineType);
+                            if (baseInfo !== undefined) {
+                                const baseLocal: string = this.getLocalName(baseInfo.base);
+                                if ((blocksExtension && baseInfo.method === 'extension') ||
+                                    (blocksRestriction && baseInfo.method === 'restriction')) {
+                                    if (baseLocal === headType || this.isMemberTypeBlocked(baseLocal, headType, blocksExtension, blocksRestriction)) {
+                                        blocked = true;
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                if (!blocked) {
+                    filtered.add(member);
+                }
                 continue;
             }
             if (!this.isMemberTypeBlocked(memberType, headType, blocksExtension, blocksRestriction)) {

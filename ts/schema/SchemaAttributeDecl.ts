@@ -22,7 +22,7 @@ export class SchemaAttributeDecl {
     private defaultValue: string | undefined;
     private fixedValue: string | undefined;
     private facets: SchemaFacets;
-    private unionAlternatives: Array<{enumerations: string[], patterns: string[][]}>;
+    private unionAlternatives: Array<{facets: SchemaFacets, baseType: string}>;
 
     constructor(
         name: string,
@@ -122,7 +122,7 @@ export class SchemaAttributeDecl {
         this.facets.isList = value;
     }
 
-    setUnionAlternatives(alts: Array<{enumerations: string[], patterns: string[][]}>): void {
+    setUnionAlternatives(alts: Array<{facets: SchemaFacets, baseType: string}>): void {
         this.unionAlternatives = alts.slice();
     }
 
@@ -130,14 +130,10 @@ export class SchemaAttributeDecl {
         if (this.fixedValue !== undefined && value !== this.fixedValue) {
             return false;
         }
-        // Union: valid if any member type accepts the value.
         if (this.unionAlternatives.length > 0) {
             for (let i: number = 0; i < this.unionAlternatives.length; i++) {
-                const alt: {enumerations: string[], patterns: string[][]} = this.unionAlternatives[i];
-                const altFacets: SchemaFacets = {
-                    enumeration: alt.enumerations,
-                    patterns: alt.patterns
-                };                if (SchemaTypeValidator.validateFacets(value, altFacets)) {
+                const alt: {facets: SchemaFacets, baseType: string} = this.unionAlternatives[i];
+                if (SchemaTypeValidator.validate(value, alt.baseType) && SchemaTypeValidator.validateFacets(value, alt.facets, alt.baseType)) {
                     return true;
                 }
             }
