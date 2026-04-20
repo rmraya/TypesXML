@@ -663,9 +663,9 @@ export class SchemaBuilder extends XMLSchemaParser {
                 const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localTypeName);
                 if (namedSimpleType) {
                     // Detect union/list types and store their member/item type instead of resolving to xs:string.
-                    const unionMembers: string[] = this.extractUnionMemberTypeNames(namedSimpleType);
-                    if (unionMembers.length > 0) {
-                        decl.setUnionMemberTypes(unionMembers);
+                    const unionAlts: Array<{facets: SchemaFacets, baseType: string}> = this.collectUnionAlternatives(namedSimpleType);
+                    if (unionAlts.length > 0) {
+                        decl.setUnionAlternatives(unionAlts);
                     } else {
                         const listItem: string | undefined = this.extractListItemTypeName(namedSimpleType);
                         if (listItem !== undefined) {
@@ -689,9 +689,9 @@ export class SchemaBuilder extends XMLSchemaParser {
             const simpleTypeEl: XMLElement | undefined = this.findChildByLocalName(info.element, 'simpleType');
             if (simpleTypeEl) {
                 decl.setContentModel(SchemaContentModel.empty());
-                const unionMembers2: string[] = this.extractUnionMemberTypeNames(simpleTypeEl);
-                if (unionMembers2.length > 0) {
-                    decl.setUnionMemberTypes(unionMembers2);
+                const unionAlts2: Array<{facets: SchemaFacets, baseType: string}> = this.collectUnionAlternatives(simpleTypeEl);
+                if (unionAlts2.length > 0) {
+                    decl.setUnionAlternatives(unionAlts2);
                 } else {
                     const listItem2: string | undefined = this.extractListItemTypeName(simpleTypeEl);
                     if (listItem2 !== undefined) {
@@ -1353,6 +1353,12 @@ export class SchemaBuilder extends XMLSchemaParser {
         }
         const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
         let parentFacets: SchemaFacets | undefined;
+        if (!baseAttr) {
+            const inlineBase: XMLElement | undefined = this.findChildByLocalName(restrictionEl, 'simpleType');
+            if (inlineBase) {
+                parentFacets = this.collectFacets(inlineBase);
+            }
+        }
         if (baseAttr) {
             const baseLocal: string = this.getLocalName(baseAttr.getValue());
             if (baseLocal === 'normalizedString') {

@@ -89,6 +89,7 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkSimpleTypeChildren(schemaRoot);
         XSDSemanticValidator.checkListUnionConstraints(schemaRoot);
         XSDSemanticValidator.checkComplexTypeContentModel(schemaRoot);
+        XSDSemanticValidator.checkGroupCompositorCount(schemaRoot);
     }
 
     static validateCrossReferences(
@@ -504,6 +505,41 @@ export class XSDSemanticValidator {
                     throw new Error('xs:totalDigits value must be a positive integer, got: "' + raw + '"');
                 }
             }
+        } else if (localEl === 'restriction') {
+            let minExclusive: string | undefined;
+            let maxExclusive: string | undefined;
+            let minInclusive: string | undefined;
+            let maxInclusive: string | undefined;
+            for (const facet of el.getChildren()) {
+                const facetLocal: string = XSDSemanticValidator.localName(facet.getName());
+                const val: string | undefined = facet.getAttribute('value')?.getValue();
+                if (val === undefined) { continue; }
+                if (facetLocal === 'minExclusive') { minExclusive = val; }
+                else if (facetLocal === 'maxExclusive') { maxExclusive = val; }
+                else if (facetLocal === 'minInclusive') { minInclusive = val; }
+                else if (facetLocal === 'maxInclusive') { maxInclusive = val; }
+            }
+            if (minExclusive !== undefined && minInclusive !== undefined) {
+                throw new Error('xs:restriction cannot have both minExclusive and minInclusive');
+            }
+            if (maxExclusive !== undefined && maxInclusive !== undefined) {
+                throw new Error('xs:restriction cannot have both maxExclusive and maxInclusive');
+            }
+            const lo: number | undefined = minExclusive !== undefined ? parseFloat(minExclusive) : (minInclusive !== undefined ? parseFloat(minInclusive) : undefined);
+            const loExclusive: boolean = minExclusive !== undefined;
+            const hi: number | undefined = maxExclusive !== undefined ? parseFloat(maxExclusive) : (maxInclusive !== undefined ? parseFloat(maxInclusive) : undefined);
+            const hiExclusive: boolean = maxExclusive !== undefined;
+            if (lo !== undefined && hi !== undefined && !isNaN(lo) && !isNaN(hi)) {
+                if (loExclusive || hiExclusive) {
+                    if (lo >= hi) {
+                        throw new Error('xs:restriction has contradictory range facets: min=' + lo + ' max=' + hi);
+                    }
+                } else {
+                    if (lo > hi) {
+                        throw new Error('xs:restriction has contradictory range facets: minInclusive=' + lo + ' maxInclusive=' + hi);
+                    }
+                }
+            }
         }
         for (const child of el.getChildren()) {
             XSDSemanticValidator.checkFacetValues(child);
@@ -752,7 +788,8 @@ export class XSDSemanticValidator {
         prefixMap: Map<string, string>
     ): void {
         if (qname.indexOf(':') === -1) {
-            if (!topLevelElements.has(qname)) {
+            const nsKey: string = targetNs.length > 0 ? targetNs + '|' + qname : qname;
+            if (!topLevelElements.has(qname) && !topLevelElements.has(nsKey)) {
                 throw new Error('xs:element ref="' + qname + '" refers to undeclared element "' + qname + '"');
             }
         } else {
@@ -1183,6 +1220,9 @@ export class XSDSemanticValidator {
         if (local === 'all') {
             for (const child of el.getChildren()) {
                 const childLocal: string = XSDSemanticValidator.localName(child.getName());
+                if (childLocal !== 'element' && childLocal !== 'annotation') {
+                    throw new Error('xs:all may only contain xs:element particles, found xs:' + childLocal);
+                }
                 if (childLocal === 'element') {
                     const maxOccursAttr: XMLAttribute | undefined = child.getAttribute('maxOccurs');
                     if (maxOccursAttr !== undefined) {
@@ -1735,6 +1775,26 @@ export class XSDSemanticValidator {
         }
         for (const child of el.getChildren()) {
             XSDSemanticValidator.checkComplexTypeContentModel(child);
+        }
+    }
+
+    private static checkGroupCompositorCount(schemaRoot: XMLElement): void {
+        for (const child of schemaRoot.getChildren()) {
+            const childLocal: string = XSDSemanticValidator.localName(child.getName());
+            if (childLocal !== 'group') {
+                continue;
+            }
+            const groupName: string = child.getAttribute('name')?.getValue() ?? '(anonymous)';
+            const compositors: Array<string> = [];
+            for (const gc of child.getChildren()) {
+                const gcLocal: string = XSDSemanticValidator.localName(gc.getName());
+                if (gcLocal !== 'annotation') {
+                    compositors.push(gcLocal);
+                }
+            }
+            if (compositors.length !== 1) {
+                throw new Error('xs:group "' + groupName + '" must have exactly one compositor child (all, choice, or sequence), found ' + compositors.length);
+            }
         }
     }
 

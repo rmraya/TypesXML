@@ -192,6 +192,8 @@ class XMLSchemaTestSuite {
                         if (schemaRoot) {
                             XSDSemanticValidator.validate(schemaRoot);
                         }
+                        const builder: SchemaBuilder = new SchemaBuilder();
+                        builder.buildGrammar(schemaPath);
                         actual = 'valid';
                     } catch (_e) {
                         actual = 'invalid';

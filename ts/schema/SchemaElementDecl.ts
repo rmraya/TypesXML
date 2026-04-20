@@ -41,6 +41,7 @@ export class SchemaElementDecl {
     private finalConstraints: Set<string> = new Set<string>();
     private nillable: boolean = false;
     private unionMemberTypes: string[] | undefined;
+    private unionAlternatives: Array<{facets: SchemaFacets, baseType: string}> | undefined;
     private listItemType: string | undefined;
     private identityConstraints: IdentityConstraint[] | undefined;
     private fixedValue: string | undefined;
@@ -179,6 +180,14 @@ export class SchemaElementDecl {
 
     getUnionMemberTypes(): string[] | undefined {
         return this.unionMemberTypes;
+    }
+
+    setUnionAlternatives(alts: Array<{facets: SchemaFacets, baseType: string}>): void {
+        this.unionAlternatives = alts.slice();
+    }
+
+    getUnionAlternatives(): Array<{facets: SchemaFacets, baseType: string}> | undefined {
+        return this.unionAlternatives;
     }
 
     setListItemType(type: string): void {

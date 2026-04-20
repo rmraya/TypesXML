@@ -173,7 +173,7 @@ The script compiles the TypeScript sources and executes `ts/tests/DTDTestSuite.t
 
 ### XML Schema
 
-TypesXML currently passes **93.9%** of the W3C XML Schema Test Suite (2006 edition, ~40,000 tests), the only native TypeScript implementation of XML Schema 1.0 validated against the official W3C test suite.
+TypesXML currently passes **94.4%** of the W3C XML Schema Test Suite (2006 edition, ~40,000 tests), the only native TypeScript implementation of XML Schema 1.0 validated against the official W3C test suite.
 
 1. Download the latest archive from the [XML Schema Version 1.0, 2nd Edition](https://www.w3.org/XML/2004/xml-schema-test-suite/xmlschema2006-11-06/xsts-2007-06-20.tar.gz).
 2. Extract the archive into `./tests/` so the test cases are available under `./tests/xmlschema2006-11-06`.

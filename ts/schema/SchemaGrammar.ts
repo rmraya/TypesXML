@@ -14,7 +14,7 @@ import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationResult } f
 import { SchemaAttributeDecl } from './SchemaAttributeDecl.js';
 import { SchemaContentModelType } from './SchemaContentModel.js';
 import { IdentityConstraint, SchemaElementDecl } from './SchemaElementDecl.js';
-import { SchemaTypeValidator } from './SchemaTypeValidator.js';
+import { SchemaFacets, SchemaTypeValidator } from './SchemaTypeValidator.js';
 
 const BUILTIN_TYPE_HIERARCHY: Map<string, string> = new Map<string, string>([
     ['anySimpleType', 'anyType'],
@@ -335,8 +335,21 @@ export class SchemaGrammar implements Grammar {
                     }
                 }
             } else {
+                const unionAlternatives: Array<{facets: SchemaFacets, baseType: string}> | undefined = textDecl.getUnionAlternatives();
                 const unionMemberTypes: string[] | undefined = textDecl.getUnionMemberTypes();
-                if (unionMemberTypes !== undefined && unionMemberTypes.length > 0) {
+                if (unionAlternatives !== undefined && unionAlternatives.length > 0) {
+                    const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
+                    let valid: boolean = false;
+                    for (const alt of unionAlternatives) {
+                        if (SchemaTypeValidator.validate(normalizedText, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(normalizedText, alt.facets, alt.baseType)) {
+                            valid = true;
+                            break;
+                        }
+                    }
+                    if (!valid) {
+                        textError = 'Invalid text content "' + effectiveText + '" for element "' + element + '": does not match any union member type';
+                    }
+                } else if (unionMemberTypes !== undefined && unionMemberTypes.length > 0) {
                     const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
                     let valid: boolean = false;
                     for (const memberType of unionMemberTypes) {
