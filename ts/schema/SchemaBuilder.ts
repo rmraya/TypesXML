@@ -32,6 +32,7 @@ type ElementInfo = {
     element: XMLElement;
     namespace?: string;
     localName: string;
+    isTopLevel?: boolean;
 };
 
 export class SchemaBuilder extends XMLSchemaParser {
@@ -50,6 +51,8 @@ export class SchemaBuilder extends XMLSchemaParser {
     private substitutionGroups: Map<string, Set<string>>;
     private schemaBlockDefaults: Map<string, string>;
     private schemaFinalDefaults: Map<string, string>;
+    private schemaFormDefaults: Map<string, string>;
+    private elementFormDefaultMap: Map<XMLElement, string>;
     private earlyTypeHierarchy: Map<string, {base: string, method: string}>;
     private schemaPrefixMaps: Map<string, Map<string, string>>;
 
@@ -59,6 +62,8 @@ export class SchemaBuilder extends XMLSchemaParser {
         this.substitutionGroups = new Map<string, Set<string>>();
         this.schemaBlockDefaults = new Map<string, string>();
         this.schemaFinalDefaults = new Map<string, string>();
+        this.schemaFormDefaults = new Map<string, string>();
+        this.elementFormDefaultMap = new Map<XMLElement, string>();
         this.earlyTypeHierarchy = new Map<string, {base: string, method: string}>();
         this.schemaPrefixMaps = new Map<string, Map<string, string>>();
     }
@@ -69,6 +74,8 @@ export class SchemaBuilder extends XMLSchemaParser {
         this.substitutionGroups = new Map<string, Set<string>>();
         this.schemaBlockDefaults = new Map<string, string>();
         this.schemaFinalDefaults = new Map<string, string>();
+        this.schemaFormDefaults = new Map<string, string>();
+        this.elementFormDefaultMap = new Map<XMLElement, string>();
         this.earlyTypeHierarchy = new Map<string, {base: string, method: string}>();
         this.schemaPrefixMaps = new Map<string, Map<string, string>>();
         this.walkSchema(this.normalizePath(schemaPath));
@@ -182,7 +189,7 @@ export class SchemaBuilder extends XMLSchemaParser {
                 continue;
             }
             processed.add(canonical);
-            grammar.addElementDecl(this.buildElementDecl(info));
+            grammar.addElementDecl(this.buildElementDecl({ element: info.element, namespace: info.namespace, localName: info.localName, isTopLevel: true }));
         }
 
         // Build per-namespace sub-grammars for global attribute declarations.
@@ -471,6 +478,21 @@ export class SchemaBuilder extends XMLSchemaParser {
                 this.schemaFinalDefaults.set(key, finalDefaultAttr.getValue().trim());
             }
         }
+        const elementFormDefaultAttr: XMLAttribute | undefined = schemaElement.getAttribute('elementFormDefault');
+        const nsKeyForForm: string = targetNamespace !== undefined ? targetNamespace : '';
+        if (!this.schemaFormDefaults.has(nsKeyForForm)) {
+            this.schemaFormDefaults.set(nsKeyForForm, elementFormDefaultAttr !== undefined ? elementFormDefaultAttr.getValue().trim() : 'unqualified');
+        }
+        const formDefaultValue: string = elementFormDefaultAttr !== undefined ? elementFormDefaultAttr.getValue().trim() : 'unqualified';
+        const stampElements = (el: XMLElement): void => {
+            for (const child of el.getChildren()) {
+                if (this.getLocalName(child.getName()) === 'element') {
+                    this.elementFormDefaultMap.set(child, formDefaultValue);
+                }
+                stampElements(child);
+            }
+        };
+        stampElements(schemaElement);
         // Also collect xs:group (model group) definitions that xs:sequence/choice/all may reference.
         for (const child of schemaElement.getChildren()) {
             if (this.getLocalName(child.getName()) !== 'group') {
@@ -494,7 +516,22 @@ export class SchemaBuilder extends XMLSchemaParser {
     }
 
     private buildElementDecl(info: ElementInfo): SchemaElementDecl {
-        const decl: SchemaElementDecl = new SchemaElementDecl(info.localName, info.namespace);
+        let qualified: boolean;
+        if (info.isTopLevel) {
+            qualified = true;
+        } else {
+            const formAttr: XMLAttribute | undefined = info.element.getAttribute('form');
+            if (formAttr) {
+                qualified = formAttr.getValue().trim() === 'qualified';
+            } else {
+                const formDefault: string = this.elementFormDefaultMap.get(info.element) ?? 'unqualified';
+                qualified = formDefault === 'qualified';
+            }
+        }
+        // Unqualified local elements have no namespace in instance documents; store under bare key.
+        const effectiveNamespace: string | undefined = qualified ? info.namespace : undefined;
+        const decl: SchemaElementDecl = new SchemaElementDecl(info.localName, effectiveNamespace);
+        decl.setQualified(qualified);
 
         const typeAttr: XMLAttribute | undefined = info.element.getAttribute('type');
         if (typeAttr) {
@@ -574,7 +611,45 @@ export class SchemaBuilder extends XMLSchemaParser {
                 const derivation: XMLElement = this.unwrapDerivation(simpleContentEl);
                 const baseAttr: XMLAttribute | undefined = derivation.getAttribute('base');
                 if (baseAttr) {
-                    decl.setSimpleType(this.normalizeXsdType(baseAttr.getValue(), info.namespace));
+                    const normalizedBase: string = this.normalizeXsdType(baseAttr.getValue(), info.namespace);
+                    const isRestriction: boolean = this.getLocalName(derivation.getName()) === 'restriction';
+                    if (SchemaBuilder.XSD_BUILT_IN_TYPES.has(normalizedBase)) {
+                        decl.setSimpleType(normalizedBase);
+                        if (isRestriction) {
+                            decl.setTextFacets(this.collectInlineFacets(derivation));
+                        }
+                    } else {
+                        const localTypeName: string = this.getLocalName(normalizedBase);
+                        const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localTypeName);
+                        if (namedSimpleType) {
+                            const resolvedBase: string | undefined = this.resolveSimpleTypeBase(namedSimpleType);
+                            if (resolvedBase) {
+                                decl.setSimpleType(this.normalizeXsdType(resolvedBase, info.namespace));
+                            }
+                            const baseFacets: SchemaFacets = this.collectFacets(namedSimpleType);
+                            if (isRestriction) {
+                                const inlineFacets: SchemaFacets = this.collectInlineFacets(derivation);
+                                const merged: SchemaFacets = Object.assign({}, baseFacets);
+                                if (inlineFacets.enumeration !== undefined) { merged.enumeration = inlineFacets.enumeration; }
+                                if (inlineFacets.patterns !== undefined) { merged.patterns = inlineFacets.patterns; }
+                                if (inlineFacets.minExclusive !== undefined) { merged.minExclusive = inlineFacets.minExclusive; }
+                                if (inlineFacets.maxExclusive !== undefined) { merged.maxExclusive = inlineFacets.maxExclusive; }
+                                if (inlineFacets.minInclusive !== undefined) { merged.minInclusive = inlineFacets.minInclusive; }
+                                if (inlineFacets.maxInclusive !== undefined) { merged.maxInclusive = inlineFacets.maxInclusive; }
+                                if (inlineFacets.length !== undefined) { merged.length = inlineFacets.length; }
+                                if (inlineFacets.minLength !== undefined) { merged.minLength = inlineFacets.minLength; }
+                                if (inlineFacets.maxLength !== undefined) { merged.maxLength = inlineFacets.maxLength; }
+                                if (inlineFacets.totalDigits !== undefined) { merged.totalDigits = inlineFacets.totalDigits; }
+                                if (inlineFacets.fractionDigits !== undefined) { merged.fractionDigits = inlineFacets.fractionDigits; }
+                                if (inlineFacets.whiteSpace !== undefined) { merged.whiteSpace = inlineFacets.whiteSpace; }
+                                decl.setTextFacets(merged);
+                            } else {
+                                decl.setTextFacets(baseFacets);
+                            }
+                        } else {
+                            decl.setSimpleType(normalizedBase);
+                        }
+                    }
                 }
             }
         } else if (typeAttr) {
@@ -1413,6 +1488,49 @@ export class SchemaBuilder extends XMLSchemaParser {
         return values;
     }
 
+    private collectInlineFacets(restrictionEl: XMLElement): SchemaFacets {
+        const facets: SchemaFacets = {};
+        const currentPatterns: string[] = [];
+        for (const child of restrictionEl.getChildren()) {
+            const localChildName: string = this.getLocalName(child.getName());
+            const valueAttr: XMLAttribute | undefined = child.getAttribute('value');
+            if (!valueAttr) {
+                continue;
+            }
+            const val: string = this.resolveCharRefs(valueAttr.getValue());
+            if (localChildName === 'enumeration') {
+                if (!facets.enumeration) { facets.enumeration = []; }
+                facets.enumeration.push(val);
+            } else if (localChildName === 'pattern') {
+                currentPatterns.push(val);
+            } else if (localChildName === 'minExclusive') {
+                facets.minExclusive = val;
+            } else if (localChildName === 'maxExclusive') {
+                facets.maxExclusive = val;
+            } else if (localChildName === 'minInclusive') {
+                facets.minInclusive = val;
+            } else if (localChildName === 'maxInclusive') {
+                facets.maxInclusive = val;
+            } else if (localChildName === 'length') {
+                facets.length = parseInt(val, 10);
+            } else if (localChildName === 'minLength') {
+                facets.minLength = parseInt(val, 10);
+            } else if (localChildName === 'maxLength') {
+                facets.maxLength = parseInt(val, 10);
+            } else if (localChildName === 'totalDigits') {
+                facets.totalDigits = parseInt(val, 10);
+            } else if (localChildName === 'fractionDigits') {
+                facets.fractionDigits = parseInt(val, 10);
+            } else if (localChildName === 'whiteSpace') {
+                facets.whiteSpace = val;
+            }
+        }
+        if (currentPatterns.length > 0) {
+            facets.patterns = [currentPatterns];
+        }
+        return facets;
+    }
+
     private collectPatterns(simpleTypeEl: XMLElement): string[][] {
         const patterns: string[] = [];
         const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
@@ -1568,17 +1686,29 @@ export class SchemaBuilder extends XMLSchemaParser {
         return typeValue;
     }
 
-    private resolveSimpleTypeBase(simpleTypeEl: XMLElement): string | undefined {
+    private resolveSimpleTypeBase(simpleTypeEl: XMLElement, visited?: Set<string>): string | undefined {
         const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
         if (restrictionEl) {
             const baseAttr: XMLAttribute | undefined = restrictionEl.getAttribute('base');
             if (baseAttr) {
-                return baseAttr.getValue();
+                const normalized: string = this.normalizeXsdType(baseAttr.getValue(), '');
+                if (SchemaBuilder.XSD_BUILT_IN_TYPES.has(normalized)) {
+                    return normalized;
+                }
+                const localBase: string = this.getLocalName(normalized);
+                const guard: Set<string> = visited ?? new Set<string>();
+                if (!guard.has(localBase)) {
+                    const namedBase: XMLElement | undefined = this.simpleTypeDefinitions.get(localBase);
+                    if (namedBase) {
+                        guard.add(localBase);
+                        return this.resolveSimpleTypeBase(namedBase, guard);
+                    }
+                }
+                return normalized;
             }
-            // restriction with no base attribute — look for inline xs:simpleType child
             const innerSimpleType: XMLElement | undefined = this.findChildByLocalName(restrictionEl, 'simpleType');
             if (innerSimpleType) {
-                return this.resolveSimpleTypeBase(innerSimpleType);
+                return this.resolveSimpleTypeBase(innerSimpleType, visited);
             }
         }
         if (this.findChildByLocalName(simpleTypeEl, 'list') || this.findChildByLocalName(simpleTypeEl, 'union')) {

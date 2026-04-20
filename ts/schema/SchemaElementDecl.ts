@@ -45,6 +45,7 @@ export class SchemaElementDecl {
     private identityConstraints: IdentityConstraint[] | undefined;
     private fixedValue: string | undefined;
     private defaultValue: string | undefined;
+    private qualified: boolean = true;
 
     constructor(name: string, namespace?: string, contentModel?: SchemaContentModel) {
         this.name = name;
@@ -213,6 +214,14 @@ export class SchemaElementDecl {
 
     getDefaultValue(): string | undefined {
         return this.defaultValue;
+    }
+
+    setQualified(value: boolean): void {
+        this.qualified = value;
+    }
+
+    isQualified(): boolean {
+        return this.qualified;
     }
 }
 

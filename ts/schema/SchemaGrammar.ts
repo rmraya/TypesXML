@@ -507,6 +507,28 @@ export class SchemaGrammar implements Grammar {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
         this.wildcardModeStack.push('normal');
+        // Enforce elementFormDefault / form per XSD §3.3.1 / §2.6.3.
+        // Use instanceNsStack (which already includes xmlns= declared on this element)
+        // rather than resolvePrefix(), which only reads the static namespaceDeclarations map.
+        const colonIdx: number = element.indexOf(':');
+        const elemPrefix: string = colonIdx !== -1 ? element.substring(0, colonIdx) : '';
+        const currentInstanceNs: Map<string, string> | undefined =
+            this.instanceNsStack.length > 0 ? this.instanceNsStack[this.instanceNsStack.length - 1] : undefined;
+        const resolvedElemNs: string | undefined = currentInstanceNs !== undefined ? currentInstanceNs.get(elemPrefix) : undefined;
+        if (decl.isQualified()) {
+            const declNs: string | undefined = decl.getNamespace();
+            if (declNs !== undefined && resolvedElemNs !== declNs) {
+                return ValidationResult.error(
+                    'Element "' + element + '" must be namespace-qualified with namespace "' + declNs + '"'
+                );
+            }
+        } else {
+            if (resolvedElemNs !== undefined && resolvedElemNs !== '') {
+                return ValidationResult.error(
+                    'Element "' + element + '" must not be namespace-qualified (elementFormDefault is unqualified)'
+                );
+            }
+        }
         // Per spec §2.6.2: xsi:nil="true" is only allowed when the element declaration has nillable="true".
         if (isNilTrue && !decl.isNillable()) {
             return ValidationResult.error(
@@ -943,11 +965,16 @@ export class SchemaGrammar implements Grammar {
             }
         }
 
-        // 4. Linear scan matching local-name portion of any stored key.
+        // 4. Linear scan matching local-name portion of any stored key,
+        //    but only when the resolved namespace matches the stored key's namespace (or both are absent).
         for (const [key, value] of this.elementDecls) {
             const pipeIndex: number = key.indexOf('|');
             const keyLocal: string = pipeIndex !== -1 ? key.substring(pipeIndex + 1) : key;
-            if (keyLocal === local) {
+            if (keyLocal !== local) {
+                continue;
+            }
+            const keyNs: string | undefined = pipeIndex !== -1 ? key.substring(0, pipeIndex) : undefined;
+            if (keyNs === resolvedNs) {
                 return value;
             }
         }
