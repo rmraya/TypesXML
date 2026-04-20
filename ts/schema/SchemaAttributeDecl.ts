@@ -26,7 +26,7 @@ export class SchemaAttributeDecl {
 
     constructor(
         name: string,
-        type: string = 'xs:string',
+        type: string = 'string',
         use: AttributeUse = AttributeUse.OPTIONAL,
         defaultValue?: string,
         fixedValue?: string,

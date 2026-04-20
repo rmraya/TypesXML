@@ -35,6 +35,16 @@ type ElementInfo = {
 
 export class SchemaBuilder extends XMLSchemaParser {
 
+    private static readonly XSD_BUILT_IN_TYPES: Set<string> = new Set<string>([
+        'string', 'boolean', 'decimal', 'float', 'double', 'duration', 'dateTime', 'time', 'date',
+        'gYearMonth', 'gYear', 'gMonthDay', 'gDay', 'gMonth', 'hexBinary', 'base64Binary', 'anyURI',
+        'QName', 'NOTATION', 'normalizedString', 'token', 'language', 'NMTOKEN', 'NMTOKENS',
+        'Name', 'NCName', 'ID', 'IDREF', 'IDREFS', 'ENTITY', 'ENTITIES', 'integer',
+        'nonPositiveInteger', 'negativeInteger', 'long', 'int', 'short', 'byte',
+        'nonNegativeInteger', 'unsignedLong', 'unsignedInt', 'unsignedShort', 'unsignedByte',
+        'positiveInteger', 'anySimpleType', 'anyType'
+    ]);
+
     private modelGroupDefinitions: Map<string, XMLElement>;
     private substitutionGroups: Map<string, Set<string>>;
     private schemaBlockDefaults: Map<string, string>;
@@ -536,14 +546,14 @@ export class SchemaBuilder extends XMLSchemaParser {
                 const derivation: XMLElement = this.unwrapDerivation(simpleContentEl);
                 const baseAttr: XMLAttribute | undefined = derivation.getAttribute('base');
                 if (baseAttr) {
-                    decl.setSimpleType(baseAttr.getValue());
+                    decl.setSimpleType(this.normalizeXsdType(baseAttr.getValue(), info.namespace));
                 }
             }
         } else if (typeAttr) {
             // Named simple type reference — text content only, no child elements.
             decl.setContentModel(SchemaContentModel.empty());
-            const typeValue: string = typeAttr.getValue();
-            if (typeValue.startsWith('xs:')) {
+            const typeValue: string = this.normalizeXsdType(typeAttr.getValue(), info.namespace);
+            if (SchemaBuilder.XSD_BUILT_IN_TYPES.has(typeValue)) {
                 decl.setSimpleType(typeValue);
             } else {
                 const localTypeName: string = this.getLocalName(typeValue);
@@ -561,7 +571,7 @@ export class SchemaBuilder extends XMLSchemaParser {
                             // Resolve base xs: type so validateTextContent can use SchemaTypeValidator.
                             const resolvedBase: string | undefined = this.resolveSimpleTypeBase(namedSimpleType);
                             if (resolvedBase) {
-                                decl.setSimpleType(resolvedBase);
+                                decl.setSimpleType(this.normalizeXsdType(resolvedBase, info.namespace));
                             }
                         }
                     }
@@ -586,7 +596,7 @@ export class SchemaBuilder extends XMLSchemaParser {
                     } else {
                         const resolvedBase2: string | undefined = this.resolveSimpleTypeBase(simpleTypeEl);
                         if (resolvedBase2) {
-                            decl.setSimpleType(resolvedBase2);
+                            decl.setSimpleType(this.normalizeXsdType(resolvedBase2, info.namespace));
                         }
                     }
                 }
@@ -1138,7 +1148,7 @@ export class SchemaBuilder extends XMLSchemaParser {
 
         let name: string | undefined;
         let attrNamespace: string | undefined;
-        let type: string = 'xs:string';
+        let type: string = 'string';
         let defaultValue: string | undefined;
         let fixedValue: string | undefined;
 
@@ -1182,6 +1192,8 @@ export class SchemaBuilder extends XMLSchemaParser {
             fixedValue = fixedAttr.getValue();
         }
 
+        type = this.normalizeXsdType(type, namespace);
+
         const formAttr: XMLAttribute | undefined = attrEl.getAttribute('form');
         if (formAttr && formAttr.getValue() === 'qualified') {
             attrNamespace = namespace;
@@ -1208,7 +1220,7 @@ export class SchemaBuilder extends XMLSchemaParser {
         const simpleTypeEl: XMLElement | undefined = this.findChildByLocalName(attrEl, 'simpleType');
         if (simpleTypeEl) {
             this.applySimpleTypeConstraints(decl, simpleTypeEl);
-        } else if (!type.startsWith('xs:')) {
+        } else if (!SchemaBuilder.XSD_BUILT_IN_TYPES.has(type)) {
             const localTypeName: string = this.getLocalName(type);
             const namedSimpleType: XMLElement | undefined = this.simpleTypeDefinitions.get(localTypeName);
             if (namedSimpleType) {
@@ -1488,6 +1500,39 @@ export class SchemaBuilder extends XMLSchemaParser {
         return undefined;
     }
 
+    private normalizeXsdType(typeValue: string, namespace?: string): string {
+        const colonIdx: number = typeValue.indexOf(':');
+        if (colonIdx === -1) {
+            return typeValue;
+        }
+        const prefix: string = typeValue.substring(0, colonIdx);
+        const localPart: string = typeValue.substring(colonIdx + 1);
+        const nsKey: string = namespace !== undefined ? namespace : '';
+        const prefixMap: Map<string, string> | undefined = this.schemaPrefixMaps.get(nsKey);
+        if (prefixMap !== undefined) {
+            const uri: string | undefined = prefixMap.get(prefix);
+            if (uri === 'http://www.w3.org/2001/XMLSchema') {
+                return localPart;
+            }
+        }
+        if (nsKey !== '') {
+            const fallbackMap: Map<string, string> | undefined = this.schemaPrefixMaps.get('');
+            if (fallbackMap !== undefined) {
+                const uri: string | undefined = fallbackMap.get(prefix);
+                if (uri === 'http://www.w3.org/2001/XMLSchema') {
+                    return localPart;
+                }
+            }
+        }
+        for (const [, map] of this.schemaPrefixMaps) {
+            const uri: string | undefined = map.get(prefix);
+            if (uri === 'http://www.w3.org/2001/XMLSchema') {
+                return localPart;
+            }
+        }
+        return typeValue;
+    }
+
     private resolveSimpleTypeBase(simpleTypeEl: XMLElement): string | undefined {
         const restrictionEl: XMLElement | undefined = this.findChildByLocalName(simpleTypeEl, 'restriction');
         if (restrictionEl) {
@@ -1502,7 +1547,7 @@ export class SchemaBuilder extends XMLSchemaParser {
             }
         }
         if (this.findChildByLocalName(simpleTypeEl, 'list') || this.findChildByLocalName(simpleTypeEl, 'union')) {
-            return 'xs:string';
+            return 'string';
         }
         return undefined;
     }

@@ -80,6 +80,11 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkKeyrefReferences(schemaRoot);
         XSDSemanticValidator.checkIdentityConstraintPlacement(schemaRoot, false);
         XSDSemanticValidator.checkElementRefConstraints(schemaRoot);
+        XSDSemanticValidator.checkAttributeUseConstraints(schemaRoot);
+        XSDSemanticValidator.checkOccurrenceConstraints(schemaRoot);
+        XSDSemanticValidator.checkSimpleTypeChildren(schemaRoot);
+        XSDSemanticValidator.checkListUnionConstraints(schemaRoot);
+        XSDSemanticValidator.checkComplexTypeContentModel(schemaRoot);
     }
 
     private static checkNamedComponents(schemaRoot: XMLElement): void {
@@ -672,6 +677,10 @@ export class XSDSemanticValidator {
                     }
                 }
             }
+            if (el.getAttribute('default') !== undefined && el.getAttribute('fixed') !== undefined) {
+                const elemName: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+                throw new Error('xs:element "' + elemName + '" cannot have both "default" and "fixed"');
+            }
         }
         for (const child of el.getChildren()) {
             XSDSemanticValidator.checkElementRefConstraints(child);
@@ -703,6 +712,21 @@ export class XSDSemanticValidator {
         }
         if (insideCompositor && local === 'all') {
             throw new Error('xs:all may not appear inside xs:sequence or xs:choice');
+        }
+        if (local === 'all') {
+            for (const child of el.getChildren()) {
+                const childLocal: string = XSDSemanticValidator.localName(child.getName());
+                if (childLocal === 'element') {
+                    const maxOccursAttr: XMLAttribute | undefined = child.getAttribute('maxOccurs');
+                    if (maxOccursAttr !== undefined) {
+                        const maxVal: string = maxOccursAttr.getValue();
+                        if (maxVal !== '0' && maxVal !== '1') {
+                            const elemName: string = child.getAttribute('name')?.getValue() ?? child.getAttribute('ref')?.getValue() ?? '(anonymous)';
+                            throw new Error('xs:element "' + elemName + '" inside xs:all must have maxOccurs of 0 or 1');
+                        }
+                    }
+                }
+            }
         }
         const resetsContext: boolean = local === 'element' || local === 'complexType';
         const isCompositor: boolean = local === 'sequence' || local === 'choice';
@@ -1107,6 +1131,143 @@ export class XSDSemanticValidator {
                     }
                 }
             }
+        }
+    }
+
+    private static checkAttributeUseConstraints(el: XMLElement): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'attribute') {
+            const useAttr: XMLAttribute | undefined = el.getAttribute('use');
+            const useValue: string | undefined = useAttr?.getValue();
+            const attrName: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+            if (useValue === 'required' && el.getAttribute('default') !== undefined) {
+                throw new Error('xs:attribute "' + attrName + '" with use="required" cannot have "default"');
+            }
+            if (useValue === 'prohibited') {
+                if (el.getAttribute('fixed') !== undefined) {
+                    throw new Error('xs:attribute "' + attrName + '" with use="prohibited" cannot have "fixed"');
+                }
+                if (el.getAttribute('default') !== undefined) {
+                    throw new Error('xs:attribute "' + attrName + '" with use="prohibited" cannot have "default"');
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkAttributeUseConstraints(child);
+        }
+    }
+
+    private static checkOccurrenceConstraints(el: XMLElement): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        const OCCURRENCE_ELEMENTS: Set<string> = new Set(['element', 'group', 'choice', 'sequence', 'all', 'any']);
+        if (OCCURRENCE_ELEMENTS.has(local)) {
+            const minOccursAttr: XMLAttribute | undefined = el.getAttribute('minOccurs');
+            if (minOccursAttr !== undefined && !/^\d+$/.test(minOccursAttr.getValue())) {
+                throw new Error('xs:' + local + ' minOccurs must be a non-negative integer, got: "' + minOccursAttr.getValue() + '"');
+            }
+            const maxOccursAttr: XMLAttribute | undefined = el.getAttribute('maxOccurs');
+            if (maxOccursAttr !== undefined) {
+                const maxVal: string = maxOccursAttr.getValue();
+                if (maxVal !== 'unbounded' && !/^\d+$/.test(maxVal)) {
+                    throw new Error('xs:' + local + ' maxOccurs must be a non-negative integer or "unbounded", got: "' + maxVal + '"');
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkOccurrenceConstraints(child);
+        }
+    }
+
+    private static checkSimpleTypeChildren(el: XMLElement): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'simpleType') {
+            const VALID_CHILDREN: Set<string> = new Set(['restriction', 'list', 'union']);
+            let count: number = 0;
+            for (const child of el.getChildren()) {
+                const childLocal: string = XSDSemanticValidator.localName(child.getName());
+                if (VALID_CHILDREN.has(childLocal)) {
+                    count++;
+                }
+            }
+            if (count !== 1) {
+                const nameAttr: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+                throw new Error('xs:simpleType "' + nameAttr + '" must have exactly one of xs:restriction, xs:list, or xs:union, found ' + count);
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkSimpleTypeChildren(child);
+        }
+    }
+
+    private static checkListUnionConstraints(el: XMLElement): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'list') {
+            const hasItemType: boolean = el.getAttribute('itemType') !== undefined;
+            const hasInlineType: boolean = el.getChildren().some(
+                (c: XMLElement) => XSDSemanticValidator.localName(c.getName()) === 'simpleType'
+            );
+            if (hasItemType && hasInlineType) {
+                throw new Error('xs:list cannot have both "itemType" attribute and an inline xs:simpleType child');
+            }
+            if (!hasItemType && !hasInlineType) {
+                throw new Error('xs:list must have either an "itemType" attribute or an inline xs:simpleType child');
+            }
+        }
+        if (local === 'union') {
+            const memberTypesAttr: XMLAttribute | undefined = el.getAttribute('memberTypes');
+            const hasMemberTypes: boolean = memberTypesAttr !== undefined && memberTypesAttr.getValue().trim() !== '';
+            const hasInlineType: boolean = el.getChildren().some(
+                (c: XMLElement) => XSDSemanticValidator.localName(c.getName()) === 'simpleType'
+            );
+            if (!hasMemberTypes && !hasInlineType) {
+                throw new Error('xs:union must have at least one memberTypes item or an inline xs:simpleType child');
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkListUnionConstraints(child);
+        }
+    }
+
+    private static checkComplexTypeContentModel(el: XMLElement): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'complexType') {
+            const typeName: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+            let hasSimpleContent: boolean = false;
+            let hasComplexContent: boolean = false;
+            for (const child of el.getChildren()) {
+                const childLocal: string = XSDSemanticValidator.localName(child.getName());
+                if (childLocal === 'simpleContent') {
+                    hasSimpleContent = true;
+                }
+                if (childLocal === 'complexContent') {
+                    hasComplexContent = true;
+                }
+            }
+            if (hasSimpleContent && hasComplexContent) {
+                throw new Error('xs:complexType "' + typeName + '" cannot have both simpleContent and complexContent');
+            }
+            const mixedAttr: XMLAttribute | undefined = el.getAttribute('mixed');
+            if (hasSimpleContent && mixedAttr !== undefined && mixedAttr.getValue() === 'true') {
+                throw new Error('xs:complexType "' + typeName + '" with simpleContent cannot also have mixed="true"');
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkComplexTypeContentModel(child);
         }
     }
 

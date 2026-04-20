@@ -108,6 +108,7 @@ export class SchemaGrammar implements Grammar {
     private seenIds: Set<string>;
     private pendingIdrefs: string[];
     private pendingKeyrefChecks: Array<{constraintName: string; refer: string; tuples: Array<Array<string | undefined>>}>;
+    private wildcardModeStack: Array<'normal' | 'lax' | 'skip'>;
 
     constructor() {
         this.elementDecls = new Map<string, SchemaElementDecl>();
@@ -130,6 +131,7 @@ export class SchemaGrammar implements Grammar {
         this.seenIds = new Set<string>();
         this.pendingIdrefs = [];
         this.pendingKeyrefChecks = [];
+        this.wildcardModeStack = [];
     }
 
     addTargetNamespace(namespace: string): void {
@@ -214,6 +216,14 @@ export class SchemaGrammar implements Grammar {
             this.lastPoppedInstanceNs = undefined;
         }
         this.lastClosedDepth = this.elementPath.length - 1;
+        const wildcardMode: 'normal' | 'lax' | 'skip' | undefined =
+            this.wildcardModeStack.length > 0 ? this.wildcardModeStack.pop() : undefined;
+        if (wildcardMode === 'skip') {
+            if (this.elementPath.length > 0) {
+                this.elementPath.pop();
+            }
+            return ValidationResult.success();
+        }
         if (this.activeScopes.length > 0 && !isNilled) {
             const closingDepth: number = this.lastClosedDepth;
             const idLocalName: string = this.localName(element);
@@ -224,7 +234,7 @@ export class SchemaGrammar implements Grammar {
                 const top: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
                 if (!top.nil) {
                     if (closingDepth === top.depth) {
-                        this.collectTextFields(scope, idLocalName, text, true, this.lastPoppedInstanceNs);
+                        this.collectTextFields(scope, idLocalName, text, true, this.lastPoppedInstanceNs, xsiType);
                     } else {
                         const hasDescendantField: boolean = scope.constraint.fields.some(
                             (f: string) => f.split('|').some((alt: string) => alt.trim().startsWith('.//')))
@@ -233,7 +243,7 @@ export class SchemaGrammar implements Grammar {
                             ? closingDepth > top.depth
                             : closingDepth === top.depth + 1;
                         if (depthMatches) {
-                            this.collectTextFields(scope, idLocalName, text, false, this.lastPoppedInstanceNs);
+                            this.collectTextFields(scope, idLocalName, text, false, this.lastPoppedInstanceNs, xsiType);
                         }
                     }
                 }
@@ -243,20 +253,13 @@ export class SchemaGrammar implements Grammar {
         if (this.elementPath.length > 0) {
             this.elementPath.pop();
         }
+        if (wildcardMode === 'lax') {
+            return ValidationResult.success();
+        }
         const substitutedDecl: SchemaElementDecl | undefined = xsiType !== undefined ? this.complexTypeDecls.get(xsiType) : undefined;
 
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
-            if (this.elementPath.length > 0) {
-                const parentName: string = this.elementPath[this.elementPath.length - 1];
-                const parentDecl: SchemaElementDecl | undefined = this.lookupElementDecl(parentName);
-                if (parentDecl !== undefined) {
-                    const pc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, this.lastPoppedInstanceNs);
-                    if (pc === 'skip' || pc === 'lax') {
-                        return ValidationResult.success();
-                    }
-                }
-            }
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
         // Per spec §2.6.2: a nilled element must have no element or text children.
@@ -387,6 +390,7 @@ export class SchemaGrammar implements Grammar {
             this.seenIds = new Set<string>();
             this.pendingIdrefs = [];
             this.pendingKeyrefChecks = [];
+            this.wildcardModeStack = [];
         }
         this.elementPath.push(this.localName(element));
         const currentDepth: number = this.elementPath.length - 1;
@@ -472,10 +476,37 @@ export class SchemaGrammar implements Grammar {
         }
         this.instanceNsStack.push(instanceNs);
 
+        const parentMode: 'normal' | 'lax' | 'skip' | undefined =
+            this.wildcardModeStack.length > 0 ? this.wildcardModeStack[this.wildcardModeStack.length - 1] : undefined;
+        if (parentMode === 'skip') {
+            this.wildcardModeStack.push('skip');
+            return ValidationResult.success();
+        }
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
+            if (parentMode === 'lax') {
+                this.wildcardModeStack.push('lax');
+                return ValidationResult.success();
+            }
+            if (this.elementPath.length >= 2) {
+                const parentName: string = this.elementPath[this.elementPath.length - 2];
+                const parentDecl: SchemaElementDecl | undefined = this.lookupElementDecl(parentName);
+                if (parentDecl !== undefined) {
+                    const currentNs: Map<string, string> | undefined = this.instanceNsStack.length > 0 ? this.instanceNsStack[this.instanceNsStack.length - 1] : undefined;
+                    const pc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, currentNs);
+                    if (pc === 'lax') {
+                        this.wildcardModeStack.push('lax');
+                        return ValidationResult.success();
+                    }
+                    if (pc === 'skip') {
+                        this.wildcardModeStack.push('skip');
+                        return ValidationResult.success();
+                    }
+                }
+            }
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
+        this.wildcardModeStack.push('normal');
         // Per spec §2.6.2: xsi:nil="true" is only allowed when the element declaration has nillable="true".
         if (isNilTrue && !decl.isNillable()) {
             return ValidationResult.error(
@@ -1067,7 +1098,17 @@ export class SchemaGrammar implements Grammar {
                 attrNs.set(attrName.substring(6), attrValue);
             }
         }
-        const elemDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
+        const declaredDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
+        let xsiTypeLocal: string | undefined = undefined;
+        for (const [attrName, attrValue] of attributes) {
+            if (attrName === 'xsi:type' || (attrName.endsWith(':type') && attrName.indexOf(':') !== -1)) {
+                xsiTypeLocal = this.localName(attrValue);
+                break;
+            }
+        }
+        const effectiveDecl: SchemaElementDecl | undefined = xsiTypeLocal !== undefined
+            ? (this.complexTypeDecls.get(xsiTypeLocal) ?? this.simpleTypeDecls.get(xsiTypeLocal) ?? declaredDecl)
+            : declaredDecl;
         for (let i: number = 0; i < scope.constraint.fields.length; i++) {
             const alternatives: Array<{isAttribute: boolean, localName: string, descendant: boolean}> = this.parseFieldAlternatives(scope.constraint.fields[i]);
             for (const alt of alternatives) {
@@ -1077,9 +1118,9 @@ export class SchemaGrammar implements Grammar {
                 for (const [attrName, attrValue] of attributes) {
                     const attrLocal: string = this.localName(attrName);
                     if (attrLocal === alt.localName) {
-                        const attrDecl: SchemaAttributeDecl | undefined = elemDecl?.getAttributeDecl(attrName) ?? elemDecl?.getAttributeDecl(attrLocal);
-                        const attrType: string = attrDecl !== undefined ? attrDecl.getType() : 'xs:string';
-                        pendingTop.tuple[i] = SchemaTypeValidator.canonicalize(attrValue, attrType, attrNs);
+                        const attrDecl: SchemaAttributeDecl | undefined = effectiveDecl?.getAttributeDecl(attrName) ?? effectiveDecl?.getAttributeDecl(attrLocal);
+                        const attrType: string = attrDecl !== undefined ? attrDecl.getType() : 'string';
+                        pendingTop.tuple[i] = attrType + '\x02' + SchemaTypeValidator.canonicalize(attrValue, attrType, attrNs);
                         break;
                     }
                 }
@@ -1090,7 +1131,7 @@ export class SchemaGrammar implements Grammar {
         }
     }
 
-    private collectTextFields(scope: IdentityConstraintScope, elementLocalName: string, text: string, isSelf: boolean, nsMap?: Map<string, string>): void {
+    private collectTextFields(scope: IdentityConstraintScope, elementLocalName: string, text: string, isSelf: boolean, nsMap?: Map<string, string>, xsiTypeLocalName?: string): void {
         if (scope.pendingStack.length === 0) {
             return;
         }
@@ -1112,10 +1153,14 @@ export class SchemaGrammar implements Grammar {
                             textTop.overflow = true;
                         }
                     } else {
-                        const elemDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
-                        const simpleType: string | undefined = elemDecl?.getSimpleType();
+                        const declaredDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
+                        const effectiveDecl: SchemaElementDecl | undefined = xsiTypeLocalName !== undefined
+                            ? (this.complexTypeDecls.get(xsiTypeLocalName) ?? this.simpleTypeDecls.get(xsiTypeLocalName) ?? declaredDecl)
+                            : declaredDecl;
+                        const simpleType: string | undefined = effectiveDecl?.getSimpleType();
                         const raw: string = text.trim();
-                        tuple[i] = simpleType !== undefined ? SchemaTypeValidator.canonicalize(raw, simpleType, nsMap) : raw;
+                        const canonicalized: string = simpleType !== undefined ? SchemaTypeValidator.canonicalize(raw, simpleType, nsMap) : raw;
+                        tuple[i] = (simpleType ?? 'string') + '\x02' + canonicalized;
                     }
                     break;
                 }
