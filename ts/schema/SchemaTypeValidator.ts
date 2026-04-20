@@ -11,6 +11,7 @@
  *******************************************************************************/
 
 import { XMLUtils } from '../XMLUtils.js';
+import { XsdRegexTranslator } from './XsdRegexTranslator.js';
 
 export interface SchemaFacets {
     enumeration?: string[];
@@ -46,7 +47,7 @@ export class SchemaTypeValidator {
                 const group: string[] = facets.patterns[g];
                 let groupMatched: boolean = false;
                 for (let i: number = 0; i < group.length; i++) {
-                    if (new RegExp('^(?:' + SchemaTypeValidator.translateXsdPattern(group[i]) + ')$', 'u').test(value)) {
+                    if (XsdRegexTranslator.toRegExp(group[i]).test(value)) {
                         groupMatched = true;
                         break;
                     }
@@ -254,77 +255,6 @@ export class SchemaTypeValidator {
                 return true;
         }
     }
-
-    private static readonly XSD_I: string = '[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:]';
-    private static readonly XSD_I_NO_COLON: string = '[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD]';
-    private static readonly XSD_C: string = '[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:\\.\\-0-9\u00B7\u0300-\u036F\u203F-\u2040]';
-    private static readonly XSD_C_NO_COLON: string = '[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\\.\\-0-9\u00B7\u0300-\u036F\u203F-\u2040]';
-    private static readonly XSD_NOT_I: string = '[^A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:]';
-    private static readonly XSD_NOT_C: string = '[^A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD:\\.\\-0-9\u00B7\u0300-\u036F\u203F-\u2040]';
-
-    private static translateXsdPattern(pattern: string): string {
-        return pattern
-            .replace(/\[\\i-\[:\]\]/g, SchemaTypeValidator.XSD_I_NO_COLON)
-            .replace(/\[\\c-\[:\]\]/g, SchemaTypeValidator.XSD_C_NO_COLON)
-            .replace(/\\i/g, SchemaTypeValidator.XSD_I)
-            .replace(/\\I/g, SchemaTypeValidator.XSD_NOT_I)
-            .replace(/\\c/g, SchemaTypeValidator.XSD_C)
-            .replace(/\\C/g, SchemaTypeValidator.XSD_NOT_C)
-            .replace(/\\p\{Is([^}]+)\}/g, (_m, name) => '\\p{Script=' + name + '}')
-            .replace(/\\P\{Is([^}]+)\}/g, (_m, name) => '\\P{Script=' + name + '}')
-            .replace(/\\p\{([^}]+)\}/g, (_m, name) => SchemaTypeValidator.xsdUnicodeCategory(name, false))
-            .replace(/\\P\{([^}]+)\}/g, (_m, name) => SchemaTypeValidator.xsdUnicodeCategory(name, true))
-            // Convert \X where X is not a valid JS Unicode-mode escape character to \xNN.
-            // Valid JS Unicode escapes after \: d D w W s S n r t f v b B u x p P 0-9
-            // and the syntax characters: ^ $ . | ? * + ( ) [ ] { } / \
-            .replace(/\\([^\\dDwWsSnrtfvbBuxpP0-9\^$.|?*+()[\]{}/])/g, (_m, ch) => {
-                return '\\x' + ch.charCodeAt(0).toString(16).padStart(2, '0');
-            });
-    }
-
-    private static xsdUnicodeCategory(name: string, negate: boolean): string {
-        const prefix: string = negate ? '\\P' : '\\p';
-        switch (name) {
-            case 'L': return prefix + '{L}';
-            case 'Lu': return prefix + '{Lu}';
-            case 'Ll': return prefix + '{Ll}';
-            case 'Lt': return prefix + '{Lt}';
-            case 'Lm': return prefix + '{Lm}';
-            case 'Lo': return prefix + '{Lo}';
-            case 'M': return prefix + '{M}';
-            case 'Mn': return prefix + '{Mn}';
-            case 'Mc': return prefix + '{Mc}';
-            case 'Me': return prefix + '{Me}';
-            case 'N': return prefix + '{N}';
-            case 'Nd': return prefix + '{Nd}';
-            case 'Nl': return prefix + '{Nl}';
-            case 'No': return prefix + '{No}';
-            case 'P': return prefix + '{P}';
-            case 'Pc': return prefix + '{Pc}';
-            case 'Pd': return prefix + '{Pd}';
-            case 'Ps': return prefix + '{Ps}';
-            case 'Pe': return prefix + '{Pe}';
-            case 'Pi': return prefix + '{Pi}';
-            case 'Pf': return prefix + '{Pf}';
-            case 'Po': return prefix + '{Po}';
-            case 'Z': return prefix + '{Z}';
-            case 'Zs': return prefix + '{Zs}';
-            case 'Zl': return prefix + '{Zl}';
-            case 'Zp': return prefix + '{Zp}';
-            case 'S': return prefix + '{S}';
-            case 'Sm': return prefix + '{Sm}';
-            case 'Sc': return prefix + '{Sc}';
-            case 'Sk': return prefix + '{Sk}';
-            case 'So': return prefix + '{So}';
-            case 'C': return prefix + '{C}';
-            case 'Cc': return prefix + '{Cc}';
-            case 'Cf': return prefix + '{Cf}';
-            case 'Co': return prefix + '{Co}';
-            case 'Cn': return prefix + '{Cn}';
-            default: return prefix + '{' + name + '}';
-        }
-    }
-
     private static isAnyURI(value: string): boolean {
         // XSD anyURI lexical space: any string that is a valid IRI reference per RFC 3987.
         // Reject control characters (U+0000-U+001F, U+007F) which are never allowed in an IRI.

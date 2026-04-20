@@ -10,35 +10,25 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-/**
- * XsdRegexTranslator
- *
- * Converts an XSD 1.0 regular expression pattern into an equivalent
- * JavaScript RegExp, handling all dialect differences:
- *
- *  1. Implicit full-string anchoring  (^...$)
- *  2. \i  / \I  — XML NameStartChar / complement
- *  3. \c  / \C  — XML NameChar       / complement
- *  4. \s  / \S  — XSD whitespace     / complement  (only \x20 \t \n \r)
- *  5. \d  / \D  — XSD digit          / complement  ([0-9] only)
- *  6. \w  / \W  — XSD word char      / complement
- *  7. \p{...} / \P{...} — Unicode category and block escapes
- *  8. Character class subtraction  [base-[excluded]]
- *  9. The dot  .  →  [^\n\r\x85\u2028]
- * 10. Flags: the JS regex is created with the "u" flag so that \p{} and
- *     surrogate-aware matching work correctly.
- */
+class CharClassItem {
+    isComplement: boolean;
+    content: string;
+
+    constructor(isComplement: boolean, content: string) {
+        this.isComplement = isComplement;
+        this.content = content;
+    }
+}
+
 export class XsdRegexTranslator {
 
-    // ------------------------------------------------------------------ //
-    //  \i  — NameStartChar (XML 1.0 §2.3, production [4])
-    //  Covers: ":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] |
-    //          [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] |
-    //          [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] |
-    //          [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] |
-    //          [#x10000-#xEFFFF]
-    // ------------------------------------------------------------------ //
-    private static readonly I_CLASS =
+    // \i  — NameStartChar (XML 1.0 §2.3, production [4])
+    // Covers: ":" | [A-Z] | "_" | [a-z] | [#xC0-#xD6] | [#xD8-#xF6] |
+    //         [#xF8-#x2FF] | [#x370-#x37D] | [#x37F-#x1FFF] |
+    //         [#x200C-#x200D] | [#x2070-#x218F] | [#x2C00-#x2FEF] |
+    //         [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] |
+    //         [#x10000-#xEFFFF]
+    private static readonly NAME_START_CHAR =
         ':A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF' +
         '\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F' +
         '\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD' +
@@ -46,14 +36,9 @@ export class XsdRegexTranslator {
 
     // NameChar adds to NameStartChar: "-" | "." | [0-9] | #xB7 |
     //   [#x0300-#x036F] | [#x203F-#x2040]
-    private static readonly C_CLASS = XsdRegexTranslator.I_CLASS +
+    private static readonly NAME_CHAR = XsdRegexTranslator.NAME_START_CHAR +
         '\\-\\.0-9\u00B7\u0300-\u036F\u203F-\u2040';
 
-    // ------------------------------------------------------------------ //
-    //  Unicode category map — XSD name → JS \p{} equivalent
-    //  Categories that JS supports directly via Unicode property escapes.
-    //  XSD uses the same two-letter abbreviations as Unicode General_Category.
-    // ------------------------------------------------------------------ //
     private static readonly CATEGORY_MAP: Record<string, string> = {
         // Letter
         L: '\\p{L}', Lu: '\\p{Lu}', Ll: '\\p{Ll}', Lt: '\\p{Lt}',
@@ -75,13 +60,6 @@ export class XsdRegexTranslator {
         Cn: '\\p{Cn}',
     };
 
-    // ------------------------------------------------------------------ //
-    //  Unicode block map — XSD \p{IsXxx} name → code-point range string
-    //  suitable for use inside a JS character class [...].
-    //  Ranges taken from Unicode 6.0 (as referenced by XSD 1.0).
-    //  Only the most-commonly tested blocks are listed here; unknowns fall
-    //  through to a runtime warning and an empty class (safe failure).
-    // ------------------------------------------------------------------ //
     private static readonly BLOCK_MAP: Record<string, string> = {
         BasicLatin: '\u0000-\u007F',
         Latin1Supplement: '\u0080-\u00FF',
@@ -180,33 +158,14 @@ export class XsdRegexTranslator {
         HalfwidthandFullwidthForms: '\uFF00-\uFFEF',
     };
 
-    // ------------------------------------------------------------------ //
-    //  Public API
-    // ------------------------------------------------------------------ //
-
-    /**
-     * Convert an XSD pattern string into a JavaScript RegExp.
-     * The returned RegExp uses the "u" flag and is fully anchored.
-     *
-     * @throws {Error} if the pattern contains unrecognised syntax that
-     *   cannot be translated safely.
-     */
     public static toRegExp(xsdPattern: string): RegExp {
         const jsSource = XsdRegexTranslator.translate(xsdPattern);
         return new RegExp('^(?:' + jsSource + ')$', 'u');
     }
 
-    /**
-     * Return the translated JS pattern string (without anchors) for
-     * embedding into a larger expression.
-     */
     public static translate(xsdPattern: string): string {
         return XsdRegexTranslator.parseExpression(xsdPattern, 0).result;
     }
-
-    // ------------------------------------------------------------------ //
-    //  Core parser — walks the XSD pattern character by character
-    // ------------------------------------------------------------------ //
 
     private static parseExpression(
         src: string,
@@ -269,10 +228,6 @@ export class XsdRegexTranslator {
         return { result: out, end: i };
     }
 
-    // ------------------------------------------------------------------ //
-    //  Escape sequences  \x  outside a character class
-    // ------------------------------------------------------------------ //
-
     private static parseEscape(
         src: string,
         i: number   // points at the '\'
@@ -281,10 +236,10 @@ export class XsdRegexTranslator {
 
         switch (next) {
             // XSD-specific shorthand classes
-            case 'i': return { result: '[' + XsdRegexTranslator.I_CLASS + ']', end: i + 2 };
-            case 'I': return { result: '[^' + XsdRegexTranslator.I_CLASS + ']', end: i + 2 };
-            case 'c': return { result: '[' + XsdRegexTranslator.C_CLASS + ']', end: i + 2 };
-            case 'C': return { result: '[^' + XsdRegexTranslator.C_CLASS + ']', end: i + 2 };
+            case 'i': return { result: '[' + XsdRegexTranslator.NAME_START_CHAR + ']', end: i + 2 };
+            case 'I': return { result: '[^' + XsdRegexTranslator.NAME_START_CHAR + ']', end: i + 2 };
+            case 'c': return { result: '[' + XsdRegexTranslator.NAME_CHAR + ']', end: i + 2 };
+            case 'C': return { result: '[^' + XsdRegexTranslator.NAME_CHAR + ']', end: i + 2 };
 
             // XSD \s is narrower than JS \s — only U+0020, \t, \n, \r
             case 's': return { result: '[\\x20\\t\\n\\r]', end: i + 2 };
@@ -310,6 +265,10 @@ export class XsdRegexTranslator {
                 return { result: XsdRegexTranslator.translateCategory(name, true), end };
             }
 
+            // \- is a valid XSD identity escape but not in JS u-mode outside
+            // a character class; map it to \x2D (literal hyphen).
+            case '-': return { result: '\\x2D', end: i + 2 };
+
             // Everything else (including \n \r \t \\ \. etc.) is passed
             // through unchanged — JS understands them identically.
             default:
@@ -317,21 +276,16 @@ export class XsdRegexTranslator {
         }
     }
 
-    // ------------------------------------------------------------------ //
-    //  Character class  [...]  with XSD subtraction  [base-[sub]]
-    // ------------------------------------------------------------------ //
-
     private static parseCharClass(
         src: string,
         start: number   // points at the opening '['
     ): { result: string; end: number } {
-        // Collect the raw content of the outermost [...], tracking nesting
-        // only for the subtraction inner bracket.
         let i = start + 1;
         const negate = src[i] === '^';
         if (negate) i++;
 
-        let baseContent = '';
+        // First pass: collect items as a typed list
+        const items: CharClassItem[] = [];
         let subtracted: string | null = null;
 
         while (i < src.length && src[i] !== ']') {
@@ -340,16 +294,15 @@ export class XsdRegexTranslator {
                 const inner = XsdRegexTranslator.parseCharClass(src, i + 1);
                 subtracted = inner.result;
                 i = inner.end;
-                // After inner ']' we expect the outer ']'
                 break;
             }
 
             if (src[i] === '\\') {
                 const esc = XsdRegexTranslator.parseEscapeInsideClass(src, i);
-                baseContent += esc.result;
+                items.push(esc.item);
                 i = esc.end;
             } else {
-                baseContent += src[i];
+                items.push(new CharClassItem(false, src[i]));
                 i++;
             }
         }
@@ -357,12 +310,10 @@ export class XsdRegexTranslator {
         // Consume closing ']'
         if (src[i] === ']') i++;
 
+        const baseExpr = XsdRegexTranslator.emitCharClass(items, negate);
+
         if (subtracted === null) {
-            // Simple class — reconstruct
-            return {
-                result: '[' + (negate ? '^' : '') + baseContent + ']',
-                end: i,
-            };
+            return { result: baseExpr, end: i };
         }
 
         // Class subtraction:  [base-[sub]]
@@ -370,58 +321,80 @@ export class XsdRegexTranslator {
         // lookahead: (?![sub])[base]  — but that only works outside a class.
         // We therefore convert to:  (?:(?!subtracted)[base])
         // which is semantically equivalent to one code-point matching.
-        //
-        // If the base was negated, we apply double negation:
-        //   [^base-[sub]] →  (?:(?!subtracted)[^base])
-        const baseClass = '[' + (negate ? '^' : '') + baseContent + ']';
         return {
-            result: '(?:(?!' + subtracted + ')' + baseClass + ')',
+            result: '(?:(?!' + subtracted + ')' + baseExpr + ')',
             end: i,
         };
     }
 
-    /**
-     * Parse an escape sequence that appears *inside* a character class.
-     * The set of recognised sequences is the same but the expansion must
-     * be suitable for embedding inside [...] rather than standing alone.
-     */
+    private static emitCharClass(items: CharClassItem[], negate: boolean): string {
+        const posContent = items.filter(it => !it.isComplement).map(it => it.content).join('');
+        const compContents = items.filter(it => it.isComplement).map(it => it.content);
+
+        if (compContents.length === 0) {
+            return '[' + (negate ? '^' : '') + posContent + ']';
+        }
+
+        if (posContent === '' && compContents.length === 1) {
+            return negate
+                ? '[' + compContents[0] + ']'
+                : '[^' + compContents[0] + ']';
+        }
+
+        if (posContent === '') {
+            if (negate) {
+                // Intersection of complement bases: (?=[c1])(?=[c2])...[cN]
+                let result = '';
+                for (let k = 0; k < compContents.length - 1; k++) {
+                    result += '(?=[' + compContents[k] + '])';
+                }
+                return result + '[' + compContents[compContents.length - 1] + ']';
+            }
+            // Union of negated: (?:[^c1]|[^c2]|...)
+            return '(?:' + compContents.map(c => '[^' + c + ']').join('|') + ')';
+        }
+
+        if (negate) {
+            // ¬(P ∪ ¬C) = ¬P ∩ C  →  lookaheads for each C, then [^P]
+            const lookaheads = compContents.map(c => '(?=[' + c + '])').join('');
+            return lookaheads + '[^' + posContent + ']';
+        }
+        // P ∪ ¬C  →  (?:[P]|[^c1]|[^c2]|...)
+        const parts: string[] = ['[' + posContent + ']'];
+        compContents.forEach(c => parts.push('[^' + c + ']'));
+        return '(?:' + parts.join('|') + ')';
+    }
+
     private static parseEscapeInsideClass(
         src: string,
         i: number
-    ): { result: string; end: number } {
+    ): { item: CharClassItem; end: number } {
         const next = src[i + 1];
 
         switch (next) {
-            case 'i': return { result: XsdRegexTranslator.I_CLASS, end: i + 2 };
-            case 'I': return { result: '^' + XsdRegexTranslator.I_CLASS, end: i + 2 };   // ^ inside [...] only valid at start; caller must handle
-            case 'c': return { result: XsdRegexTranslator.C_CLASS, end: i + 2 };
-            case 'C': return { result: '^' + XsdRegexTranslator.C_CLASS, end: i + 2 };
-            case 's': return { result: '\\x20\\t\\n\\r', end: i + 2 };
-            case 'S': return { result: '^\\x20\\t\\n\\r', end: i + 2 };
-            case 'd': return { result: '0-9', end: i + 2 };
-            case 'D': return { result: '^0-9', end: i + 2 };
-            case 'w': return { result: '\\p{L}\\p{M}\\p{N}\\p{S}', end: i + 2 };
-            case 'W': return { result: '^\\p{L}\\p{M}\\p{N}\\p{S}', end: i + 2 };
+            case 'i': return { item: new CharClassItem(false, XsdRegexTranslator.NAME_START_CHAR), end: i + 2 };
+            case 'I': return { item: new CharClassItem(true,  XsdRegexTranslator.NAME_START_CHAR), end: i + 2 };
+            case 'c': return { item: new CharClassItem(false, XsdRegexTranslator.NAME_CHAR), end: i + 2 };
+            case 'C': return { item: new CharClassItem(true,  XsdRegexTranslator.NAME_CHAR), end: i + 2 };
+            case 's': return { item: new CharClassItem(false, '\\x20\\t\\n\\r'), end: i + 2 };
+            case 'S': return { item: new CharClassItem(true,  '\\x20\\t\\n\\r'), end: i + 2 };
+            case 'd': return { item: new CharClassItem(false, '0-9'), end: i + 2 };
+            case 'D': return { item: new CharClassItem(true,  '0-9'), end: i + 2 };
+            case 'w': return { item: new CharClassItem(false, '\\p{L}\\p{M}\\p{N}\\p{S}'), end: i + 2 };
+            case 'W': return { item: new CharClassItem(true,  '\\p{L}\\p{M}\\p{N}\\p{S}'), end: i + 2 };
             case 'p': {
                 const { name, end } = XsdRegexTranslator.readBracedName(src, i + 2);
-                return { result: XsdRegexTranslator.translateCategoryForClass(name, false), end };
+                return { item: new CharClassItem(false, XsdRegexTranslator.resolveClassContent(name)), end };
             }
             case 'P': {
                 const { name, end } = XsdRegexTranslator.readBracedName(src, i + 2);
-                return { result: XsdRegexTranslator.translateCategoryForClass(name, true), end };
+                return { item: new CharClassItem(true,  XsdRegexTranslator.resolveClassContent(name)), end };
             }
             default:
-                return { result: '\\' + next, end: i + 2 };
+                return { item: new CharClassItem(false, '\\' + next), end: i + 2 };
         }
     }
 
-    // ------------------------------------------------------------------ //
-    //  Unicode category / block translation
-    // ------------------------------------------------------------------ //
-
-    /**
-     * Translate \p{name} or \P{name} for use *outside* a character class.
-     */
     private static translateCategory(name: string, negate: boolean): string {
         // Block escape: \p{IsXxx}
         if (name.startsWith('Is')) {
@@ -443,39 +416,23 @@ export class XsdRegexTranslator {
         throw new Error('XsdRegexTranslator: unknown Unicode category \'' + name + '\'');
     }
 
-    /**
-     * Translate \p{name} for use *inside* a character class [...].
-     * JS (with "u" flag) supports \p{} inside character classes directly,
-     * so we can just emit \p{Category} or the expanded range.
-     */
-    private static translateCategoryForClass(name: string, negate: boolean): string {
+    private static resolveClassContent(name: string): string {
         if (name.startsWith('Is')) {
             const blockName = name.slice(2);
             const range = XsdRegexTranslator.BLOCK_MAP[blockName]
                 ?? XsdRegexTranslator.BLOCK_MAP[blockName.replace(/-/g, '')];
             if (range) {
-                // Negation inside a class is complex; caller handles ^ placement
                 return range;
             }
             throw new Error('XsdRegexTranslator: unknown Unicode block \'' + name + '\'');
         }
-
         const mapped = XsdRegexTranslator.CATEGORY_MAP[name];
         if (mapped) {
-            // Return the raw \p{X} token; it's valid inside JS [...] with "u" flag
-            return negate
-                ? mapped.replace('\\p{', '\\P{')
-                : mapped;
+            return mapped;
         }
-
         throw new Error('XsdRegexTranslator: unknown Unicode category \'' + name + '\'');
     }
 
-    // ------------------------------------------------------------------ //
-    //  Helpers
-    // ------------------------------------------------------------------ //
-
-    /** Read the  {Name}  part following \p or \P, return name and new index. */
     private static readBracedName(
         src: string,
         i: number   // should point at '{'
