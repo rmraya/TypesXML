@@ -334,6 +334,12 @@ export class XsdRegexTranslator {
                 continue;
             }
 
+            if (ch === ']') {
+                out += '\\x5D';
+                i++;
+                continue;
+            }
+
             // Quantifiers, alternation, anchors — pass through as-is.
             // XSD has no anchors, but the characters |, *, +, ?, } are
             // the same as in JS.
@@ -437,7 +443,12 @@ export class XsdRegexTranslator {
             }
 
             if (src[i] === '[') {
-                throw new Error('XsdRegexTranslator: unexpected \'[\' inside character class at position ' + i);
+                if (src[i + 1] === ':') {
+                    throw new Error('XsdRegexTranslator: POSIX character class not supported at position ' + i);
+                }
+                items.push(new CharClassItem(false, '\\x5B'));
+                i++;
+                continue;
             }
 
             if (src[i] === '\\') {
