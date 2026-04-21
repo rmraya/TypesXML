@@ -1318,9 +1318,16 @@ export class SchemaBuilder extends XMLSchemaParser {
             return undefined;
         }
 
+        const simpleTypeEl: XMLElement | undefined = this.findChildByLocalName(attrEl, 'simpleType');
+        if (simpleTypeEl && type === 'string') {
+            const resolvedBase: string | undefined = this.resolveSimpleTypeBase(simpleTypeEl);
+            if (resolvedBase) {
+                type = resolvedBase;
+            }
+        }
+
         const decl: SchemaAttributeDecl = new SchemaAttributeDecl(name, type, use, defaultValue, fixedValue, attrNamespace);
 
-        const simpleTypeEl: XMLElement | undefined = this.findChildByLocalName(attrEl, 'simpleType');
         if (simpleTypeEl) {
             this.applySimpleTypeConstraints(decl, simpleTypeEl);
         } else if (!SchemaBuilder.XSD_BUILT_IN_TYPES.has(type)) {
