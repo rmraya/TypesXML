@@ -72,12 +72,14 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkAnnotationCount(schemaRoot);
         XSDSemanticValidator.checkNotationAttributes(schemaRoot);
         XSDSemanticValidator.checkNotationPlacement(schemaRoot, true);
+        XSDSemanticValidator.checkNotationRestrictionEnumerations(schemaRoot);
         XSDSemanticValidator.checkIdAttributes(schemaRoot);
         XSDSemanticValidator.checkDuplicateIds(schemaRoot);
         XSDSemanticValidator.checkIncludeRedefine(schemaRoot);
         XSDSemanticValidator.checkDuplicateImports(schemaRoot);
         XSDSemanticValidator.checkDuplicateTopLevelElements(schemaRoot);
         XSDSemanticValidator.checkDuplicateTopLevelComplexTypes(schemaRoot);
+        XSDSemanticValidator.checkDuplicateTopLevelSimpleTypes(schemaRoot);
         XSDSemanticValidator.checkDuplicateTopLevelAttributeGroups(schemaRoot);
         XSDSemanticValidator.checkDuplicateTopLevelGroups(schemaRoot);
         XSDSemanticValidator.checkFacetValues(schemaRoot);
@@ -240,6 +242,45 @@ export class XSDSemanticValidator {
                 throw new Error('xs:notation must be a top-level schema component');
             }
             XSDSemanticValidator.checkNotationPlacement(child, false);
+        }
+    }
+
+    private static checkNotationRestrictionEnumerations(schemaRoot: XMLElement): void {
+        const declaredNotations: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'notation') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (nameAttr) {
+                    declaredNotations.add(nameAttr.getValue());
+                }
+            }
+        }
+        XSDSemanticValidator.checkNotationEnumValues(schemaRoot, declaredNotations);
+    }
+
+    private static checkNotationEnumValues(el: XMLElement, declaredNotations: Set<string>): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'restriction') {
+            const baseAttr: XMLAttribute | undefined = el.getAttribute('base');
+            if (baseAttr && XSDSemanticValidator.localName(baseAttr.getValue()) === 'NOTATION') {
+                for (const facet of el.getChildren()) {
+                    if (XSDSemanticValidator.localName(facet.getName()) === 'enumeration') {
+                        const valueAttr: XMLAttribute | undefined = facet.getAttribute('value');
+                        if (valueAttr) {
+                            const val: string = XSDSemanticValidator.localName(valueAttr.getValue());
+                            if (!declaredNotations.has(val)) {
+                                throw new Error('xs:NOTATION restriction enumeration value "' + val + '" does not name a declared xs:notation');
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkNotationEnumValues(child, declaredNotations);
         }
     }
 
@@ -413,6 +454,24 @@ export class XSDSemanticValidator {
             const name: string = nameAttr.getValue();
             if (seen.has(name)) {
                 throw new Error('Duplicate top-level xs:element name: "' + name + '"');
+            }
+            seen.add(name);
+        }
+    }
+
+    private static checkDuplicateTopLevelSimpleTypes(schemaRoot: XMLElement): void {
+        const seen: Set<string> = new Set<string>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) !== 'simpleType') {
+                continue;
+            }
+            const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+            if (!nameAttr) {
+                continue;
+            }
+            const name: string = nameAttr.getValue();
+            if (seen.has(name)) {
+                throw new Error('Duplicate top-level xs:simpleType name: "' + name + '"');
             }
             seen.add(name);
         }
@@ -1027,7 +1086,7 @@ export class XSDSemanticValidator {
         if (local === 'element') {
             const refAttr: XMLAttribute | undefined = el.getAttribute('ref');
             if (refAttr !== undefined) {
-                const forbidden: string[] = ['name', 'type', 'nillable', 'default', 'fixed', 'abstract'];
+                const forbidden: string[] = ['name', 'type', 'nillable', 'default', 'fixed', 'abstract', 'form', 'block', 'substitutionGroup', 'final'];
                 for (const attr of forbidden) {
                     if (el.getAttribute(attr) !== undefined) {
                         throw new Error('xs:element with "ref" cannot also have "' + attr + '"');

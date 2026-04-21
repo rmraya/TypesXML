@@ -78,7 +78,7 @@ interface PendingTupleEntry {
 interface IdentityConstraintScope {
     constraint: IdentityConstraint;
     rootDepth: number;
-    selectorAlternatives: Array<{segments: string[], descendant: boolean}>;
+    selectorAlternatives: Array<{ segments: string[], descendant: boolean }>;
     pendingStack: PendingTupleEntry[];
     lastCommittedTuple: Array<string | undefined> | undefined;
     lastCommittedDepth: number;
@@ -96,7 +96,7 @@ export class SchemaGrammar implements Grammar {
     private importedGrammars: Map<string, SchemaGrammar>;
     private xsiTypeStack: Array<string | undefined>;
     private nilStack: Array<boolean>;
-    private typeHierarchy: Map<string, {base: string, method: string}>;
+    private typeHierarchy: Map<string, { base: string, method: string }>;
     private instanceNsStack: Array<Map<string, string>>;
     private elementPath: string[];
     private activeScopes: IdentityConstraintScope[];
@@ -107,7 +107,7 @@ export class SchemaGrammar implements Grammar {
     private lastPoppedInstanceNs: Map<string, string> | undefined;
     private seenIds: Set<string>;
     private pendingIdrefs: string[];
-    private pendingKeyrefChecks: Array<{constraintName: string; refer: string; tuples: Array<Array<string | undefined>>}>;
+    private pendingKeyrefChecks: Array<{ constraintName: string; refer: string; tuples: Array<Array<string | undefined>> }>;
     private wildcardModeStack: Array<'normal' | 'lax' | 'skip'>;
 
     constructor() {
@@ -120,7 +120,7 @@ export class SchemaGrammar implements Grammar {
         this.importedGrammars = new Map<string, SchemaGrammar>();
         this.xsiTypeStack = [];
         this.nilStack = [];
-        this.typeHierarchy = new Map<string, {base: string, method: string}>();
+        this.typeHierarchy = new Map<string, { base: string, method: string }>();
         this.instanceNsStack = [];
         this.elementPath = [];
         this.activeScopes = [];
@@ -159,7 +159,7 @@ export class SchemaGrammar implements Grammar {
     }
 
     addTypeHierarchyEntry(typeName: string, baseTypeName: string, method: string): void {
-        this.typeHierarchy.set(typeName, {base: baseTypeName, method: method});
+        this.typeHierarchy.set(typeName, { base: baseTypeName, method: method });
     }
 
     mergeFrom(other: SchemaGrammar): void {
@@ -238,7 +238,7 @@ export class SchemaGrammar implements Grammar {
                     } else {
                         const hasDescendantField: boolean = scope.constraint.fields.some(
                             (f: string) => f.split('|').some((alt: string) => alt.trim().startsWith('.//')))
-                        ;
+                            ;
                         const depthMatches: boolean = hasDescendantField
                             ? closingDepth > top.depth
                             : closingDepth === top.depth + 1;
@@ -326,7 +326,7 @@ export class SchemaGrammar implements Grammar {
                         }
                     } else if (simpleTypeLocal === 'IDREF' || this.isTypeDerivedFrom(simpleTypeLocal, 'IDREF')) {
                         this.pendingIdrefs.push(normalizedText);
-                    } else if (simpleTypeLocal === 'IDREFS') {
+                    } else if (simpleTypeLocal === 'IDREFS' || this.isTypeDerivedFrom(simpleTypeLocal, 'IDREFS')) {
                         for (const token of normalizedText.split(/\s+/)) {
                             if (token.length > 0) {
                                 this.pendingIdrefs.push(token);
@@ -335,7 +335,7 @@ export class SchemaGrammar implements Grammar {
                     }
                 }
             } else {
-                const unionAlternatives: Array<{facets: SchemaFacets, baseType: string}> | undefined = textDecl.getUnionAlternatives();
+                const unionAlternatives: Array<{ facets: SchemaFacets, baseType: string }> | undefined = textDecl.getUnionAlternatives();
                 const unionMemberTypes: string[] | undefined = textDecl.getUnionMemberTypes();
                 if (unionAlternatives !== undefined && unionAlternatives.length > 0) {
                     const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
@@ -373,7 +373,7 @@ export class SchemaGrammar implements Grammar {
                             }
                         }
                     } else if (decl.getContentModel().getType() === SchemaContentModelType.ELEMENT
-                            || decl.getContentModel().getType() === SchemaContentModelType.EMPTY) {
+                        || decl.getContentModel().getType() === SchemaContentModelType.EMPTY) {
                         if (effectiveText.trim().length > 0) {
                             textError = 'Element "' + element + '" has element-only content but contains text: "' + effectiveText + '"';
                         }
@@ -435,13 +435,13 @@ export class SchemaGrammar implements Grammar {
             for (const alt of scope.selectorAlternatives) {
                 if (alt.descendant) {
                     if (currentDepth >= scope.rootDepth + alt.segments.length
-                            && relativePath.length >= alt.segments.length
-                            && this.selectorMatches(alt.segments, relativePath.slice(relativePath.length - alt.segments.length))) {
+                        && relativePath.length >= alt.segments.length
+                        && this.selectorMatches(alt.segments, relativePath.slice(relativePath.length - alt.segments.length))) {
                         selectorMatched = true;
                         break;
                     }
                 } else if (currentDepth === scope.rootDepth + alt.segments.length
-                        && this.selectorMatches(alt.segments, relativePath)) {
+                    && this.selectorMatches(alt.segments, relativePath)) {
                     selectorMatched = true;
                     break;
                 }
@@ -672,7 +672,7 @@ export class SchemaGrammar implements Grammar {
                     this.seenIds.add(attrValue);
                 } else if (attrTypeLocal === 'IDREF' || this.isTypeDerivedFrom(attrTypeLocal, 'IDREF')) {
                     this.pendingIdrefs.push(attrValue);
-                } else if (attrTypeLocal === 'IDREFS') {
+                } else if (attrTypeLocal === 'IDREFS' || this.isTypeDerivedFrom(attrTypeLocal, 'IDREFS')) {
                     for (const token of attrValue.trim().split(/\s+/)) {
                         if (token.length > 0) {
                             this.pendingIdrefs.push(token);
@@ -755,7 +755,7 @@ export class SchemaGrammar implements Grammar {
         const identityConstraints: IdentityConstraint[] | undefined = decl.getIdentityConstraints();
         if (identityConstraints !== undefined) {
             for (const constraint of identityConstraints) {
-                const selectorAlternatives: Array<{segments: string[], descendant: boolean}> = this.parseSelectorSegments(constraint.selector);
+                const selectorAlternatives: Array<{ segments: string[], descendant: boolean }> = this.parseSelectorSegments(constraint.selector);
                 const scope: IdentityConstraintScope = {
                     constraint,
                     rootDepth: currentDepth,
@@ -765,7 +765,7 @@ export class SchemaGrammar implements Grammar {
                     lastCommittedDepth: -1,
                     tuples: [],
                 };
-                if (selectorAlternatives.some((alt: {segments: string[], descendant: boolean}) => alt.segments.length === 0)) {
+                if (selectorAlternatives.some((alt: { segments: string[], descendant: boolean }) => alt.segments.length === 0)) {
                     scope.pendingStack.push({
                         tuple: new Array<string | undefined>(constraint.fields.length).fill(undefined),
                         depth: currentDepth,
@@ -953,18 +953,24 @@ export class SchemaGrammar implements Grammar {
         }
 
         // 2. Strip namespace prefix; try local name only.
+        // A prefixed element cannot match an unqualified local declaration, so only return here
+        // when the found decl is qualified or the element itself carries no prefix.
         const local: string = this.localName(elementName);
         if (local !== elementName) {
             decl = this.elementDecls.get(local);
-            if (decl) {
+            if (decl && decl.isQualified()) {
                 return decl;
             }
+            decl = undefined;
         }
 
         // 2b. Resolve the element's actual namespace from namespaceDeclarations and try that key first.
+        // Also consult instanceNsStack for prefixes declared in the instance document.
         const colonIndex: number = elementName.indexOf(':');
         const prefix: string = colonIndex !== -1 ? elementName.substring(0, colonIndex) : '';
-        const resolvedNs: string | undefined = this.resolvePrefix(prefix);
+        const instanceNsTop: Map<string, string> | undefined =
+            this.instanceNsStack.length > 0 ? this.instanceNsStack[this.instanceNsStack.length - 1] : undefined;
+        const resolvedNs: string | undefined = this.resolvePrefix(prefix) ?? instanceNsTop?.get(prefix);
         if (resolvedNs) {
             const nsKey: string = this.buildElementKey(local, resolvedNs);
             decl = this.elementDecls.get(nsKey);
@@ -1016,7 +1022,7 @@ export class SchemaGrammar implements Grammar {
                 break;
             }
             visited.add(current);
-            const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
+            const entry: { base: string, method: string } | undefined = this.typeHierarchy.get(current);
             if (!entry) {
                 break;
             }
@@ -1046,7 +1052,7 @@ export class SchemaGrammar implements Grammar {
                 break;
             }
             visited.add(current);
-            const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
+            const entry: { base: string, method: string } | undefined = this.typeHierarchy.get(current);
             current = entry ? entry.base : BUILTIN_TYPE_HIERARCHY.get(current);
         }
         return false;
@@ -1067,7 +1073,7 @@ export class SchemaGrammar implements Grammar {
                 break;
             }
             visited.add(current);
-            const entry: {base: string, method: string} | undefined = this.typeHierarchy.get(current);
+            const entry: { base: string, method: string } | undefined = this.typeHierarchy.get(current);
             if (entry) {
                 methods.add(entry.method);
                 current = entry.base;
@@ -1085,13 +1091,13 @@ export class SchemaGrammar implements Grammar {
         return new Set<string>();
     }
 
-    private parseSelectorSegments(selector: string): Array<{segments: string[], descendant: boolean}> {
+    private parseSelectorSegments(selector: string): Array<{ segments: string[], descendant: boolean }> {
         return selector.split('|').map((alt: string) => {
             const trimmed: string = alt.trim();
             const descendant: boolean = trimmed.includes('//');
             const relative: string = trimmed.startsWith('./') ? trimmed.substring(2) : trimmed;
             if (relative === '.' || relative === '') {
-                return {segments: [], descendant};
+                return { segments: [], descendant };
             }
             const steps: string[] = relative.split('/');
             const segments: string[] = [];
@@ -1108,7 +1114,7 @@ export class SchemaGrammar implements Grammar {
                     segments.push(colonIdx !== -1 ? step.substring(colonIdx + 1) : step);
                 }
             }
-            return {segments, descendant};
+            return { segments, descendant };
         });
     }
 
@@ -1124,7 +1130,7 @@ export class SchemaGrammar implements Grammar {
         return true;
     }
 
-    private parseFieldPath(field: string): {isAttribute: boolean, localName: string, descendant: boolean} {
+    private parseFieldPath(field: string): { isAttribute: boolean, localName: string, descendant: boolean } {
         const trimmed: string = field.trim();
         const descendant: boolean = trimmed.startsWith('.//');
         const withoutSelf: string = descendant ? trimmed.substring(3) : (trimmed.startsWith('./') ? trimmed.substring(2) : (trimmed === '.' ? '' : trimmed));
@@ -1132,13 +1138,13 @@ export class SchemaGrammar implements Grammar {
         if (withoutAxis.startsWith('@') || withoutAxis.startsWith('attribute::')) {
             const atName: string = withoutAxis.startsWith('attribute::') ? withoutAxis.substring(11) : withoutAxis.substring(1);
             const colonIdx: number = atName.indexOf(':');
-            return {isAttribute: true, localName: colonIdx !== -1 ? atName.substring(colonIdx + 1) : atName, descendant};
+            return { isAttribute: true, localName: colonIdx !== -1 ? atName.substring(colonIdx + 1) : atName, descendant };
         }
         const colonIdx: number = withoutAxis.indexOf(':');
-        return {isAttribute: false, localName: colonIdx !== -1 ? withoutAxis.substring(colonIdx + 1) : withoutAxis, descendant};
+        return { isAttribute: false, localName: colonIdx !== -1 ? withoutAxis.substring(colonIdx + 1) : withoutAxis, descendant };
     }
 
-    private parseFieldAlternatives(field: string): Array<{isAttribute: boolean, localName: string, descendant: boolean}> {
+    private parseFieldAlternatives(field: string): Array<{ isAttribute: boolean, localName: string, descendant: boolean }> {
         return field.split('|').map((alt: string) => this.parseFieldPath(alt));
     }
 
@@ -1172,7 +1178,7 @@ export class SchemaGrammar implements Grammar {
             ? (this.complexTypeDecls.get(xsiTypeLocal) ?? this.simpleTypeDecls.get(xsiTypeLocal) ?? declaredDecl)
             : declaredDecl;
         for (let i: number = 0; i < scope.constraint.fields.length; i++) {
-            const alternatives: Array<{isAttribute: boolean, localName: string, descendant: boolean}> = this.parseFieldAlternatives(scope.constraint.fields[i]);
+            const alternatives: Array<{ isAttribute: boolean, localName: string, descendant: boolean }> = this.parseFieldAlternatives(scope.constraint.fields[i]);
             for (const alt of alternatives) {
                 if (!alt.isAttribute) {
                     continue;
@@ -1201,7 +1207,7 @@ export class SchemaGrammar implements Grammar {
         const tuple: Array<string | undefined> = textTop.tuple;
         const fields: string[] = scope.constraint.fields;
         for (let i: number = 0; i < fields.length; i++) {
-            const alternatives: Array<{isAttribute: boolean, localName: string, descendant: boolean}> = this.parseFieldAlternatives(fields[i]);
+            const alternatives: Array<{ isAttribute: boolean, localName: string, descendant: boolean }> = this.parseFieldAlternatives(fields[i]);
             for (const alt of alternatives) {
                 if (alt.isAttribute) {
                     continue;
@@ -1364,7 +1370,7 @@ export class SchemaGrammar implements Grammar {
                             }
                         }
                     } else {
-                        this.pendingKeyrefChecks.push({constraintName: scope.constraint.name, refer: referName, tuples: scope.tuples});
+                        this.pendingKeyrefChecks.push({ constraintName: scope.constraint.name, refer: referName, tuples: scope.tuples });
                     }
                 }
             }
