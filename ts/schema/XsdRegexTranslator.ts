@@ -240,8 +240,27 @@ export class XsdRegexTranslator {
                 continue;
             }
 
+            // A '{' is a quantifier only when immediately followed by one or more digits.
+            // Otherwise it is a literal character; find the closing '}' and escape both.
+            if (ch === '{') {
+                if (i + 1 < src.length && src[i + 1] >= '0' && src[i + 1] <= '9') {
+                    out += '{';
+                    i++;
+                    continue;
+                }
+                const closeIdx: number = src.indexOf('}', i + 1);
+                if (closeIdx !== -1) {
+                    out += '\\{' + src.substring(i + 1, closeIdx) + '\\}';
+                    i = closeIdx + 1;
+                } else {
+                    out += '\\{';
+                    i++;
+                }
+                continue;
+            }
+
             // Quantifiers, alternation, anchors — pass through as-is.
-            // XSD has no anchors, but the characters |, *, +, ?, {, } are
+            // XSD has no anchors, but the characters |, *, +, ?, } are
             // the same as in JS.
             out += ch;
             i++;

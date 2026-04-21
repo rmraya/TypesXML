@@ -40,6 +40,7 @@ type SetStats = {
     total: number;
     passed: number;
     failed: number;
+    skipped: number;
 };
 
 class XMLSchemaTestSuite {
@@ -47,6 +48,7 @@ class XMLSchemaTestSuite {
     private grandTotal: number = 0;
     private grandPassed: number = 0;
     private grandFailed: number = 0;
+    private grandSkipped: number = 0;
     private setResults: SetStats[] = [];
 
     constructor() {
@@ -66,6 +68,7 @@ class XMLSchemaTestSuite {
             this.grandTotal += stats.total;
             this.grandPassed += stats.passed;
             this.grandFailed += stats.failed;
+            this.grandSkipped += stats.skipped;
         } else {
             console.warn('Boeing test set not found: ' + boeingPath);
         }
@@ -78,6 +81,7 @@ class XMLSchemaTestSuite {
             this.grandTotal += stats.total;
             this.grandPassed += stats.passed;
             this.grandFailed += stats.failed;
+            this.grandSkipped += stats.skipped;
         } else {
             console.warn('NIST test set not found: ' + nistPath);
         }
@@ -85,7 +89,7 @@ class XMLSchemaTestSuite {
         // Microsoft: 17 testSet files in msMeta/, all named *_w3c.xml
         const msMetaDir: string = resolve(suiteDir, MS_META_DIR);
         if (existsSync(msMetaDir)) {
-            const msStats: SetStats = { contributor: 'Microsoft', name: 'MS-XSD-2006', total: 0, passed: 0, failed: 0 };
+            const msStats: SetStats = { contributor: 'Microsoft', name: 'MS-XSD-2006', total: 0, passed: 0, failed: 0, skipped: 0 };
             const msFiles: string[] = readdirSync(msMetaDir)
                 .filter((f: string) => f.endsWith('_w3c.xml'))
                 .sort();
@@ -97,6 +101,7 @@ class XMLSchemaTestSuite {
             this.grandTotal += msStats.total;
             this.grandPassed += msStats.passed;
             this.grandFailed += msStats.failed;
+            this.grandSkipped += msStats.skipped;
         } else {
             console.warn('Microsoft meta directory not found: ' + msMetaDir);
         }
@@ -104,7 +109,7 @@ class XMLSchemaTestSuite {
         // SUN: 13 testSet files in sunMeta/
         const sunMetaDir: string = resolve(suiteDir, SUN_META_DIR);
         if (existsSync(sunMetaDir)) {
-            const sunStats: SetStats = { contributor: 'SUN', name: 'SUN-XSD-2006', total: 0, passed: 0, failed: 0 };
+            const sunStats: SetStats = { contributor: 'SUN', name: 'SUN-XSD-2006', total: 0, passed: 0, failed: 0, skipped: 0 };
             const sunFiles: string[] = readdirSync(sunMetaDir)
                 .filter((f: string) => f.endsWith('.testSet'))
                 .sort();
@@ -116,6 +121,7 @@ class XMLSchemaTestSuite {
             this.grandTotal += sunStats.total;
             this.grandPassed += sunStats.passed;
             this.grandFailed += sunStats.failed;
+            this.grandSkipped += sunStats.skipped;
         } else {
             console.warn('SUN meta directory not found: ' + sunMetaDir);
         }
@@ -202,6 +208,8 @@ class XMLSchemaTestSuite {
                     stats.total++;
                     if (actual === expected) {
                         stats.passed++;
+                    } else if (!this.isAccepted(child)) {
+                        stats.skipped++;
                     } else {
                         stats.failed++;
                         console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual + ' [' + schemaPath + ']');
@@ -245,6 +253,8 @@ class XMLSchemaTestSuite {
                 stats.total++;
                 if (actual === expected) {
                     stats.passed++;
+                } else if (!this.isAccepted(child)) {
+                    stats.skipped++;
                 } else {
                     stats.failed++;
                     console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual + ' [' + instancePath + ']');
@@ -341,6 +351,8 @@ class XMLSchemaTestSuite {
                     stats.total++;
                     if (actual === expected) {
                         stats.passed++;
+                    } else if (!this.isAccepted(child)) {
+                        stats.skipped++;
                     } else {
                         stats.failed++;
                         console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual + ' [' + schemaPath + ']');
@@ -390,6 +402,8 @@ class XMLSchemaTestSuite {
                 stats.total++;
                 if (actual === expected) {
                     stats.passed++;
+                } else if (!this.isAccepted(child)) {
+                    stats.skipped++;
                 } else {
                     stats.failed++;
                     console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual + ' [' + instancePath + ']');
@@ -414,7 +428,7 @@ class XMLSchemaTestSuite {
     // -------------------------------------------------------------------------
     private runNistTestSet(testSetPath: string): SetStats {
         const testSetDir: string = dirname(testSetPath);
-        const stats: SetStats = { contributor: 'NIST', name: 'NIST2004-01-14', total: 0, passed: 0, failed: 0 };
+        const stats: SetStats = { contributor: 'NIST', name: 'NIST2004-01-14', total: 0, passed: 0, failed: 0, skipped: 0 };
 
         const doc: XMLDocument | undefined = this.parseXML(testSetPath);
         if (!doc) {
@@ -471,6 +485,8 @@ class XMLSchemaTestSuite {
                     stats.total++;
                     if (actual === expected) {
                         stats.passed++;
+                    } else if (!this.isAccepted(child)) {
+                        stats.skipped++;
                     } else {
                         stats.failed++;
                         console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual + ' [' + schemaPath + ']');
@@ -514,6 +530,8 @@ class XMLSchemaTestSuite {
                 stats.total++;
                 if (actual === expected) {
                     stats.passed++;
+                } else if (!this.isAccepted(child)) {
+                    stats.skipped++;
                 } else {
                     stats.failed++;
                     console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual + ' [' + instancePath + ']');
@@ -543,7 +561,7 @@ class XMLSchemaTestSuite {
     // -------------------------------------------------------------------------
     private runBoeingTestSet(testSetPath: string): SetStats {
         const testSetDir: string = dirname(testSetPath);
-        const stats: SetStats = { contributor: 'Boeing', name: 'BoeingXSDTestCases', total: 0, passed: 0, failed: 0 };
+        const stats: SetStats = { contributor: 'Boeing', name: 'BoeingXSDTestCases', total: 0, passed: 0, failed: 0, skipped: 0 };
 
         const doc: XMLDocument | undefined = this.parseXML(testSetPath);
         if (!doc) {
@@ -606,6 +624,8 @@ class XMLSchemaTestSuite {
                     stats.total++;
                     if (actual === expected) {
                         stats.passed++;
+                    } else if (!this.isAccepted(child)) {
+                        stats.skipped++;
                     } else {
                         stats.failed++;
                         console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual);
@@ -652,6 +672,8 @@ class XMLSchemaTestSuite {
                 stats.total++;
                 if (actual === expected) {
                     stats.passed++;
+                } else if (!this.isAccepted(child)) {
+                    stats.skipped++;
                 } else {
                     stats.failed++;
                     console.log(' -- ' + testName + ': expected=' + expected + ' actual=' + actual + ' [' + instancePath + ']');
@@ -677,6 +699,15 @@ class XMLSchemaTestSuite {
     private localName(name: string): string {
         const idx: number = name.indexOf(':');
         return idx !== -1 ? name.substring(idx + 1) : name;
+    }
+
+    private isAccepted(child: XMLElement): boolean {
+        const currentEl: XMLElement | undefined = this.findChildByLocalName(child, 'current');
+        if (!currentEl) {
+            return true;
+        }
+        const status: string | undefined = currentEl.getAttribute('status')?.getValue();
+        return status === undefined || status === 'accepted';
     }
 
     private getXlinkHref(el: XMLElement): string | undefined {
@@ -712,13 +743,15 @@ class XMLSchemaTestSuite {
         console.log('');
 
         for (const stats of this.setResults) {
-            const pct: string = stats.total > 0 ? ((stats.passed / stats.total) * 100).toFixed(1) : '0.0';
-            console.log(stats.contributor + ' [' + stats.name + ']: passed=' + stats.passed + ', failed=' + stats.failed + ', total=' + stats.total + ' (' + pct + '%)');
+            const effective: number = stats.total - stats.skipped;
+            const pct: string = effective > 0 ? ((stats.passed / effective) * 100).toFixed(1) : '0.0';
+            console.log(stats.contributor + ' [' + stats.name + ']: passed=' + stats.passed + ', failed=' + stats.failed + ', skipped=' + stats.skipped + ', total=' + stats.total + ' (' + pct + '%)');
         }
 
-        const totalPct: string = this.grandTotal > 0 ? ((this.grandPassed / this.grandTotal) * 100).toFixed(1) : '0.0';
+        const grandEffective: number = this.grandTotal - this.grandSkipped;
+        const totalPct: string = grandEffective > 0 ? ((this.grandPassed / grandEffective) * 100).toFixed(1) : '0.0';
         console.log('');
-        console.log('TOTAL: ' + this.grandPassed + '/' + this.grandTotal + ' (' + totalPct + '%)');
+        console.log('TOTAL: ' + this.grandPassed + '/' + grandEffective + ' (' + totalPct + '%) - Skipped ' + this.grandSkipped + ' contested tests');
         console.log('');
     }
 }

@@ -509,6 +509,10 @@ export class SchemaGrammar implements Grammar {
                 const parentName: string = this.elementPath[this.elementPath.length - 2];
                 const parentDecl: SchemaElementDecl | undefined = this.lookupElementDecl(parentName);
                 if (parentDecl !== undefined) {
+                    if (parentDecl.getContentModel().getType() === SchemaContentModelType.ANY) {
+                        this.wildcardModeStack.push('skip');
+                        return ValidationResult.success();
+                    }
                     const currentNs: Map<string, string> | undefined = this.instanceNsStack.length > 0 ? this.instanceNsStack[this.instanceNsStack.length - 1] : undefined;
                     const pc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, currentNs);
                     if (pc === 'lax') {
@@ -723,6 +727,9 @@ export class SchemaGrammar implements Grammar {
                 }
             }
 
+            if (decl.getContentModel().getType() === SchemaContentModelType.ANY) {
+                continue;
+            }
             return ValidationResult.error(
                 'Attribute "' + attrName + '" is not declared for element "' + element + '"'
             );
