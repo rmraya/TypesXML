@@ -6,4 +6,4 @@ dist/
 .github/
 tests/
 benchmarks/
-catalog/
+/catalog/

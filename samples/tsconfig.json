@@ -11,7 +11,10 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "noEmitOnError": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "*.ts"

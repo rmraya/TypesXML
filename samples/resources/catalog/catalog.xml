@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+    <uri name="http://example.com/samples/rng/library" uri="../rng/library.rng"/>
+    <uri name="http://example.com/samples/schema" uri="../schema/example.xsd"/>
+    <system systemId="http://example.com/samples/dtd/library" uri="../dtd/sample.dtd"/>
+</catalog>
