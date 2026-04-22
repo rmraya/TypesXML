@@ -8,6 +8,23 @@ TypesXML is a TypeScript / Node.js XML library for parsing, validating, and proc
 
 The library is implemented entirely in TypeScript (no native bindings) and is validated against the official W3C XML test suites for DTD and XML Schema.
 
+## Quick example
+
+Parse an XML file and build a DOM document:
+
+```ts id="9w3k2x"
+import { DOMBuilder, SAXParser } from "typesxml";
+
+const handler = new DOMBuilder();
+const parser = new SAXParser();
+
+parser.setContentHandler(handler);
+parser.parseFile("example.xml");
+
+const document = handler.getDocument();
+console.log(document.toString());
+```
+
 ## Features
 
 - DOM builder (`DOMBuilder`) that produces an in-memory tree and preserves lexical information needed by canonicalization.
