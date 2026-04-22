@@ -203,9 +203,9 @@ export class AttListDecl implements XMLNode {
 
     private normalizeEnumeration(value: string): string {
         let normalized = value.replaceAll(/\s+/g, ' ');
-        normalized = normalized.replaceAll(/\s*\|\s*/g, '|');
-        normalized = normalized.replaceAll(/\(\s*/g, '(');
-        normalized = normalized.replaceAll(/\s*\)/g, ')');
+        normalized = normalized.replaceAll(' | ', '|').replaceAll(' |', '|').replaceAll('| ', '|');
+        normalized = normalized.replaceAll('( ', '(');
+        normalized = normalized.replaceAll(' )', ')');
         return normalized.trim();
     }
 

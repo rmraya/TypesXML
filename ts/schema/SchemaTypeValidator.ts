@@ -33,9 +33,9 @@ export class SchemaTypeValidator {
 
     static validateFacets(value: string, facets: SchemaFacets, typeName?: string): boolean {
         if (facets.whiteSpace === 'replace') {
-            value = value.replace(/[\t\n\r]/g, ' ');
+            value = value.replaceAll(/[\t\n\r]/g, ' ');
         } else if (facets.whiteSpace === 'collapse') {
-            value = value.replace(/[\t\n\r ]+/g, ' ').trim();
+            value = value.replaceAll(/[\t\n\r ]+/g, ' ').trim();
         }
         if (facets.enumeration && facets.enumeration.length > 0) {
             if (facets.enumeration.indexOf(value) === -1) {
@@ -109,7 +109,7 @@ export class SchemaTypeValidator {
                 const trimmed: string = value.trim();
                 effectiveLength = trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
             } else if (localTypeName === 'base64Binary') {
-                const clean: string = value.replace(/\s/g, '');
+                const clean: string = value.replaceAll(/\s/g, '');
                 let padding: number = 0;
                 for (let i: number = clean.length - 1; i >= 0 && clean[i] === '='; i--) { padding++; }
                 effectiveLength = Math.floor(clean.length * 3 / 4) - padding;
@@ -169,14 +169,14 @@ export class SchemaTypeValidator {
                 return !/[\t\n\r]/.test(value);
 
             case 'token':
-                return value === value.replace(/[\t\n\r ]+/g, ' ').trim();
+                return value === value.replaceAll(/[\t\n\r ]+/g, ' ').trim();
 
             case 'hexBinary': {
-                const cleanHex: string = value.replace(/\s/g, '');
+                const cleanHex: string = value.replaceAll(/\s/g, '');
                 return cleanHex.length % 2 === 0 && /^[0-9A-Fa-f]*$/.test(cleanHex);
             }
             case 'base64Binary': {
-                const cleanB64: string = value.replace(/\s/g, '');
+                const cleanB64: string = value.replaceAll(/\s/g, '');
                 if (cleanB64.length % 4 !== 0) { return false; }
                 if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleanB64)) { return false; }
                 const eqIdx: number = cleanB64.indexOf('=');
@@ -352,27 +352,27 @@ export class SchemaTypeValidator {
             case 'negativeInteger':
                 return value.startsWith('-');
             case 'byte': {
-                const n: number = parseInt(value, 10);
+                const n: number = Number.parseInt(value, 10);
                 return n >= -128 && n <= 127;
             }
             case 'short': {
-                const n: number = parseInt(value, 10);
+                const n: number = Number.parseInt(value, 10);
                 return n >= -32768 && n <= 32767;
             }
             case 'int': {
-                const n: number = parseInt(value, 10);
+                const n: number = Number.parseInt(value, 10);
                 return n >= -2147483648 && n <= 2147483647;
             }
             case 'unsignedByte': {
-                const n: number = parseInt(value, 10);
+                const n: number = Number.parseInt(value, 10);
                 return n >= 0 && n <= 255;
             }
             case 'unsignedShort': {
-                const n: number = parseInt(value, 10);
+                const n: number = Number.parseInt(value, 10);
                 return n >= 0 && n <= 65535;
             }
             case 'unsignedInt': {
-                const n: number = parseInt(value, 10);
+                const n: number = Number.parseInt(value, 10);
                 return n >= 0 && n <= 4294967295;
             }
             default:
@@ -384,7 +384,7 @@ export class SchemaTypeValidator {
         if (tz === undefined || tz === 'Z') { return true; }
         const tzM: RegExpMatchArray | null = tz.match(/^([+-])([0-9]{2}):([0-9]{2})$/);
         if (!tzM) { return false; }
-        const offsetMinutes: number = parseInt(tzM[2], 10) * 60 + parseInt(tzM[3], 10);
+        const offsetMinutes: number = Number.parseInt(tzM[2], 10) * 60 + Number.parseInt(tzM[3], 10);
         return offsetMinutes <= 840;
     }
 
@@ -405,13 +405,13 @@ export class SchemaTypeValidator {
             /^(-?)([0-9]{4,})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$/
         );
         if (!m) { return false; }
-        if (parseInt(m[2], 10) === 0) { return false; }
-        const year: number = parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
-        const month: number = parseInt(m[3], 10);
-        const day: number = parseInt(m[4], 10);
-        const hour: number = parseInt(m[5], 10);
-        const minute: number = parseInt(m[6], 10);
-        const second: number = parseFloat(m[7]);
+        if (Number.parseInt(m[2], 10) === 0) { return false; }
+        const year: number = Number.parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
+        const month: number = Number.parseInt(m[3], 10);
+        const day: number = Number.parseInt(m[4], 10);
+        const hour: number = Number.parseInt(m[5], 10);
+        const minute: number = Number.parseInt(m[6], 10);
+        const second: number = Number.parseFloat(m[7]);
         if (month < 1 || month > 12) { return false; }
         if (day < 1 || day > SchemaTypeValidator.daysInMonth(year, month)) { return false; }
         if (hour === 24) {
@@ -426,7 +426,7 @@ export class SchemaTypeValidator {
     private static isDayTimeDuration(value: string): boolean {
         if (value === 'P' || value === '-P') { return false; }
         const m: RegExpMatchArray | null = value.match(
-            /^-?P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+(\.?[0-9]+)?S)?)?$/
+            /^-?P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+(\.[0-9]+)?S)?)?$/
         );
         if (!m) { return false; }
         if (m[2] !== undefined && !m[3] && !m[4] && !m[5]) { return false; }
@@ -447,13 +447,13 @@ export class SchemaTypeValidator {
             /^(-?)([0-9]{4,})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})?$/
         );
         if (!m) { return false; }
-        if (parseInt(m[2], 10) === 0) { return false; }
-        const year: number = parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
-        const month: number = parseInt(m[3], 10);
-        const day: number = parseInt(m[4], 10);
-        const hour: number = parseInt(m[5], 10);
-        const minute: number = parseInt(m[6], 10);
-        const second: number = parseFloat(m[7]);
+        if (Number.parseInt(m[2], 10) === 0) { return false; }
+        const year: number = Number.parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
+        const month: number = Number.parseInt(m[3], 10);
+        const day: number = Number.parseInt(m[4], 10);
+        const hour: number = Number.parseInt(m[5], 10);
+        const minute: number = Number.parseInt(m[6], 10);
+        const second: number = Number.parseFloat(m[7]);
         if (month < 1 || month > 12) { return false; }
         if (day < 1 || day > SchemaTypeValidator.daysInMonth(year, month)) { return false; }
         if (hour === 24) {
@@ -471,10 +471,10 @@ export class SchemaTypeValidator {
             /^(-?)([0-9]{4,})-([0-9]{2})-([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?$/
         );
         if (!m) { return false; }
-        if (parseInt(m[2], 10) === 0) { return false; }
-        const year: number = parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
-        const month: number = parseInt(m[3], 10);
-        const day: number = parseInt(m[4], 10);
+        if (Number.parseInt(m[2], 10) === 0) { return false; }
+        const year: number = Number.parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
+        const month: number = Number.parseInt(m[3], 10);
+        const day: number = Number.parseInt(m[4], 10);
         if (month < 1 || month > 12) { return false; }
         if (day < 1 || day > SchemaTypeValidator.daysInMonth(year, month)) { return false; }
         if (!SchemaTypeValidator.isValidTimezone(m[5])) { return false; }
@@ -486,9 +486,9 @@ export class SchemaTypeValidator {
             /^([0-9]{2}):([0-9]{2}):([0-9]{2})(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})?$/
         );
         if (!m) { return false; }
-        const hour: number = parseInt(m[1], 10);
-        const minute: number = parseInt(m[2], 10);
-        const second: number = parseFloat(m[3]);
+        const hour: number = Number.parseInt(m[1], 10);
+        const minute: number = Number.parseInt(m[2], 10);
+        const second: number = Number.parseFloat(m[3]);
         if (hour === 24) {
             if (minute !== 0 || second !== 0) { return false; }
         } else if (hour > 23) {
@@ -514,15 +514,15 @@ export class SchemaTypeValidator {
     private static isGYear(value: string): boolean {
         const m: RegExpMatchArray | null = value.match(/^(-?)([0-9]{4,})(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
-        if (parseInt(m[2], 10) === 0) { return false; }
+        if (Number.parseInt(m[2], 10) === 0) { return false; }
         return SchemaTypeValidator.isValidTimezone(m[3]);
     }
 
     private static isGYearMonth(value: string): boolean {
         const m: RegExpMatchArray | null = value.match(/^(-?)([0-9]{4,})-([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
-        if (parseInt(m[2], 10) === 0) { return false; }
-        const month: number = parseInt(m[3], 10);
+        if (Number.parseInt(m[2], 10) === 0) { return false; }
+        const month: number = Number.parseInt(m[3], 10);
         if (month < 1 || month > 12) { return false; }
         return SchemaTypeValidator.isValidTimezone(m[4]);
     }
@@ -530,7 +530,7 @@ export class SchemaTypeValidator {
     private static isGMonth(value: string): boolean {
         const m: RegExpMatchArray | null = value.match(/^--([0-9]{2})(--)?(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
-        const month: number = parseInt(m[1], 10);
+        const month: number = Number.parseInt(m[1], 10);
         if (month < 1 || month > 12) { return false; }
         return SchemaTypeValidator.isValidTimezone(m[3]);
     }
@@ -538,8 +538,8 @@ export class SchemaTypeValidator {
     private static isGMonthDay(value: string): boolean {
         const m: RegExpMatchArray | null = value.match(/^--([0-9]{2})-([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
-        const month: number = parseInt(m[1], 10);
-        const day: number = parseInt(m[2], 10);
+        const month: number = Number.parseInt(m[1], 10);
+        const day: number = Number.parseInt(m[2], 10);
         if (month < 1 || month > 12) { return false; }
         if (day < 1 || day > SchemaTypeValidator.daysInMonth(2000, month)) { return false; }
         return SchemaTypeValidator.isValidTimezone(m[3]);
@@ -548,7 +548,7 @@ export class SchemaTypeValidator {
     private static isGDay(value: string): boolean {
         const m: RegExpMatchArray | null = value.match(/^---([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?$/);
         if (!m) { return false; }
-        const day: number = parseInt(m[1], 10);
+        const day: number = Number.parseInt(m[1], 10);
         if (day < 1 || day > 31) { return false; }
         return SchemaTypeValidator.isValidTimezone(m[2]);
     }
@@ -610,7 +610,7 @@ export class SchemaTypeValidator {
 
         const tIndex: number = abs.indexOf('T');
         if (tIndex === -1) {
-            return NaN;
+            return Number.NaN;
         }
         const datePart: string = abs.substring(0, tIndex);
         let rest: string = abs.substring(tIndex + 1);
@@ -623,26 +623,26 @@ export class SchemaTypeValidator {
             if (tzMatch) {
                 rest = rest.substring(0, rest.length - tzMatch[0].length);
                 const sign: number = tzMatch[1] === '+' ? 1 : -1;
-                tzOffsetMs = sign * (parseInt(tzMatch[2], 10) * 60 + parseInt(tzMatch[3], 10)) * 60000;
+                tzOffsetMs = sign * (Number.parseInt(tzMatch[2], 10) * 60 + Number.parseInt(tzMatch[3], 10)) * 60000;
             }
         }
 
         const dateParts: string[] = datePart.split('-');
-        const year: number = parseInt(dateParts[0], 10) * (negative ? -1 : 1);
-        const month: number = parseInt(dateParts[1], 10) - 1;
-        const day: number = parseInt(dateParts[2], 10);
+        const year: number = Number.parseInt(dateParts[0], 10) * (negative ? -1 : 1);
+        const month: number = Number.parseInt(dateParts[1], 10) - 1;
+        const day: number = Number.parseInt(dateParts[2], 10);
 
         const c1: number = rest.indexOf(':');
         const c2: number = rest.indexOf(':', c1 + 1);
-        const hours: number = parseInt(rest.substring(0, c1), 10);
-        const minutes: number = parseInt(rest.substring(c1 + 1, c2), 10);
-        const secFloat: number = parseFloat(rest.substring(c2 + 1));
+        const hours: number = Number.parseInt(rest.substring(0, c1), 10);
+        const minutes: number = Number.parseInt(rest.substring(c1 + 1, c2), 10);
+        const secFloat: number = Number.parseFloat(rest.substring(c2 + 1));
         const secInt: number = Math.floor(secFloat);
         const ms: number = Math.round((secFloat - secInt) * 1000);
 
         const d: Date = new Date(Date.UTC(year, month, day, hours, minutes, secInt, ms));
-        if (isNaN(d.getTime())) {
-            return NaN;
+        if (Number.isNaN(d.getTime())) {
+            return Number.NaN;
         }
         // Subtract tzOffsetMs: a value of +05:00 means local = UTC+5, so UTC = local - 5 h.
         return d.getTime() - tzOffsetMs;
@@ -660,18 +660,18 @@ export class SchemaTypeValidator {
             if (tzMatch) {
                 abs = abs.substring(0, abs.length - tzMatch[0].length);
                 const sign: number = tzMatch[1] === '+' ? 1 : -1;
-                tzOffsetMs = sign * (parseInt(tzMatch[2], 10) * 60 + parseInt(tzMatch[3], 10)) * 60000;
+                tzOffsetMs = sign * (Number.parseInt(tzMatch[2], 10) * 60 + Number.parseInt(tzMatch[3], 10)) * 60000;
             }
         }
 
         const parts: string[] = abs.split('-');
-        const year: number = parseInt(parts[0], 10) * (negative ? -1 : 1);
-        const month: number = parseInt(parts[1], 10) - 1;
-        const day: number = parseInt(parts[2], 10);
+        const year: number = Number.parseInt(parts[0], 10) * (negative ? -1 : 1);
+        const month: number = Number.parseInt(parts[1], 10) - 1;
+        const day: number = Number.parseInt(parts[2], 10);
 
         const d: Date = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-        if (isNaN(d.getTime())) {
-            return NaN;
+        if (Number.isNaN(d.getTime())) {
+            return Number.NaN;
         }
         return d.getTime() - tzOffsetMs;
     }
@@ -687,15 +687,15 @@ export class SchemaTypeValidator {
             if (tzMatch) {
                 rest = rest.substring(0, rest.length - tzMatch[0].length);
                 const sign: number = tzMatch[1] === '+' ? 1 : -1;
-                tzOffsetMs = sign * (parseInt(tzMatch[2], 10) * 60 + parseInt(tzMatch[3], 10)) * 60000;
+                tzOffsetMs = sign * (Number.parseInt(tzMatch[2], 10) * 60 + Number.parseInt(tzMatch[3], 10)) * 60000;
             }
         }
 
         const c1: number = rest.indexOf(':');
         const c2: number = rest.indexOf(':', c1 + 1);
-        const hours: number = parseInt(rest.substring(0, c1), 10);
-        const minutes: number = parseInt(rest.substring(c1 + 1, c2), 10);
-        const secFloat: number = parseFloat(rest.substring(c2 + 1));
+        const hours: number = Number.parseInt(rest.substring(0, c1), 10);
+        const minutes: number = Number.parseInt(rest.substring(c1 + 1, c2), 10);
+        const secFloat: number = Number.parseFloat(rest.substring(c2 + 1));
         const secInt: number = Math.floor(secFloat);
         const ms: number = Math.round((secFloat - secInt) * 1000);
 
@@ -705,7 +705,7 @@ export class SchemaTypeValidator {
     private static compareDateTimes(a: string, b: string): number {
         const msA: number = SchemaTypeValidator.dateTimeToMs(a);
         const msB: number = SchemaTypeValidator.dateTimeToMs(b);
-        if (isNaN(msA) || isNaN(msB)) {
+        if (Number.isNaN(msA) || Number.isNaN(msB)) {
             return a < b ? -1 : a > b ? 1 : 0;
         }
         return msA < msB ? -1 : msA > msB ? 1 : 0;
@@ -714,7 +714,7 @@ export class SchemaTypeValidator {
     private static compareDates(a: string, b: string): number {
         const msA: number = SchemaTypeValidator.dateToMs(a);
         const msB: number = SchemaTypeValidator.dateToMs(b);
-        if (isNaN(msA) || isNaN(msB)) {
+        if (Number.isNaN(msA) || Number.isNaN(msB)) {
             return a < b ? -1 : a > b ? 1 : 0;
         }
         return msA < msB ? -1 : msA > msB ? 1 : 0;
@@ -723,7 +723,7 @@ export class SchemaTypeValidator {
     private static compareTimes(a: string, b: string): number {
         const msA: number = SchemaTypeValidator.timeToMs(a);
         const msB: number = SchemaTypeValidator.timeToMs(b);
-        if (isNaN(msA) || isNaN(msB)) {
+        if (Number.isNaN(msA) || Number.isNaN(msB)) {
             return a < b ? -1 : a > b ? 1 : 0;
         }
         return msA < msB ? -1 : msA > msB ? 1 : 0;
@@ -732,61 +732,61 @@ export class SchemaTypeValidator {
     private static compareGYears(a: string, b: string): number {
         const parseYear = (s: string): number => {
             const m: RegExpMatchArray | null = s.match(/^(-?)([0-9]{4,})/);
-            if (!m) { return NaN; }
-            return parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
+            if (!m) { return Number.NaN; }
+            return Number.parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
         };
         const ya: number = parseYear(a);
         const yb: number = parseYear(b);
-        if (isNaN(ya) || isNaN(yb)) { return a < b ? -1 : a > b ? 1 : 0; }
+        if (Number.isNaN(ya) || Number.isNaN(yb)) { return a < b ? -1 : a > b ? 1 : 0; }
         return ya < yb ? -1 : ya > yb ? 1 : 0;
     }
 
     private static compareGYearMonths(a: string, b: string): number {
         const parseYM = (s: string): number => {
             const m: RegExpMatchArray | null = s.match(/^(-?)([0-9]{4,})-([0-9]{2})/);
-            if (!m) { return NaN; }
-            const year: number = parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
-            return year * 12 + parseInt(m[3], 10);
+            if (!m) { return Number.NaN; }
+            const year: number = Number.parseInt(m[2], 10) * (m[1] === '-' ? -1 : 1);
+            return year * 12 + Number.parseInt(m[3], 10);
         };
         const va: number = parseYM(a);
         const vb: number = parseYM(b);
-        if (isNaN(va) || isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
+        if (Number.isNaN(va) || Number.isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
         return va < vb ? -1 : va > vb ? 1 : 0;
     }
 
     private static compareGMonthDays(a: string, b: string): number {
         const parseMD = (s: string): number => {
             const m: RegExpMatchArray | null = s.match(/^--([0-9]{2})-([0-9]{2})/);
-            if (!m) { return NaN; }
-            return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+            if (!m) { return Number.NaN; }
+            return Number.parseInt(m[1], 10) * 100 + Number.parseInt(m[2], 10);
         };
         const va: number = parseMD(a);
         const vb: number = parseMD(b);
-        if (isNaN(va) || isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
+        if (Number.isNaN(va) || Number.isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
         return va < vb ? -1 : va > vb ? 1 : 0;
     }
 
     private static compareGMonths(a: string, b: string): number {
         const parseM = (s: string): number => {
             const m: RegExpMatchArray | null = s.match(/^--([0-9]{2})/);
-            if (!m) { return NaN; }
-            return parseInt(m[1], 10);
+            if (!m) { return Number.NaN; }
+            return Number.parseInt(m[1], 10);
         };
         const va: number = parseM(a);
         const vb: number = parseM(b);
-        if (isNaN(va) || isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
+        if (Number.isNaN(va) || Number.isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
         return va < vb ? -1 : va > vb ? 1 : 0;
     }
 
     private static compareGDays(a: string, b: string): number {
         const parseD = (s: string): number => {
             const m: RegExpMatchArray | null = s.match(/^---([0-9]{2})/);
-            if (!m) { return NaN; }
-            return parseInt(m[1], 10);
+            if (!m) { return Number.NaN; }
+            return Number.parseInt(m[1], 10);
         };
         const va: number = parseD(a);
         const vb: number = parseD(b);
-        if (isNaN(va) || isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
+        if (Number.isNaN(va) || Number.isNaN(vb)) { return a < b ? -1 : a > b ? 1 : 0; }
         return va < vb ? -1 : va > vb ? 1 : 0;
     }
 
@@ -796,12 +796,12 @@ export class SchemaTypeValidator {
         );
         if (!m) { return null; }
         const negative: boolean = m[1] === '-';
-        const years: number = m[2] ? parseInt(m[2], 10) : 0;
-        const months: number = m[3] ? parseInt(m[3], 10) : 0;
-        const days: number = m[4] ? parseInt(m[4], 10) : 0;
-        const hours: number = m[5] ? parseInt(m[5], 10) : 0;
-        const minutes: number = m[6] ? parseInt(m[6], 10) : 0;
-        const seconds: number = m[7] ? parseFloat(m[7]) : 0;
+        const years: number = m[2] ? Number.parseInt(m[2], 10) : 0;
+        const months: number = m[3] ? Number.parseInt(m[3], 10) : 0;
+        const days: number = m[4] ? Number.parseInt(m[4], 10) : 0;
+        const hours: number = m[5] ? Number.parseInt(m[5], 10) : 0;
+        const minutes: number = m[6] ? Number.parseInt(m[6], 10) : 0;
+        const seconds: number = m[7] ? Number.parseFloat(m[7]) : 0;
         const totalMonths: number = years * 12 + months;
         const totalSeconds: number = days * 86400 + hours * 3600 + minutes * 60 + seconds;
         return { negative, months: totalMonths, seconds: totalSeconds };
@@ -861,9 +861,9 @@ export class SchemaTypeValidator {
                 // Fall through to float comparison.
             }
         }
-        const numA: number = parseFloat(a);
-        const numB: number = parseFloat(b);
-        if (!isNaN(numA) && !isNaN(numB)) {
+        const numA: number = Number.parseFloat(a);
+        const numB: number = Number.parseFloat(b);
+        if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
             return numA < numB ? -1 : numA > numB ? 1 : 0;
         }
         return a < b ? -1 : a > b ? 1 : 0;
@@ -897,7 +897,7 @@ export class SchemaTypeValidator {
                 if (value === '0') { return 'false'; }
                 return value;
             case 'normalizedString':
-                return value.replace(/[\t\n\r]/g, ' ');
+                return value.replaceAll(/[\t\n\r]/g, ' ');
             case 'token':
             case 'language':
             case 'Name':
@@ -910,9 +910,9 @@ export class SchemaTypeValidator {
             case 'IDREFS':
             case 'ENTITIES':
             case 'NMTOKENS':
-                return value.replace(/[\t\n\r ]+/g, ' ').trim();
+                return value.replaceAll(/[\t\n\r ]+/g, ' ').trim();
             case 'QName': {
-                const normalized: string = value.replace(/[\t\n\r ]+/g, ' ').trim();
+                const normalized: string = value.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                 if (nsMap !== undefined) {
                     const qColon: number = normalized.indexOf(':');
                     if (qColon !== -1) {
@@ -932,9 +932,9 @@ export class SchemaTypeValidator {
                 return normalized;
             }
             case 'hexBinary':
-                return value.replace(/\s/g, '').toUpperCase();
+                return value.replaceAll(/\s/g, '').toUpperCase();
             case 'base64Binary':
-                return value.replace(/\s/g, '');
+                return value.replaceAll(/\s/g, '');
             case 'dateTime':
             case 'date':
             case 'time':
@@ -989,7 +989,7 @@ export class SchemaTypeValidator {
         if (trimmed === 'INF' || trimmed === '+INF') { return 'INF'; }
         if (trimmed === '-INF') { return '-INF'; }
         if (trimmed === 'NaN') { return 'NaN'; }
-        return String(parseFloat(trimmed));
+        return String(Number.parseFloat(trimmed));
     }
 
     private static canonicalizeTemporal(value: string): string {

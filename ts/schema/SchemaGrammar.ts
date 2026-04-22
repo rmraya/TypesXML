@@ -303,7 +303,7 @@ export class SchemaGrammar implements Grammar {
         let textError: string | undefined = undefined;
         const fixedValue: string | undefined = textDecl.getFixedValue();
         if (fixedValue !== undefined) {
-            const normalizedText: string = text.replace(/[\t\n\r ]+/g, ' ').trim();
+            const normalizedText: string = text.replaceAll(/[\t\n\r ]+/g, ' ').trim();
             if (normalizedText !== fixedValue) {
                 textError = 'Element "' + element + '" has a fixed value "' + fixedValue + '" but got "' + normalizedText + '"';
             }
@@ -311,7 +311,7 @@ export class SchemaGrammar implements Grammar {
         if (textError === undefined) {
             const simpleType: string | undefined = textDecl.getSimpleType();
             if (simpleType !== undefined) {
-                const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
+                const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                 if (!SchemaTypeValidator.validate(normalizedText, simpleType, instanceNs)) {
                     textError = 'Invalid text content "' + effectiveText + '" for element "' + element + '": expected type ' + simpleType;
                 } else if (textDecl.hasTextFacets() && !textDecl.validateText(effectiveText)) {
@@ -338,7 +338,7 @@ export class SchemaGrammar implements Grammar {
                 const unionAlternatives: Array<{ facets: SchemaFacets, baseType: string }> | undefined = textDecl.getUnionAlternatives();
                 const unionMemberTypes: string[] | undefined = textDecl.getUnionMemberTypes();
                 if (unionAlternatives !== undefined && unionAlternatives.length > 0) {
-                    const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
+                    const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                     let valid: boolean = false;
                     for (const alt of unionAlternatives) {
                         if (SchemaTypeValidator.validate(normalizedText, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(normalizedText, alt.facets, alt.baseType)) {
@@ -350,7 +350,7 @@ export class SchemaGrammar implements Grammar {
                         textError = 'Invalid text content "' + effectiveText + '" for element "' + element + '": does not match any union member type';
                     }
                 } else if (unionMemberTypes !== undefined && unionMemberTypes.length > 0) {
-                    const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
+                    const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                     let valid: boolean = false;
                     for (const memberType of unionMemberTypes) {
                         if (this.validateTokenForType(normalizedText, memberType, instanceNs)) {
@@ -364,7 +364,7 @@ export class SchemaGrammar implements Grammar {
                 } else {
                     const listItemType: string | undefined = textDecl.getListItemType();
                     if (listItemType !== undefined) {
-                        const normalizedText: string = effectiveText.replace(/[\t\n\r ]+/g, ' ').trim();
+                        const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                         const tokens: string[] = normalizedText.length === 0 ? [] : normalizedText.split(/\s+/);
                         for (const token of tokens) {
                             if (!this.validateTokenForType(token, listItemType, instanceNs)) {

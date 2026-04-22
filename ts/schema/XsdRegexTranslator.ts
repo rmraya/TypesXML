@@ -300,7 +300,7 @@ export class XsdRegexTranslator {
                         const rawFlags = src.substring(i + 2, flagEnd);
                         const flags = rawFlags.startsWith('+') ? rawFlags.slice(1) : rawFlags;
                         if (/^[nimsx]+$/.test(flags)) {
-                            const jsFlags = flags.replace(/n/g, '');
+                            const jsFlags = flags.replaceAll(/n/g, '');
                             prefix = jsFlags.length > 0 ? '(?' + jsFlags + ':' : '(?:';
                             bodyStart = flagEnd + 1;
                         }
@@ -406,7 +406,7 @@ export class XsdRegexTranslator {
                         octalStr += src[j];
                         j++;
                     }
-                    const code = parseInt(octalStr, 8);
+                    const code = Number.parseInt(octalStr, 8);
                     const hex = code <= 0xFF
                         ? '\\x' + code.toString(16).padStart(2, '0')
                         : '\\u' + code.toString(16).padStart(4, '0');
@@ -558,7 +558,7 @@ export class XsdRegexTranslator {
                         octalStr += src[j];
                         j++;
                     }
-                    const code = parseInt(octalStr, 8);
+                    const code = Number.parseInt(octalStr, 8);
                     const hex = code <= 0xFF
                         ? '\\x' + code.toString(16).padStart(2, '0')
                         : '\\u' + code.toString(16).padStart(4, '0');
@@ -574,7 +574,7 @@ export class XsdRegexTranslator {
         if (name.startsWith('Is')) {
             const blockName = name.slice(2);
             const range = XsdRegexTranslator.BLOCK_MAP[blockName]
-                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replace(/-/g, '')];
+                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replaceAll(/-/g, '')];
             if (range) {
                 return negate ? '[^' + range + ']' : '[' + range + ']';
             }
@@ -594,7 +594,7 @@ export class XsdRegexTranslator {
         if (name.startsWith('Is')) {
             const blockName = name.slice(2);
             const range = XsdRegexTranslator.BLOCK_MAP[blockName]
-                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replace(/-/g, '')];
+                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replaceAll(/-/g, '')];
             if (range) {
                 return range;
             }

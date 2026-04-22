@@ -1342,10 +1342,10 @@ export class SchemaBuilder extends XMLSchemaParser {
     }
 
     private resolveCharRefs(s: string): string {
-        return s.replace(/&(?:#x([0-9a-fA-F]+)|#([0-9]+)|amp|lt|gt|quot|apos);/g,
+        return s.replaceAll(/&(?:#x([0-9a-fA-F]+)|#([0-9]+)|amp|lt|gt|quot|apos);/g,
             (match: string, hex: string | undefined, dec: string | undefined): string => {
-                if (hex !== undefined) { return String.fromCodePoint(parseInt(hex, 16)); }
-                if (dec !== undefined) { return String.fromCodePoint(parseInt(dec, 10)); }
+                if (hex !== undefined) { return String.fromCodePoint(Number.parseInt(hex, 16)); }
+                if (dec !== undefined) { return String.fromCodePoint(Number.parseInt(dec, 10)); }
                 if (match === '&amp;') { return '&'; }
                 if (match === '&lt;') { return '<'; }
                 if (match === '&gt;') { return '>'; }
@@ -1429,15 +1429,15 @@ export class SchemaBuilder extends XMLSchemaParser {
             } else if (localChildName === 'maxInclusive') {
                 facets.maxInclusive = val;
             } else if (localChildName === 'length') {
-                facets.length = parseInt(val, 10);
+                facets.length = Number.parseInt(val, 10);
             } else if (localChildName === 'minLength') {
-                facets.minLength = parseInt(val, 10);
+                facets.minLength = Number.parseInt(val, 10);
             } else if (localChildName === 'maxLength') {
-                facets.maxLength = parseInt(val, 10);
+                facets.maxLength = Number.parseInt(val, 10);
             } else if (localChildName === 'totalDigits') {
-                facets.totalDigits = parseInt(val, 10);
+                facets.totalDigits = Number.parseInt(val, 10);
             } else if (localChildName === 'fractionDigits') {
-                facets.fractionDigits = parseInt(val, 10);
+                facets.fractionDigits = Number.parseInt(val, 10);
             } else if (localChildName === 'whiteSpace') {
                 facets.whiteSpace = val;
             }
@@ -1531,15 +1531,15 @@ export class SchemaBuilder extends XMLSchemaParser {
             } else if (localChildName === 'maxInclusive') {
                 facets.maxInclusive = val;
             } else if (localChildName === 'length') {
-                facets.length = parseInt(val, 10);
+                facets.length = Number.parseInt(val, 10);
             } else if (localChildName === 'minLength') {
-                facets.minLength = parseInt(val, 10);
+                facets.minLength = Number.parseInt(val, 10);
             } else if (localChildName === 'maxLength') {
-                facets.maxLength = parseInt(val, 10);
+                facets.maxLength = Number.parseInt(val, 10);
             } else if (localChildName === 'totalDigits') {
-                facets.totalDigits = parseInt(val, 10);
+                facets.totalDigits = Number.parseInt(val, 10);
             } else if (localChildName === 'fractionDigits') {
-                facets.fractionDigits = parseInt(val, 10);
+                facets.fractionDigits = Number.parseInt(val, 10);
             } else if (localChildName === 'whiteSpace') {
                 facets.whiteSpace = val;
             }
@@ -1656,9 +1656,9 @@ export class SchemaBuilder extends XMLSchemaParser {
     private parseOccurs(el: XMLElement): [number, number | 'unbounded'] {
         const minAttr: XMLAttribute | undefined = el.getAttribute('minOccurs');
         const maxAttr: XMLAttribute | undefined = el.getAttribute('maxOccurs');
-        const min: number = minAttr ? parseInt(minAttr.getValue(), 10) : 1;
+        const min: number = minAttr ? Number.parseInt(minAttr.getValue(), 10) : 1;
         const max: number | 'unbounded' = maxAttr
-            ? (maxAttr.getValue() === 'unbounded' ? 'unbounded' : parseInt(maxAttr.getValue(), 10))
+            ? (maxAttr.getValue() === 'unbounded' ? 'unbounded' : Number.parseInt(maxAttr.getValue(), 10))
             : 1;
         return [min, max];
     }

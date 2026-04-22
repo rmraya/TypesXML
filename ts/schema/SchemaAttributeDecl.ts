@@ -144,9 +144,9 @@ export class SchemaAttributeDecl {
         }
         let normalized: string = value;
         if (this.facets.whiteSpace === 'replace') {
-            normalized = value.replace(/[\t\n\r]/g, ' ');
+            normalized = value.replaceAll(/[\t\n\r]/g, ' ');
         } else if (this.facets.whiteSpace === 'collapse') {
-            normalized = value.replace(/[\t\n\r ]+/g, ' ').trim();
+            normalized = value.replaceAll(/[\t\n\r ]+/g, ' ').trim();
         }
         return SchemaTypeValidator.validate(normalized, this.type);
     }

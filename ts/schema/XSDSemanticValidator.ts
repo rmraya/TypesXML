@@ -537,7 +537,7 @@ export class XSDSemanticValidator {
             const valAttr: XMLAttribute | undefined = el.getAttribute('value');
             if (valAttr) {
                 const raw: string = valAttr.getValue();
-                if (!/^[0-9]+$/.test(raw) || parseInt(raw, 10) < 1) {
+                if (!/^[0-9]+$/.test(raw) || Number.parseInt(raw, 10) < 1) {
                     throw new Error('xs:totalDigits value must be a positive integer, got: "' + raw + '"');
                 }
             }
@@ -563,7 +563,7 @@ export class XSDSemanticValidator {
                 if (isFloatBase && floatSpecials.has(val)) {
                     return false;
                 }
-                return isNaN(parseFloat(val));
+                return Number.isNaN(Number.parseFloat(val));
             };
             let hasLength: boolean = false;
             let hasMinLength: boolean = false;
@@ -583,8 +583,8 @@ export class XSDSemanticValidator {
                 else if (facetLocal === 'minInclusive') { minInclusive = val; }
                 else if (facetLocal === 'maxInclusive') { maxInclusive = val; }
                 else if (facetLocal === 'length') { hasLength = true; }
-                else if (facetLocal === 'minLength') { hasMinLength = true; minLengthVal = parseInt(val, 10); }
-                else if (facetLocal === 'maxLength') { hasMaxLength = true; maxLengthVal = parseInt(val, 10); }
+                else if (facetLocal === 'minLength') { hasMinLength = true; minLengthVal = Number.parseInt(val, 10); }
+                else if (facetLocal === 'maxLength') { hasMaxLength = true; maxLengthVal = Number.parseInt(val, 10); }
                 else if (facetLocal === 'enumeration' && isNumericBase && isInvalidNumericValue(val)) {
                     throw new Error('xs:enumeration value "' + val + '" is not valid for numeric base type "' + baseLocal + '"');
                 }
@@ -617,11 +617,11 @@ export class XSDSemanticValidator {
                     }
                 }
             }
-            const lo: number | undefined = minExclusive !== undefined ? parseFloat(minExclusive) : (minInclusive !== undefined ? parseFloat(minInclusive) : undefined);
+            const lo: number | undefined = minExclusive !== undefined ? Number.parseFloat(minExclusive) : (minInclusive !== undefined ? Number.parseFloat(minInclusive) : undefined);
             const loExclusive: boolean = minExclusive !== undefined;
-            const hi: number | undefined = maxExclusive !== undefined ? parseFloat(maxExclusive) : (maxInclusive !== undefined ? parseFloat(maxInclusive) : undefined);
+            const hi: number | undefined = maxExclusive !== undefined ? Number.parseFloat(maxExclusive) : (maxInclusive !== undefined ? Number.parseFloat(maxInclusive) : undefined);
             const hiExclusive: boolean = maxExclusive !== undefined;
-            if (lo !== undefined && hi !== undefined && !isNaN(lo) && !isNaN(hi)) {
+            if (lo !== undefined && hi !== undefined && !Number.isNaN(lo) && !Number.isNaN(hi)) {
                 if (loExclusive || hiExclusive) {
                     if (lo >= hi) {
                         throw new Error('xs:restriction has contradictory range facets: min=' + lo + ' max=' + hi);
@@ -1144,15 +1144,15 @@ export class XSDSemanticValidator {
                     } else if (facetLocal === 'maxInclusive') {
                         facets.maxInclusive = val;
                     } else if (facetLocal === 'length') {
-                        facets.length = parseInt(val, 10);
+                        facets.length = Number.parseInt(val, 10);
                     } else if (facetLocal === 'minLength') {
-                        facets.minLength = parseInt(val, 10);
+                        facets.minLength = Number.parseInt(val, 10);
                     } else if (facetLocal === 'maxLength') {
-                        facets.maxLength = parseInt(val, 10);
+                        facets.maxLength = Number.parseInt(val, 10);
                     } else if (facetLocal === 'totalDigits') {
-                        facets.totalDigits = parseInt(val, 10);
+                        facets.totalDigits = Number.parseInt(val, 10);
                     } else if (facetLocal === 'fractionDigits') {
-                        facets.fractionDigits = parseInt(val, 10);
+                        facets.fractionDigits = Number.parseInt(val, 10);
                     } else if (facetLocal === 'whiteSpace') {
                         facets.whiteSpace = val;
                     }

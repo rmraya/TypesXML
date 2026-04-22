@@ -867,7 +867,7 @@ export class SAXParser {
                 const declarations: Map<string, AttDecl> | undefined = dtdGrammar?.getElementAttributesMap(elementName);
                 grammarDefaults.forEach((value: string, key: string) => {
                     const grammarParts: { prefix?: string; localName: string } = this.splitQualifiedName(key);
-                    const attributeKey: string = this.buildSchemaAttributeKey(grammarParts.localName, undefined);
+                    const attributeKey: string = this.buildSchemaAttributeKey(grammarParts.localName);
                     if (existingAttributeKeys.has(attributeKey) || existingAttributeNames.has(key)) {
                         return;
                     }
