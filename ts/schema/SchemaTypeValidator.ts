@@ -110,7 +110,8 @@ export class SchemaTypeValidator {
                 effectiveLength = trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
             } else if (localTypeName === 'base64Binary') {
                 const clean: string = value.replace(/\s/g, '');
-                const padding: number = (clean.match(/=+$/) || [''])[0].length;
+                let padding: number = 0;
+                for (let i: number = clean.length - 1; i >= 0 && clean[i] === '='; i--) { padding++; }
                 effectiveLength = Math.floor(clean.length * 3 / 4) - padding;
             } else if (localTypeName === 'hexBinary') {
                 effectiveLength = Math.floor(value.length / 2);
@@ -132,8 +133,12 @@ export class SchemaTypeValidator {
             const dotIdx: number = s.indexOf('.');
             const rawInt: string = dotIdx === -1 ? s : s.substring(0, dotIdx);
             const rawFrac: string = dotIdx === -1 ? '' : s.substring(dotIdx + 1);
-            const canonInt: string = rawInt.replace(/^0+/, '') || '0';
-            const canonFrac: string = rawFrac.replace(/0+$/, '');
+            let canonIntStart: number = 0;
+            while (canonIntStart < rawInt.length - 1 && rawInt[canonIntStart] === '0') { canonIntStart++; }
+            const canonInt: string = rawInt.length === 0 ? '0' : rawInt.substring(canonIntStart);
+            let canonFracEnd: number = rawFrac.length;
+            while (canonFracEnd > 0 && rawFrac[canonFracEnd - 1] === '0') { canonFracEnd--; }
+            const canonFrac: string = rawFrac.substring(0, canonFracEnd);
             const total: number = canonInt.length + canonFrac.length;
             if (facets.totalDigits !== undefined && total > facets.totalDigits) {
                 return false;
@@ -281,14 +286,44 @@ export class SchemaTypeValidator {
     }
 
     private static isDecimal(value: string): boolean {
-        return /^[+-]?([0-9]+\.?[0-9]*|[0-9]*\.[0-9]+)$/.test(value);
+        let s: string = value;
+        if (s.startsWith('+') || s.startsWith('-')) { s = s.substring(1); }
+        if (s.length === 0) { return false; }
+        const dot: number = s.indexOf('.');
+        if (dot === -1) { return /^[0-9]+$/.test(s); }
+        const intPart: string = s.substring(0, dot);
+        const fracPart: string = s.substring(dot + 1);
+        if (intPart.length === 0 && fracPart.length === 0) { return false; }
+        if (intPart.length > 0 && !/^[0-9]+$/.test(intPart)) { return false; }
+        if (fracPart.length > 0 && !/^[0-9]+$/.test(fracPart)) { return false; }
+        return intPart.length > 0 || fracPart.length > 0;
     }
 
     private static isFloat(value: string): boolean {
         if (value === 'INF' || value === '+INF' || value === '-INF' || value === 'NaN') {
             return true;
         }
-        return /^[+-]?([0-9]+\.?[0-9]*|[0-9]*\.[0-9]+)([eE][+-]?[0-9]+)?$/.test(value);
+        let s: string = value;
+        if (s.startsWith('+') || s.startsWith('-')) { s = s.substring(1); }
+        if (s.length === 0) { return false; }
+        const eIdx: number = s.search(/[eE]/);
+        let mantissa: string = s;
+        if (eIdx !== -1) {
+            const exp: string = s.substring(eIdx + 1);
+            mantissa = s.substring(0, eIdx);
+            if (exp.length === 0) { return false; }
+            const expDigits: string = (exp.startsWith('+') || exp.startsWith('-')) ? exp.substring(1) : exp;
+            if (expDigits.length === 0 || !/^[0-9]+$/.test(expDigits)) { return false; }
+        }
+        if (mantissa.length === 0) { return false; }
+        const dot: number = mantissa.indexOf('.');
+        if (dot === -1) { return /^[0-9]+$/.test(mantissa); }
+        const intPart: string = mantissa.substring(0, dot);
+        const fracPart: string = mantissa.substring(dot + 1);
+        if (intPart.length === 0 && fracPart.length === 0) { return false; }
+        if (intPart.length > 0 && !/^[0-9]+$/.test(intPart)) { return false; }
+        if (fracPart.length > 0 && !/^[0-9]+$/.test(fracPart)) { return false; }
+        return intPart.length > 0 || fracPart.length > 0;
     }
 
     private static isInteger(value: string, typeName: string): boolean {
@@ -469,7 +504,7 @@ export class SchemaTypeValidator {
             return false;
         }
         const m: RegExpMatchArray | null = value.match(
-            /^-?P([0-9]+Y)?([0-9]+M)?([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+(\.?[0-9]+)?S)?)?$/
+            /^-?P([0-9]+Y)?([0-9]+M)?([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+(\.[0-9]+)?S)?)?$/
         );
         if (!m) { return false; }
         if (m[4] !== undefined && !m[5] && !m[6] && !m[7]) { return false; }
@@ -925,8 +960,12 @@ export class SchemaTypeValidator {
         const dotIndex: number = unsigned.indexOf('.');
         let intPart: string = dotIndex === -1 ? unsigned : unsigned.substring(0, dotIndex);
         let fracPart: string = dotIndex === -1 ? '0' : unsigned.substring(dotIndex + 1);
-        intPart = intPart.replace(/^0+/, '') || '0';
-        fracPart = fracPart.replace(/0+$/, '') || '0';
+        let intStart: number = 0;
+        while (intStart < intPart.length - 1 && intPart[intStart] === '0') { intStart++; }
+        intPart = intPart.length === 0 ? '0' : intPart.substring(intStart);
+        let fracEnd: number = fracPart.length;
+        while (fracEnd > 0 && fracPart[fracEnd - 1] === '0') { fracEnd--; }
+        fracPart = fracEnd === 0 ? '0' : fracPart.substring(0, fracEnd);
         const isZero: boolean = intPart === '0' && /^0*$/.test(fracPart);
         if (isZero) {
             return '0.0';
@@ -957,10 +996,16 @@ export class SchemaTypeValidator {
         // Normalize timezone: +00:00 → Z.
         let v: string = value.trim().replace(/\+00:00$/, 'Z');
         // Strip trailing zeros from fractional seconds, e.g. .100 → .1, .000 → remove.
-        v = v.replace(/(\.[0-9]*?)0+(Z|[+-][0-9]{2}:[0-9]{2}|T|$)/, (_, frac, suffix) => {
-            const trimmed: string = frac.replace(/\.?0+$/, '');
-            return (trimmed === '.' ? '' : trimmed) + suffix;
-        });
+        const dotIdx: number = v.indexOf('.');
+        if (dotIdx !== -1) {
+            let fracEnd: number = dotIdx + 1;
+            while (fracEnd < v.length && v[fracEnd] >= '0' && v[fracEnd] <= '9') { fracEnd++; }
+            const suffix: string = v.substring(fracEnd);
+            let trimEnd: number = fracEnd;
+            while (trimEnd > dotIdx + 1 && v[trimEnd - 1] === '0') { trimEnd--; }
+            const frac: string = trimEnd === dotIdx + 1 ? '' : v.substring(dotIdx, trimEnd);
+            v = v.substring(0, dotIdx) + frac + suffix;
+        }
         return v;
     }
 }

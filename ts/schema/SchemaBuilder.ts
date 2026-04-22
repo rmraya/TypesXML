@@ -1342,10 +1342,16 @@ export class SchemaBuilder extends XMLSchemaParser {
     }
 
     private resolveCharRefs(s: string): string {
-        return s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-                .replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
-                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+        return s.replace(/&(?:#x([0-9a-fA-F]+)|#([0-9]+)|amp|lt|gt|quot|apos);/g,
+            (match: string, hex: string | undefined, dec: string | undefined): string => {
+                if (hex !== undefined) { return String.fromCodePoint(parseInt(hex, 16)); }
+                if (dec !== undefined) { return String.fromCodePoint(parseInt(dec, 10)); }
+                if (match === '&amp;') { return '&'; }
+                if (match === '&lt;') { return '<'; }
+                if (match === '&gt;') { return '>'; }
+                if (match === '&quot;') { return '"'; }
+                return "'";
+            });
     }
 
     private collectFacets(simpleTypeEl: XMLElement): SchemaFacets {
