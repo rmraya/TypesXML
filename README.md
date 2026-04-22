@@ -27,17 +27,26 @@ console.log(document.toString());
 
 ## Features
 
-- DOM builder (`DOMBuilder`) that produces an in-memory tree and preserves lexical information needed by canonicalization.
-- Streaming SAX parser with pull-based file, string, and Node.js stream entry points.
-- Complete DTD parser/validator with conditional sections and parameter entities.
-- Default attribute extraction from any reachable grammar (DTD, RelaxNG, or XML Schema); defaults merge during SAX parsing independent of validation mode.
-- OASIS XML Catalog resolver for public/system identifiers and alternate entity sources.
-- Passes 100% of the test cases in the official W3C XML Conformance Test Suite for DTD grammars (valid, invalid, not-wf, external entity cases).
-- Implements strict validation for files that use XML Schema 1.0 grammars, including built-in datatypes and user-defined types with complex content models — passing 95.8% of the official W3C XML Schema Test Suite (2006 edition).
-- Canonical XML renderer compatible with the W3C XML Test Suite rules.
-- Strict character validation for XML 1.0/1.1 and optional DTD-validating mode.
-- Pure TypeScript implementation with type definitions included—ideal for bundlers and ESM/CJS projects.
-- XML↔JSON conversion APIs with both lightweight and lossless modes for simple payloads or fully faithful round-trips.
+### Parsing
+
+* DOM builder (`DOMBuilder`) for in-memory document trees with lexical preservation
+* Streaming SAX parser with file, string, and Node.js stream support
+
+### Validation
+
+* Complete DTD parser/validator (including conditional sections and parameter entities)
+* XML Schema 1.0 validation with support for complex types
+* Strict XML 1.0 / 1.1 character validation
+
+### Integration
+
+* OASIS XML Catalog resolver for public/system identifiers
+* XML ↔ JSON conversion (lightweight and lossless modes)
+
+### Compliance
+
+* 100% W3C XML DTD test suite
+* 95.8% W3C XML Schema test suite
 
 ## SAX Parser
 
