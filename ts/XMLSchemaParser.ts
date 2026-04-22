@@ -20,6 +20,7 @@ import { SAXParser } from "./SAXParser.js";
 import { XMLAttribute } from "./XMLAttribute.js";
 import { XMLDocument } from "./XMLDocument.js";
 import { XMLElement } from "./XMLElement.js";
+import { XSDSemanticValidator } from "./schema/XSDSemanticValidator.js";
 
 type ElementInfo = {
     element: XMLElement;
@@ -42,6 +43,7 @@ type AttributeDefinitionInfo = {
 export class XMLSchemaParser {
 
     private static instance: XMLSchemaParser | undefined;
+    private static readonly XML_NS: string = 'http://www.w3.org/XML/1998/namespace';
     private static readonly IGNORED_NAMESPACES: Set<string> = new Set<string>([
         Constants.XML_SCHEMA_INSTANCE_NS_URI
     ]);
@@ -50,25 +52,31 @@ export class XMLSchemaParser {
     private schemaProcessingStack: Set<string>;
     visitedSchemas: Set<string>;
     complexTypeDefinitions: Map<string, XMLElement>;
+    redefineOriginals: Map<string, XMLElement>;
     attributeGroupDefinitions: Map<string, XMLElement>;
     attributeDefinitions: Map<string, AttributeDefinitionInfo>;
     elementDefinitions: Map<string, ElementInfo>;
+    simpleTypeDefinitions: Map<string, XMLElement>;
     collectedDefaults: Map<string, Map<string, AttributeDefault>>;
     complexTypeDefaultCache: Map<string, Map<string, AttributeDefault>>;
     attributeGroupDefaultCache: Map<string, Map<string, AttributeDefault>>;
+    parsedSchemaRoots: Array<XMLElement>;
 
-    private constructor(catalog?: Catalog) {
+    protected constructor(catalog?: Catalog) {
         this.catalog = catalog;
         this.schemaCache = new Map<string, Map<string, Map<string, AttributeDefault>>>();
         this.schemaProcessingStack = new Set<string>();
         this.visitedSchemas = new Set<string>();
         this.complexTypeDefinitions = new Map<string, XMLElement>();
+        this.redefineOriginals = new Map<string, XMLElement>();
         this.attributeGroupDefinitions = new Map<string, XMLElement>();
         this.attributeDefinitions = new Map<string, AttributeDefinitionInfo>();
         this.elementDefinitions = new Map<string, ElementInfo>();
+        this.simpleTypeDefinitions = new Map<string, XMLElement>();
         this.collectedDefaults = new Map<string, Map<string, AttributeDefault>>();
         this.complexTypeDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.attributeGroupDefaultCache = new Map<string, Map<string, AttributeDefault>>();
+        this.parsedSchemaRoots = [];
     }
 
     static getInstance(catalog?: Catalog): XMLSchemaParser {
@@ -114,12 +122,34 @@ export class XMLSchemaParser {
     protected resetWorkingState(): void {
         this.visitedSchemas = new Set<string>();
         this.complexTypeDefinitions = new Map<string, XMLElement>();
+        this.redefineOriginals = new Map<string, XMLElement>();
         this.attributeGroupDefinitions = new Map<string, XMLElement>();
         this.attributeDefinitions = new Map<string, AttributeDefinitionInfo>();
         this.elementDefinitions = new Map<string, ElementInfo>();
+        this.simpleTypeDefinitions = new Map<string, XMLElement>();
         this.collectedDefaults = new Map<string, Map<string, AttributeDefault>>();
         this.complexTypeDefaultCache = new Map<string, Map<string, AttributeDefault>>();
         this.attributeGroupDefaultCache = new Map<string, Map<string, AttributeDefault>>();
+        this.parsedSchemaRoots = [];
+        this.injectXmlNamespaceAttributes();
+    }
+
+    private injectXmlNamespaceAttributes(): void {
+        const xmlAttrs: Array<[string, string]> = [
+            ['lang',  'xs:language'],
+            ['space', 'xs:NCName'],
+            ['base',  'xs:anyURI'],
+            ['id',    'xs:ID']
+        ];
+        for (const [localName, type] of xmlAttrs) {
+            const el: XMLElement = new XMLElement('xs:attribute');
+            el.setAttribute(new XMLAttribute('name', localName));
+            el.setAttribute(new XMLAttribute('type', type));
+            const info: AttributeDefinitionInfo = { element: el, namespace: XMLSchemaParser.XML_NS };
+            const key: string = XMLSchemaParser.XML_NS + '|' + localName;
+            this.attributeDefinitions.set(key, info);
+            this.attributeDefinitions.set('xml:' + localName, info);
+        }
     }
 
     protected cloneDefaults(source: Map<string, Map<string, AttributeDefault>>): Map<string, Map<string, AttributeDefault>> {
@@ -374,6 +404,11 @@ export class XMLSchemaParser {
         return undefined;
     }
 
+    protected lookupOriginalComplexType(typeName: string): XMLElement | undefined {
+        const localName: string = this.getLocalName(typeName);
+        return this.redefineOriginals.get(typeName) ?? this.redefineOriginals.get(localName);
+    }
+
     protected lookupAttributeGroup(groupName: string): XMLElement | undefined {
         const direct: XMLElement | undefined = this.attributeGroupDefinitions.get(groupName);
         if (direct) {
@@ -391,6 +426,50 @@ export class XMLSchemaParser {
             if (candidateKey.endsWith("|" + localName) || candidateKey === localName) {
                 return entry[1];
             }
+        }
+        return undefined;
+    }
+
+    protected lookupAttributeGroupWithNamespace(groupName: string): { element: XMLElement; namespace: string | undefined } | undefined {
+        const localName: string = this.getLocalName(groupName);
+        const entries: Array<[string, XMLElement]> = Array.from(this.attributeGroupDefinitions.entries());
+        for (const entry of entries) {
+            const key: string = entry[0];
+            const pipeIdx: number = key.lastIndexOf('|');
+            if (pipeIdx !== -1 && key.substring(pipeIdx + 1) === localName) {
+                const ns: string = key.substring(0, pipeIdx);
+                return { element: entry[1], namespace: ns.length > 0 ? ns : undefined };
+            }
+        }
+        const direct: XMLElement | undefined = this.attributeGroupDefinitions.get(groupName);
+        if (direct) {
+            return { element: direct, namespace: undefined };
+        }
+        const byLocal: XMLElement | undefined = this.attributeGroupDefinitions.get(localName);
+        if (byLocal) {
+            return { element: byLocal, namespace: undefined };
+        }
+        return undefined;
+    }
+
+    protected lookupComplexTypeWithNamespace(typeName: string): { element: XMLElement; namespace: string | undefined } | undefined {
+        const localName: string = this.getLocalName(typeName);
+        const entries: Array<[string, XMLElement]> = Array.from(this.complexTypeDefinitions.entries());
+        for (const entry of entries) {
+            const key: string = entry[0];
+            const pipeIdx: number = key.lastIndexOf('|');
+            if (pipeIdx !== -1 && key.substring(pipeIdx + 1) === localName) {
+                const ns: string = key.substring(0, pipeIdx);
+                return { element: entry[1], namespace: ns.length > 0 ? ns : undefined };
+            }
+        }
+        const direct: XMLElement | undefined = this.complexTypeDefinitions.get(typeName);
+        if (direct) {
+            return { element: direct, namespace: undefined };
+        }
+        const byLocal: XMLElement | undefined = this.complexTypeDefinitions.get(localName);
+        if (byLocal) {
+            return { element: byLocal, namespace: undefined };
         }
         return undefined;
     }
@@ -427,7 +506,7 @@ export class XMLSchemaParser {
         });
     }
 
-    protected walkSchema(schemaPath: string): void {
+    protected walkSchema(schemaPath: string, includingTargetNamespace?: string | null): void {
         const normalizedPath: string = this.normalizePath(schemaPath);
         if (this.visitedSchemas.has(normalizedPath)) {
             return;
@@ -454,6 +533,10 @@ export class XMLSchemaParser {
         }
         const targetNamespaceAttribute: XMLAttribute | undefined = root.getAttribute("targetNamespace");
         const targetNamespace: string | undefined = targetNamespaceAttribute ? targetNamespaceAttribute.getValue() : undefined;
+        if (includingTargetNamespace !== undefined) {
+            XSDSemanticValidator.checkIncludedNamespace(root, includingTargetNamespace !== null ? includingTargetNamespace : undefined);
+        }
+        this.parsedSchemaRoots.push(root);
         this.registerSchemaComponents(root, targetNamespace);
         this.processSchemaReferences(root, dirname(normalizedPath));
     }
@@ -475,7 +558,45 @@ export class XMLSchemaParser {
             }
             const resolved: string | undefined = this.resolveReference(location, baseDir, namespaceValue);
             if (resolved) {
-                this.walkSchema(resolved);
+                if (localName === 'include') {
+                    const includingNsAttr: XMLAttribute | undefined = schemaElement.getAttribute('targetNamespace');
+                    this.walkSchema(resolved, includingNsAttr !== undefined ? includingNsAttr.getValue() : null);
+                } else {
+                    this.walkSchema(resolved);
+                }
+            }
+            // For xs:redefine, after loading the base schema apply the redefined components (force-overwrite).
+            if (localName === 'redefine') {
+                const targetNsAttr: XMLAttribute | undefined = schemaElement.getAttribute('targetNamespace');
+                const targetNamespace: string | undefined = targetNsAttr ? targetNsAttr.getValue() : undefined;
+                this.applyRedefinitions(child, targetNamespace);
+            }
+        }
+    }
+
+    protected applyRedefinitions(redefineElement: XMLElement, targetNamespace?: string): void {
+        for (const child of redefineElement.getChildren()) {
+            const localName: string = this.getLocalName(child.getName());
+            if (localName === 'complexType') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (!nameAttr) { continue; }
+                const typeName: string = nameAttr.getValue();
+                const nsKey: string = this.buildTypeKey(typeName, targetNamespace);
+                const localKey: string = this.getLocalName(typeName);
+                // Save the original before overwriting so self-extension can resolve it.
+                const original: XMLElement | undefined =
+                    this.complexTypeDefinitions.get(nsKey)
+                    ?? this.complexTypeDefinitions.get(typeName)
+                    ?? this.complexTypeDefinitions.get(localKey);
+                if (original) {
+                    this.redefineOriginals.set(typeName, original);
+                    this.redefineOriginals.set(nsKey, original);
+                    this.redefineOriginals.set(localKey, original);
+                }
+                // Force-overwrite with the redefined version.
+                this.complexTypeDefinitions.set(nsKey, child);
+                this.complexTypeDefinitions.set(typeName, child);
+                this.complexTypeDefinitions.set(localKey, child);
             }
         }
     }
@@ -565,49 +686,39 @@ export class XMLSchemaParser {
                 if (!this.attributeDefinitions.has(localKey)) {
                     this.attributeDefinitions.set(localKey, info);
                 }
+                continue;
+            }
+            if (localName === "simpleType") {
+                const nameAttribute: XMLAttribute | undefined = child.getAttribute("name");
+                if (!nameAttribute) {
+                    continue;
+                }
+                const typeName: string = nameAttribute.getValue();
+                if (!this.simpleTypeDefinitions.has(typeName)) {
+                    this.simpleTypeDefinitions.set(typeName, child);
+                }
+                if (targetNamespace) {
+                    const nsKey: string = targetNamespace + '|' + typeName;
+                    if (!this.simpleTypeDefinitions.has(nsKey)) {
+                        this.simpleTypeDefinitions.set(nsKey, child);
+                    }
+                }
             }
         }
     }
 
     protected resolveReference(location: string | undefined, baseDir: string, namespaceValue?: string): string | undefined {
-        if (location) {
-            if (location.startsWith("file://")) {
-                const normalizedFileUrl: string = fileURLToPath(location);
-                if (existsSync(normalizedFileUrl)) {
-                    return normalizedFileUrl;
-                }
-            } else if (isAbsolute(location)) {
-                if (existsSync(location)) {
-                    return location;
-                }
-            } else if (!location.startsWith("http://") && !location.startsWith("https://")) {
-                const resolvedPath: string = resolve(baseDir, location);
-                if (existsSync(resolvedPath)) {
-                    return resolvedPath;
-                }
+        if (this.catalog) {
+            const candidates: Array<string | undefined> = [];
+            if (location) {
+                candidates.push(this.catalog.matchURI(location));
+                candidates.push(this.catalog.matchSystem(location));
             }
-            if (this.catalog) {
-                const catalogCandidates: Array<string | undefined> = [
-                    this.catalog.matchURI(location),
-                    this.catalog.matchSystem(location)
-                ];
-                for (const candidate of catalogCandidates) {
-                    if (!candidate) {
-                        continue;
-                    }
-                    const normalizedCandidate: string = candidate.startsWith("file://") ? fileURLToPath(candidate) : candidate;
-                    if (existsSync(normalizedCandidate)) {
-                        return normalizedCandidate;
-                    }
-                }
+            if (namespaceValue) {
+                candidates.push(this.catalog.matchURI(namespaceValue));
+                candidates.push(this.catalog.matchSystem(namespaceValue));
             }
-        }
-        if (namespaceValue && this.catalog) {
-            const catalogCandidates: Array<string | undefined> = [
-                this.catalog.matchURI(namespaceValue),
-                this.catalog.matchSystem(namespaceValue)
-            ];
-            for (const candidate of catalogCandidates) {
+            for (const candidate of candidates) {
                 if (!candidate) {
                     continue;
                 }
@@ -623,9 +734,22 @@ export class XMLSchemaParser {
         if (location.startsWith("http://") || location.startsWith("https://")) {
             return undefined;
         }
-        const resolvedFallback: string = resolve(baseDir, location);
-        if (existsSync(resolvedFallback)) {
-            return resolvedFallback;
+        if (location.startsWith("file://")) {
+            const normalizedFileUrl: string = fileURLToPath(location);
+            if (existsSync(normalizedFileUrl)) {
+                return normalizedFileUrl;
+            }
+            return undefined;
+        }
+        if (isAbsolute(location)) {
+            if (existsSync(location)) {
+                return location;
+            }
+            return undefined;
+        }
+        const resolvedPath: string = resolve(baseDir, location);
+        if (existsSync(resolvedPath)) {
+            return resolvedPath;
         }
         return undefined;
     }

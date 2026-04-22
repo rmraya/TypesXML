@@ -23,12 +23,14 @@ import { RelaxNGParser } from "./RelaxNGParser.js";
 import { StreamReader } from "./StreamReader.js";
 import { StringReader } from "./StringReader.js";
 import { XMLAttribute } from "./XMLAttribute.js";
-import { XMLUtils } from "./XMLUtils.js";
 import { XMLSchemaParser, type AttributeDefault } from "./XMLSchemaParser.js";
+import { XMLUtils } from "./XMLUtils.js";
 import { AttDecl } from "./dtd/AttDecl.js";
 import { DTDGrammar } from "./dtd/DTDGrammar.js";
 import { DTDParser } from "./dtd/DTDParser.js";
 import { Grammar, ValidationError, ValidationResult } from "./grammar/Grammar.js";
+import { SchemaBuilder } from "./schema/SchemaBuilder.js";
+import { SchemaGrammar } from "./schema/SchemaGrammar.js";
 
 export interface ParseSourceOptions {
     basePath?: string;
@@ -662,9 +664,12 @@ export class SAXParser {
             this.handleNamespaceDeclarations(attributesMap, namespaceContext, previousContext);
             const grammarForEntities: Grammar | undefined = this.contentHandler?.getGrammar();
             const dtdGrammarForEntities: DTDGrammar | undefined = grammarForEntities instanceof DTDGrammar ? grammarForEntities : undefined;
-            attributesMap.forEach((value: string) => {
+            attributesMap.forEach((value: string, key: string) => {
                 const decoded: string = this.decodeAttributeEntities(value, dtdGrammarForEntities);
                 XMLUtils.ensureValidXmlCharacters(this.xmlVersion, decoded, 'attribute value');
+                if (!dtdGrammarForEntities) {
+                    attributesMap.set(key, decoded);
+                }
             });
             attributesMap = this.normalizeDTDAttributes(name, attributesMap);
             let attributes: Array<XMLAttribute> = [];
@@ -672,6 +677,12 @@ export class SAXParser {
                 // TODO https://www.w3.org/TR/REC-xml/#AVNormalize
                 let attribute: XMLAttribute = new XMLAttribute(key, value);
                 attributes.push(attribute);
+            });
+            attributes = this.getDefaultAttributes(name, attributes);
+            attributes.forEach((attr: XMLAttribute) => {
+                if (!attributesMap.has(attr.getName())) {
+                    attributesMap.set(attr.getName(), attr.getValue());
+                }
             });
             if (this.validating) {
                 attributes.forEach((attr: XMLAttribute) => {
@@ -691,7 +702,6 @@ export class SAXParser {
                     }
                 }
             }
-            attributes = this.getDefaultAttributes(name, attributes);
 
             this.ensureLookahead(1);
             let isSelfClosing: boolean = false;
@@ -822,9 +832,10 @@ export class SAXParser {
 
     validateElement(name: string): void {
         const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
-        if (grammar) {
+        if (grammar && this.validating) {
+            const text: string = this.contentHandler ? this.contentHandler.getCurrentText() : '';
             const actualChildrenNames: string[] = this.childrenNames.length > 0 ? this.childrenNames[this.childrenNames.length - 1] : [];
-            const elementValidationResult = grammar.validateElement(name, actualChildrenNames);
+            const elementValidationResult = grammar.validateElement(name, actualChildrenNames, text);
             if (!elementValidationResult.isValid) {
                 const errorMessages: string = elementValidationResult.errors.map(e => e.message).join('; ');
                 throw new Error('Element validation failed for element "' + name + '": ' + errorMessages);
@@ -856,7 +867,7 @@ export class SAXParser {
                 const declarations: Map<string, AttDecl> | undefined = dtdGrammar?.getElementAttributesMap(elementName);
                 grammarDefaults.forEach((value: string, key: string) => {
                     const grammarParts: { prefix?: string; localName: string } = this.splitQualifiedName(key);
-                    const attributeKey: string = this.buildSchemaAttributeKey(grammarParts.localName, undefined);
+                    const attributeKey: string = this.buildSchemaAttributeKey(grammarParts.localName);
                     if (existingAttributeKeys.has(attributeKey) || existingAttributeNames.has(key)) {
                         return;
                     }
@@ -992,6 +1003,7 @@ export class SAXParser {
                 if (trimmed !== '' && trimmed !== previousValue) {
                     this.tryLoadSchemaForNamespace(trimmed);
                 }
+                this.propagateNamespaceToGrammar('', trimmed);
                 return;
             }
             if (!key.startsWith('xmlns:') || key.length <= 6) {
@@ -1003,13 +1015,25 @@ export class SAXParser {
             if (trimmed !== '' && trimmed !== previousValue) {
                 this.tryLoadSchemaForNamespace(trimmed);
             }
+            this.propagateNamespaceToGrammar(prefix, trimmed);
         });
         // If no new declaration appears on the current element, ensure the default namespace is considered.
         if (!previousContext && namespaceContext.has('')) {
             const defaultNamespace: string | undefined = namespaceContext.get('');
             if (defaultNamespace) {
                 this.tryLoadSchemaForNamespace(defaultNamespace);
+                this.propagateNamespaceToGrammar('', defaultNamespace);
             }
+        }
+    }
+
+    private propagateNamespaceToGrammar(prefix: string, uri: string): void {
+        if (!uri) {
+            return;
+        }
+        const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        if (grammar instanceof SchemaGrammar) {
+            grammar.addNamespaceDeclaration(prefix, uri);
         }
     }
 
@@ -1133,6 +1157,16 @@ export class SAXParser {
             this.mergeSchemaDefaults(convertedDefaults);
             this.processedSchemaLocations.add(resolvedPath);
             this.processedSchemaLocations.add(identifier);
+            if (this.validating) {
+                const builder: SchemaBuilder = new SchemaBuilder(this.catalog);
+                const grammar: SchemaGrammar = builder.buildGrammar(resolvedPath);
+                const existing: Grammar | undefined = this.contentHandler?.getGrammar();
+                if (existing instanceof SchemaGrammar) {
+                    existing.mergeFrom(grammar);
+                } else {
+                    this.contentHandler?.setGrammar(grammar);
+                }
+            }
             return true;
         } catch (error) {
             if (this.validating) {

@@ -10,7 +10,7 @@
  *     Maxprograms - initial API and implementation
  *******************************************************************************/
 
-import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationContext, ValidationResult } from '../grammar/Grammar.js';
+import { AttributeInfo, AttributeUse, Grammar, GrammarType, ValidationResult } from '../grammar/Grammar.js';
 import { XMLUtils } from "../XMLUtils.js";
 import { AttDecl } from './AttDecl.js';
 import { ContentModel, ContentModelType } from './ContentModel.js';
@@ -184,7 +184,7 @@ export class DTDGrammar implements Grammar {
         return this.attributesMap.get(element);
     }
 
-    validateElement(element: string, children: string[]): ValidationResult {
+    validateElement(element: string, children: string[], text: string): ValidationResult {
         const colonIndex = element.indexOf(':');
         if (colonIndex !== -1) {
             // element with colon means it has a namespace prefix and is not coming from a DTD
@@ -204,6 +204,9 @@ export class DTDGrammar implements Grammar {
             if (children.length > 0) {
                 return ValidationResult.error('Element "' + element + '" is declared as EMPTY but has child elements');
             } 
+            if (text !== '') {
+                return ValidationResult.error('Element "' + element + '" is declared as EMPTY but has text content');
+            }
         }
         if (model.getType() === ContentModelType.ANY) {
             return ValidationResult.success();
@@ -407,8 +410,8 @@ export class DTDGrammar implements Grammar {
         return GrammarType.DTD;
     }
 
-    getTargetNamespace(): string | undefined {
-        return undefined;
+    getTargetNamespaces(): Set<string> {
+        return new Set<string>();
     }
 
     getNamespaceDeclarations(): Map<string, string> {

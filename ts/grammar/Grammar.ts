@@ -88,7 +88,7 @@ export enum GrammarType {
 // Main Grammar interface
 export interface Grammar {
     // Core validation methods
-    validateElement(element: string, children: string[]): ValidationResult;
+    validateElement(element: string, children: string[], text: string): ValidationResult;
     validateAttributes(element: string, attributes: Map<string, string>): ValidationResult;
     getElementAttributes(element: string): Map<string, AttributeInfo>;
     getDefaultAttributes(element: string): Map<string, string>;
@@ -100,7 +100,7 @@ export interface Grammar {
     getGrammarType(): GrammarType;
 
     // Namespace support
-    getTargetNamespace(): string | undefined;
+    getTargetNamespaces(): Set<string>;
     getNamespaceDeclarations(): Map<string, string>;
 
 }

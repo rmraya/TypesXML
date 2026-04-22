@@ -4,7 +4,7 @@
 [![npm license](https://img.shields.io/npm/l/typesxml)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/implementation-native%20TypeScript-3178c6)](https://www.typescriptlang.org/)
 
-TypesXML is a native TypeScript XML library and processing toolkit — there are no bindings to C/C++ libraries or other native layers. It ships first-class DOM and SAX pipelines, validates full DTD grammars, resolves entities through OASIS XML Catalogs, and passes 100% of the W3C XML Conformance Test Suite for DTD-driven documents.
+TypesXML is a native TypeScript XML library and processing toolkit — there are no bindings to C/C++ libraries or other native layers. It ships first-class DOM and SAX pipelines, full DTD and XML Schema 1.0 validation, and OASIS XML Catalog resolution. It passes 100% of the W3C XML Conformance Test Suite for DTD grammars and 95.8% of the W3C XML Schema Test Suite — the only native TypeScript implementation verified against both official suites.
 
 ## Features
 
@@ -14,6 +14,7 @@ TypesXML is a native TypeScript XML library and processing toolkit — there are
 - Default attribute extraction from any reachable grammar (DTD, RelaxNG, or XML Schema); defaults merge during SAX parsing independent of validation mode.
 - OASIS XML Catalog resolver for public/system identifiers and alternate entity sources.
 - Passes 100% of the test cases in the official W3C XML Conformance Test Suite for DTD grammars (valid, invalid, not-wf, external entity cases).
+- Implements strict validation for files that use XML Schema 1.0 grammars, including built-in datatypes and user-defined types with complex content models — passing 95.8% of the official W3C XML Schema Test Suite (2006 edition).
 - Canonical XML renderer compatible with the W3C XML Test Suite rules.
 - Strict character validation for XML 1.0/1.1 and optional DTD-validating mode.
 - Pure TypeScript implementation with type definitions included—ideal for bundlers and ESM/CJS projects.
@@ -29,7 +30,7 @@ interface ContentHandler {
     setCatalog(catalog: Catalog): void;
     startDocument(): void;
     endDocument(): void;
-    xmlDeclaration(version: string, encoding: string, standalone: string): void;
+    xmlDeclaration(version: string, encoding: string, standalone: string | undefined): void;
     startElement(name: string, atts: XMLAttribute[]): void;
     endElement(name: string): void;
     internalSubset(declaration: string): void;
@@ -42,6 +43,9 @@ interface ContentHandler {
     startDTD(name: string, publicId: string, systemId: string): void;
     endDTD(): void;
     skippedEntity(name: string): void;
+    getGrammar(): Grammar | undefined;
+    setGrammar(grammar: Grammar | undefined): void;
+    getCurrentText(): string;
 }
 ```
 
@@ -78,7 +82,7 @@ To enable XML Catalog resolution or validation, configure the parser before invo
 
 ```ts
 parser.setCatalog(myCatalog);
-parser.setValidating(true); // Turns on DTD validation only.
+parser.setValidating(true); // Turns on DTD and XML Schema validation
 ```
 
 ## Documentation & Samples
@@ -155,7 +159,9 @@ If your use case involves large XML documents or streaming pipelines, TypesXML p
 
 ## W3C XML Test Suite
 
-The repository includes a harness that runs against the official W3C XML Conformance Test Suite for DTD grammars. To execute it locally:
+The repository includes code that runs the official W3C XML Conformance Test Suite for DTD and XML Schema grammars.
+
+### DTD
 
 1. Download the latest archive from the [W3C XML Test Suite](https://www.w3.org/XML/Test/) (e.g., `xmlts20080827.zip`).
 2. Extract the archive into `./tests/xmltest` so the `valid`, `invalid`, and `not-wf` folders sit under that path.
@@ -167,3 +173,18 @@ The repository includes a harness that runs against the official W3C XML Conform
    ```
 
 The script compiles the TypeScript sources and executes `ts/tests/DTDTestSuite.ts`, reporting any conformance failures.
+
+### XML Schema
+
+TypesXML currently passes **95.8%** of the W3C XML Schema Test Suite (2006 edition, ~40,000 tests), the only native TypeScript implementation of XML Schema 1.0 validated against the official W3C test suite.
+
+1. Download the latest archive from the [XML Schema Version 1.0, 2nd Edition](https://www.w3.org/XML/2004/xml-schema-test-suite/xmlschema2006-11-06/xsts-2007-06-20.tar.gz).
+2. Extract the archive into `./tests/` so the test cases are available under `./tests/xmlschema2006-11-06`.
+3. Install dependencies if needed: `npm install`.
+4. Run the suite:
+
+   ```bash
+   npm run testXmlSchema
+   ```
+
+The script compiles the TypeScript sources and executes `ts/tests/XmlSchemaTestSuite.ts`, reporting any conformance failures.

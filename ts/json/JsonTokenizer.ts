@@ -188,8 +188,8 @@ export class JsonTokenizer {
             throw new Error('Invalid unicode escape sequence: \\u' + hexDigits);
         }
         this.offset += 4;
-        const codePoint: number = parseInt(hexDigits, 16);
-        return String.fromCharCode(codePoint);
+        const codePoint: number = Number.parseInt(hexDigits, 16);
+        return String.fromCodePoint(codePoint);
     }
 
     private readNumber(): number {

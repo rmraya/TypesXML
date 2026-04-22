@@ -1,7 +1,7 @@
 {
   "name": "typesxml",
   "productName": "TypesXML",
-  "version": "1.19.0",
+  "version": "2.0.0",
   "description": "Open source XML library written in TypeScript",
   "keywords": [
     "XML",
@@ -9,6 +9,8 @@
     "DOM",
     "SAX",
     "DTD",
+    "XML Schema",
+    "Validation",
     "Default attributes",
     "TypeScript",
     "JSON"
@@ -18,7 +20,8 @@
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "build:esm": "tsc --project tsconfig.esm.json && node scripts/create-esm-package.cjs",
     "testDtd": "npm run build:cjs && node dist/cjs/tests/DTDTestSuite.js",
-    "testJson": "npm run build:cjs && node dist/cjs/tests/JsonConversionTest.js"
+    "testJson": "npm run build:cjs && node dist/cjs/tests/JsonConversionTest.js",
+    "testXmlSchema": "npm run build:cjs && node dist/cjs/tests/XMLSchemaTestSuite.js"
   },
   "author": {
     "name": "Rodolfo M. Raya",
@@ -48,6 +51,6 @@
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   }
 }

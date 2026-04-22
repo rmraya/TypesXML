@@ -71,6 +71,10 @@ export class XmlEventStreamWriter implements ContentHandler {
         return this.grammar;
     }
 
+    getCurrentText(): string {
+        return '';
+    }
+
     startDocument(): void {
         return;
     }

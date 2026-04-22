@@ -44,4 +44,6 @@ export interface ContentHandler {
 
     getGrammar(): Grammar | undefined;
     setGrammar(grammar: Grammar | undefined): void;
+
+    getCurrentText(): string;
 }
