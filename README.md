@@ -117,9 +117,9 @@ parser.setValidating(true); // Turns on DTD and XML Schema validation
 
 ## Documentation & Samples
 
-- Read the step-by-step [TypesXML tutorial](docs/tutorial.md) for guided workflows.
-- Use the [JSON and XML Conversion Guide](docs/jsonTutorial.md) to translate between XML documents and JSON objects, with guidance on when to enable the metadata-preserving round-trip mode.
-- Explore the runnable examples under [`samples/`](samples/README.md) to see the code in action.
+* Read the step-by-step [TypesXML tutorial](docs/tutorial.md) for guided workflows.
+* Use the [JSON and XML Conversion Guide](docs/jsonTutorial.md) to translate between XML documents and JSON objects, with guidance on when to enable the metadata-preserving round-trip mode.
+* Explore the runnable examples under [`samples/`](samples/README.md) to see the code in action.
 
 ## Benchmark
 
@@ -181,9 +181,9 @@ TypesXML uses a streaming SAX pipeline and processes input in chunks, allowing i
 
 ### Summary
 
-- **tXml**: Extremely fast for small to medium files, but limited by in-memory string size
-- **fast-xml-parser**: Competitive speed, but same memory limitation
-- **TypesXML**: Consistent performance and capable of processing very large files reliably
+* **tXml**: Extremely fast for small to medium files, but limited by in-memory string size
+* **fast-xml-parser**: Competitive speed, but same memory limitation
+* **TypesXML**: Consistent performance and capable of processing very large files reliably
 
 If your use case involves large XML documents or streaming pipelines, TypesXML provides predictable performance where in-memory parsers cannot operate.
 
