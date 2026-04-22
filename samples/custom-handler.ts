@@ -20,6 +20,10 @@ class LoggingHandler implements ContentHandler {
         return undefined;
     }
 
+    getCurrentText(): string {
+        return '';
+    }
+
     startDocument(): void {
         console.log("Start document");
     }

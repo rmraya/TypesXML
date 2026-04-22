@@ -26,7 +26,7 @@ A DTD-backed pair—`xml/library-valid.xml` and `xml/library-invalid.xml`—demo
 ## Sample Index
 
 - `parse-file.ts` – Parse a local XML file, traverse the DOM, and report attribute values.
-- `catalog-validated.ts` – Load an OASIS catalog, enable DTD validation, and show merged default attributes.
+- `catalog-validated.ts` – Load an OASIS catalog, show XML Schema merged default attributes, and optionally enforce DTD validation via command-line flags.
 - `relaxng-defaults.ts` – Resolve a RelaxNG grammar via catalog lookup and observe default attributes merged into the DOM.
 - `stream-parse.ts` – Fetch an XML document over HTTPS and process it as a stream.
 - `custom-handler.ts` – Implement a bespoke `ContentHandler` that logs SAX events.

@@ -112,16 +112,16 @@ The parser now resolves DTDs through the catalog and can locate RelaxNG or XML S
 
 ## 5. Enabling Validating Mode
 
-Validation checks the document against its DTD and raises an error when a rule is violated. It does not influence default attribute retrieval — RelaxNG and XML Schema grammars are loaded for defaults whenever they are referenced. The samples folder includes `resources/dtd/sample.dtd` plus matching XML instances so you can see both success and failure cases.
+Validation checks the document against its DTD or XML Schema and raises an error when a rule is violated. It does not influence default attribute retrieval — RelaxNG and XML Schema grammars are loaded for defaults whenever they are referenced. The samples folder includes `resources/dtd/sample.dtd` plus matching XML instances so you can see both success and failure cases.
 
 ```ts
 const parser = new SAXParser();
-parser.setValidating(true); // Switches on DTD validation only.
+parser.setValidating(true); // Switches on DTD and XML Schema 1.0 validation.
 parser.setContentHandler(handler);
 
 try {
     parser.parseFile("samples/resources/xml/library-valid.xml"); // Use "resources/..." inside the samples folder.
-    console.log("DTD validation passed");
+    console.log("Validation passed");
 } catch (error) {
     console.error("Validation failed", error);
 }
@@ -187,6 +187,7 @@ class LoggingHandler implements ContentHandler {
     setCatalog(_catalog: Catalog): void { /* Catalog not required for logging. */ }
     setGrammar(_grammar: Grammar | undefined): void { /* Grammars not cached for this handler. */ }
     getGrammar(): Grammar | undefined { return undefined; }
+    getCurrentText(): string { return ''; }
     startDocument(): void { console.log("Start document"); }
     endDocument(): void { console.log("End document"); }
     xmlDeclaration(version: string, encoding: string, standalone: string | undefined): void {
@@ -244,7 +245,7 @@ TypesXML collects default attribute values declared in any grammar it can load (
 To benefit from this feature:
 
 1. Supply an OASIS catalog that resolves schema references (or otherwise ensure the grammars are reachable).
-2. Enable validation (`parser.setValidating(true)`) only if you need DTD enforcement; default attributes are merged regardless.
+2. Enable validation (`parser.setValidating(true)`) only if you need DTD or XML Schema 1.0 enforcement; default attributes are merged regardless.
 
 You will then see the defaults in DOM output and SAX callbacks.
 

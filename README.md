@@ -4,7 +4,7 @@
 [![npm license](https://img.shields.io/npm/l/typesxml)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/implementation-native%20TypeScript-3178c6)](https://www.typescriptlang.org/)
 
-TypesXML is a native TypeScript XML library and processing toolkit — there are no bindings to C/C++ libraries or other native layers. It ships first-class DOM and SAX pipelines, full DTD and XML Schema 1.0 validation, and OASIS XML Catalog resolution. It passes 100% of the W3C XML Conformance Test Suite for DTD grammars and 95% of the W3C XML Schema Test Suite — the only native TypeScript implementation verified against both official suites.
+TypesXML is a native TypeScript XML library and processing toolkit — there are no bindings to C/C++ libraries or other native layers. It ships first-class DOM and SAX pipelines, full DTD and XML Schema 1.0 validation, and OASIS XML Catalog resolution. It passes 100% of the W3C XML Conformance Test Suite for DTD grammars and 95.8% of the W3C XML Schema Test Suite — the only native TypeScript implementation verified against both official suites.
 
 ## Features
 
@@ -14,7 +14,7 @@ TypesXML is a native TypeScript XML library and processing toolkit — there are
 - Default attribute extraction from any reachable grammar (DTD, RelaxNG, or XML Schema); defaults merge during SAX parsing independent of validation mode.
 - OASIS XML Catalog resolver for public/system identifiers and alternate entity sources.
 - Passes 100% of the test cases in the official W3C XML Conformance Test Suite for DTD grammars (valid, invalid, not-wf, external entity cases).
-- Implements strict validation for files that use XML Schema 1.0 grammars, including built-in datatypes and user-defined types with complex content models — passing 93.9% of the official W3C XML Schema Test Suite (2006 edition).
+- Implements strict validation for files that use XML Schema 1.0 grammars, including built-in datatypes and user-defined types with complex content models — passing 95.8% of the official W3C XML Schema Test Suite (2006 edition).
 - Canonical XML renderer compatible with the W3C XML Test Suite rules.
 - Strict character validation for XML 1.0/1.1 and optional DTD-validating mode.
 - Pure TypeScript implementation with type definitions included—ideal for bundlers and ESM/CJS projects.
@@ -30,7 +30,7 @@ interface ContentHandler {
     setCatalog(catalog: Catalog): void;
     startDocument(): void;
     endDocument(): void;
-    xmlDeclaration(version: string, encoding: string, standalone: string): void;
+    xmlDeclaration(version: string, encoding: string, standalone: string | undefined): void;
     startElement(name: string, atts: XMLAttribute[]): void;
     endElement(name: string): void;
     internalSubset(declaration: string): void;
@@ -43,6 +43,9 @@ interface ContentHandler {
     startDTD(name: string, publicId: string, systemId: string): void;
     endDTD(): void;
     skippedEntity(name: string): void;
+    getGrammar(): Grammar | undefined;
+    setGrammar(grammar: Grammar | undefined): void;
+    getCurrentText(): string;
 }
 ```
 
@@ -79,7 +82,7 @@ To enable XML Catalog resolution or validation, configure the parser before invo
 
 ```ts
 parser.setCatalog(myCatalog);
-parser.setValidating(true); // Turns on validation
+parser.setValidating(true); // Turns on DTD and XML Schema validation
 ```
 
 ## Documentation & Samples
