@@ -27,6 +27,8 @@ console.log(document.toString());
 
 ## Features
 
+Core capabilities for parsing, validation, and integration of XML documents:
+
 ### Parsing
 
 * DOM builder (`DOMBuilder`) for in-memory document trees with lexical preservation
