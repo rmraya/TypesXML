@@ -19,6 +19,7 @@ import { XMLElement } from '../XMLElement.js';
 import { SchemaBuilder } from '../schema/SchemaBuilder.js';
 import { SchemaGrammar } from '../schema/SchemaGrammar.js';
 import { XSDSemanticValidator } from '../schema/XSDSemanticValidator.js';
+import { RootAttributeHandler } from './RootAttributeHandler.js';
 
 const SUITE_FILE: string = './tests/xmlschema2006-11-06/suite.xml';
 
@@ -166,6 +167,7 @@ class XMLSchemaTestSuite {
                 continue;
             }
             const groupName: string = testGroupEl.getAttribute('name')?.getValue() || '';
+            let groupSchemaGrammar: SchemaGrammar | undefined;
 
             for (const child of testGroupEl.getChildren()) {
                 const childLocalName: string = this.localName(child.getName());
@@ -199,9 +201,11 @@ class XMLSchemaTestSuite {
                             XSDSemanticValidator.validate(schemaRoot);
                         }
                         const builder: SchemaBuilder = new SchemaBuilder();
-                        builder.buildGrammar(schemaPath);
+                        const built: SchemaGrammar = builder.buildGrammar(schemaPath);
+                        groupSchemaGrammar = this.isAccepted(child) ? built : undefined;
                         actual = 'valid';
                     } catch (_e) {
+                        groupSchemaGrammar = undefined;
                         actual = 'invalid';
                     }
 
@@ -218,7 +222,6 @@ class XMLSchemaTestSuite {
                 }
 
                 // ---- instanceTest ----
-                // All MS instances carry xsi:schemaLocation — no grammar injection needed.
                 if (childLocalName !== 'instanceTest') {
                     continue;
                 }
@@ -240,9 +243,22 @@ class XMLSchemaTestSuite {
 
                 let actual: string;
                 try {
+                    const checkParser: SAXParser = new SAXParser();
+                    const checkHandler: RootAttributeHandler = new RootAttributeHandler();
+                    checkParser.setContentHandler(checkHandler);
+                    const savedWarn: typeof console.warn = console.warn;
+                    console.warn = () => {};
+                    try { checkParser.parseFile(instancePath); } catch (_ignored) {}
+                    console.warn = savedWarn;
+                    const needsInjection: boolean = groupSchemaGrammar !== undefined
+                        && !checkHandler.hasSchemaRef();
+
                     const parser: SAXParser = new SAXParser();
                     const handler: DOMBuilder = new DOMBuilder();
                     parser.setContentHandler(handler);
+                    if (needsInjection) {
+                        handler.setGrammar(groupSchemaGrammar!);
+                    }
                     parser.setValidating(true);
                     parser.parseFile(instancePath);
                     actual = 'valid';

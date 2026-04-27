@@ -110,7 +110,7 @@ export class XSDSemanticValidator {
             XSDSemanticValidator.checkElementRefAndTypeReferences(root, allTopLevelElements, allComplexTypes, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
             XSDSemanticValidator.checkSimpleTypeRestrictions(root, allSimpleTypes);
             XSDSemanticValidator.checkFinalConstraints(root, allSimpleTypes);
-            XSDSemanticValidator.checkElementValueConstraints(root, allSimpleTypes);
+            XSDSemanticValidator.checkElementValueConstraints(root, allSimpleTypes, allComplexTypes);
             XSDSemanticValidator.checkComplexTypeFinalConstraints(root, allComplexTypes);
             XSDSemanticValidator.checkSubstitutionGroupFinalConstraints(root, allComplexTypes);
             XSDSemanticValidator.checkComplexRestrictionAttributes(root, allComplexTypes);
@@ -1297,7 +1297,29 @@ export class XSDSemanticValidator {
         return SchemaTypeValidator.validateFacets(value, resolved.facets, resolved.baseType);
     }
 
-    private static checkElementValueConstraints(el: XMLElement, simpleTypes: Map<string, XMLElement>): void {
+    private static getSimpleContentBase(typeName: string, complexTypes: Map<string, XMLElement>): string | undefined {
+        const local: string = XSDSemanticValidator.localName(typeName);
+        const typeEl: XMLElement | undefined = complexTypes.get(local);
+        if (typeEl === undefined) {
+            return undefined;
+        }
+        for (const child of typeEl.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'simpleContent') {
+                for (const scChild of child.getChildren()) {
+                    const scLocal: string = XSDSemanticValidator.localName(scChild.getName());
+                    if (scLocal === 'extension' || scLocal === 'restriction') {
+                        const baseAttr: XMLAttribute | undefined = scChild.getAttribute('base');
+                        if (baseAttr !== undefined) {
+                            return baseAttr.getValue();
+                        }
+                    }
+                }
+            }
+        }
+        return undefined;
+    }
+
+    private static checkElementValueConstraints(el: XMLElement, simpleTypes: Map<string, XMLElement>, complexTypes: Map<string, XMLElement>): void {
         const local: string = XSDSemanticValidator.localName(el.getName());
         if (local === 'element' || local === 'attribute') {
             const fixedAttr: XMLAttribute | undefined = el.getAttribute('fixed');
@@ -1312,7 +1334,16 @@ export class XSDSemanticValidator {
                         throw new Error('Element "' + declName + '" with xs:ID type may not have a "' + constraintKind + '" value constraint');
                     }
                     const value: string = constraintAttr.getValue();
-                    if (!XSDSemanticValidator.isValidForResolvedType(value, typeAttr.getValue(), simpleTypes)) {
+                    const typeLocalName: string = XSDSemanticValidator.localName(typeAttr.getValue());
+                    if (complexTypes.has(typeLocalName)) {
+                        const simpleBase: string | undefined = XSDSemanticValidator.getSimpleContentBase(typeLocalName, complexTypes);
+                        if (simpleBase === undefined) {
+                            throw new Error('Element "' + declName + '" type "' + typeLocalName + '" does not have simple content; a "' + constraintKind + '" value constraint is not allowed');
+                        }
+                        if (!XSDSemanticValidator.isValidForResolvedType(value, simpleBase, simpleTypes)) {
+                            throw new Error('Element "' + declName + '" has invalid ' + constraintKind + ' value "' + value + '" for type "' + typeAttr.getValue() + '"');
+                        }
+                    } else if (!XSDSemanticValidator.isValidForResolvedType(value, typeAttr.getValue(), simpleTypes)) {
                         const kind: string = local === 'element' ? 'Element' : 'Attribute';
                         throw new Error(kind + ' "' + declName + '" has invalid ' + constraintKind + ' value "' + value + '" for type "' + typeAttr.getValue() + '"');
                     }
@@ -1320,7 +1351,7 @@ export class XSDSemanticValidator {
             }
         }
         for (const child of el.getChildren()) {
-            XSDSemanticValidator.checkElementValueConstraints(child, simpleTypes);
+            XSDSemanticValidator.checkElementValueConstraints(child, simpleTypes, complexTypes);
         }
     }
 

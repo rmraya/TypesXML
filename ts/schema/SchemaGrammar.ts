@@ -316,6 +316,9 @@ export class SchemaGrammar implements Grammar {
                 textError = 'Element "' + element + '" has a fixed value "' + fixedValue + '" but got "' + normalizedText + '"';
             }
         }
+        if (fixedValue !== undefined && children.length > 0) {
+            textError = 'Element "' + element + '" has a fixed value "' + fixedValue + '" but contains element children';
+        }
         if (textError === undefined) {
             const simpleType: string | undefined = textDecl.getSimpleType();
             if (simpleType !== undefined) {
