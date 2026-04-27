@@ -414,6 +414,10 @@ export class DTDGrammar implements Grammar {
         return new Set<string>();
     }
 
+    getElementTextDefault(_element: string): string | undefined {
+        return undefined;
+    }
+
     getNamespaceDeclarations(): Map<string, string> {
         return new Map();
     }

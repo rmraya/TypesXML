@@ -205,6 +205,14 @@ export class SchemaGrammar implements Grammar {
         return this.lookupElementDecl(name);
     }
 
+    getElementTextDefault(element: string): string | undefined {
+        const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
+        if (decl === undefined) {
+            return undefined;
+        }
+        return decl.getFixedValue() ?? decl.getDefaultValue();
+    }
+
     validateElement(element: string, children: string[], text: string): ValidationResult {
         const xsiType: string | undefined = this.xsiTypeStack.length > 0 ? this.xsiTypeStack.pop() : undefined;
         this.lastPoppedXsiType = xsiType;
@@ -298,11 +306,11 @@ export class SchemaGrammar implements Grammar {
             : undefined;
         const textDecl: SchemaElementDecl = xsiTypeDecl !== undefined ? xsiTypeDecl : decl;
         const instanceNs: Map<string, string> | undefined = this.lastPoppedInstanceNs;
-        const elementDefaultValue: string | undefined = textDecl.getDefaultValue();
-        const effectiveText: string = text.trim() === '' && elementDefaultValue !== undefined ? elementDefaultValue : text;
+        const elementDefaultValue: string | undefined = decl.getDefaultValue();
+        const fixedValue: string | undefined = decl.getFixedValue();
+        const effectiveText: string = text.trim() === '' ? (fixedValue ?? elementDefaultValue ?? text) : text;
         let textError: string | undefined = undefined;
-        const fixedValue: string | undefined = textDecl.getFixedValue();
-        if (fixedValue !== undefined) {
+        if (fixedValue !== undefined && text.trim() !== '') {
             const normalizedText: string = text.replaceAll(/[\t\n\r ]+/g, ' ').trim();
             if (normalizedText !== fixedValue) {
                 textError = 'Element "' + element + '" has a fixed value "' + fixedValue + '" but got "' + normalizedText + '"';

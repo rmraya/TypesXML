@@ -28,7 +28,7 @@ import { XMLUtils } from "./XMLUtils.js";
 import { AttDecl } from "./dtd/AttDecl.js";
 import { DTDGrammar } from "./dtd/DTDGrammar.js";
 import { DTDParser } from "./dtd/DTDParser.js";
-import { Grammar, ValidationError, ValidationResult } from "./grammar/Grammar.js";
+import { Grammar, GrammarType, ValidationError, ValidationResult } from "./grammar/Grammar.js";
 import { SchemaBuilder } from "./schema/SchemaBuilder.js";
 import { SchemaGrammar } from "./schema/SchemaGrammar.js";
 
@@ -816,6 +816,16 @@ export class SAXParser {
         // Validate element content when validating mode is enabled  
         if (this.validating && !this.isRelaxNG) {
             this.validateElement(name);
+        }
+        const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
+        if (grammar !== undefined && grammar.getGrammarType() === GrammarType.XML_SCHEMA) {
+            const currentText: string = this.contentHandler ? this.contentHandler.getCurrentText() : '';
+            if (currentText.trim() === '') {
+                const defaultText: string | undefined = grammar.getElementTextDefault(name);
+                if (defaultText !== undefined) {
+                    this.contentHandler?.characters(defaultText);
+                }
+            }
         }
         this.contentHandler?.endElement(name);
         this.elementStack--;

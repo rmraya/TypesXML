@@ -96,6 +96,9 @@ export interface Grammar {
     // Entity resolution (for DTD compatibility)
     resolveEntity(name: string): string | undefined;
 
+    // Element text default/fixed value
+    getElementTextDefault(element: string): string | undefined;
+
     // Grammar type identification
     getGrammarType(): GrammarType;
 

@@ -93,6 +93,7 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkListUnionConstraints(schemaRoot);
         XSDSemanticValidator.checkComplexTypeContentModel(schemaRoot);
         XSDSemanticValidator.checkGroupCompositorCount(schemaRoot);
+        XSDSemanticValidator.checkBlockFinalAttributes(schemaRoot);
     }
 
     static validateCrossReferences(
@@ -111,6 +112,7 @@ export class XSDSemanticValidator {
             XSDSemanticValidator.checkFinalConstraints(root, allSimpleTypes);
             XSDSemanticValidator.checkElementValueConstraints(root, allSimpleTypes);
             XSDSemanticValidator.checkComplexTypeFinalConstraints(root, allComplexTypes);
+            XSDSemanticValidator.checkSubstitutionGroupFinalConstraints(root, allComplexTypes);
             XSDSemanticValidator.checkComplexRestrictionAttributes(root, allComplexTypes);
             XSDSemanticValidator.checkListUnionTypeReferences(root, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
         }
@@ -565,6 +567,24 @@ export class XSDSemanticValidator {
                 }
                 return Number.isNaN(Number.parseFloat(val));
             };
+            const isOutOfRangeForBase = (val: string, base: string): boolean => {
+                if (!/^[+-]?[0-9]+$/.test(val)) { return false; }
+                switch (base) {
+                    case 'byte': { const n: number = Number.parseInt(val, 10); return n < -128 || n > 127; }
+                    case 'short': { const n: number = Number.parseInt(val, 10); return n < -32768 || n > 32767; }
+                    case 'int': { const n: number = Number.parseInt(val, 10); return n < -2147483648 || n > 2147483647; }
+                    case 'long': { const n: bigint = BigInt(val.replace(/^\+/, '')); return n < BigInt('-9223372036854775808') || n > BigInt('9223372036854775807'); }
+                    case 'unsignedByte': { const n: number = Number.parseInt(val, 10); return n < 0 || n > 255; }
+                    case 'unsignedShort': { const n: number = Number.parseInt(val, 10); return n < 0 || n > 65535; }
+                    case 'unsignedInt': { const n: number = Number.parseInt(val, 10); return n < 0 || n > 4294967295; }
+                    case 'unsignedLong': { if (val.startsWith('-')) { return true; } const n: bigint = BigInt(val.replace(/^\+/, '')); return n > BigInt('18446744073709551615'); }
+                    case 'nonNegativeInteger': return val.startsWith('-');
+                    case 'nonPositiveInteger': { const stripped: string = val.replace(/^\+/, ''); return stripped !== '0' && !val.startsWith('-'); }
+                    case 'positiveInteger': return val.startsWith('-') || val.replace(/^\+/, '') === '0';
+                    case 'negativeInteger': return !val.startsWith('-');
+                    default: return false;
+                }
+            };
             let hasLength: boolean = false;
             let hasMinLength: boolean = false;
             let hasMaxLength: boolean = false;
@@ -614,6 +634,9 @@ export class XSDSemanticValidator {
                 for (const [facetName, val] of rangeFacets) {
                     if (val !== undefined && isInvalidNumericValue(val)) {
                         throw new Error('xs:' + facetName + ' value "' + val + '" is not valid for numeric base type "' + baseLocal + '"');
+                    }
+                    if (val !== undefined && isOutOfRangeForBase(val, baseLocal)) {
+                        throw new Error('xs:' + facetName + ' value "' + val + '" is out of range for base type "' + baseLocal + '"');
                     }
                 }
             }
@@ -1888,6 +1911,148 @@ export class XSDSemanticValidator {
                 throw new Error('xs:group "' + groupName + '" must have exactly one compositor child (all, choice, or sequence), found ' + compositors.length);
             }
         }
+    }
+
+    private static validateDerivationSet(value: string, attrName: string, allowedTokens: Set<string>): void {
+        const trimmed: string = value.trim();
+        if (trimmed === '#all') { return; }
+        for (const token of trimmed.split(/\s+/)) {
+            if (token && !allowedTokens.has(token)) {
+                throw new Error('Invalid token "' + token + '" in xs:' + attrName + ' attribute');
+            }
+        }
+    }
+
+    private static checkBlockFinalAttributes(el: XMLElement): void {
+        const localEl: string = XSDSemanticValidator.localName(el.getName());
+        if (localEl === 'element') {
+            const blockAttr: XMLAttribute | undefined = el.getAttribute('block');
+            if (blockAttr) {
+                XSDSemanticValidator.validateDerivationSet(blockAttr.getValue(), 'block', new Set(['extension', 'restriction', 'substitution']));
+            }
+            const finalAttr: XMLAttribute | undefined = el.getAttribute('final');
+            if (finalAttr) {
+                XSDSemanticValidator.validateDerivationSet(finalAttr.getValue(), 'final', new Set(['extension', 'restriction']));
+            }
+        } else if (localEl === 'complexType') {
+            const blockAttr: XMLAttribute | undefined = el.getAttribute('block');
+            if (blockAttr) {
+                XSDSemanticValidator.validateDerivationSet(blockAttr.getValue(), 'block', new Set(['extension', 'restriction']));
+            }
+            const finalAttr: XMLAttribute | undefined = el.getAttribute('final');
+            if (finalAttr) {
+                XSDSemanticValidator.validateDerivationSet(finalAttr.getValue(), 'final', new Set(['extension', 'restriction']));
+            }
+        } else if (localEl === 'simpleType') {
+            const finalAttr: XMLAttribute | undefined = el.getAttribute('final');
+            if (finalAttr) {
+                XSDSemanticValidator.validateDerivationSet(finalAttr.getValue(), 'final', new Set(['list', 'union', 'restriction', 'extension']));
+            }
+        } else if (localEl === 'schema') {
+            const blockDefaultAttr: XMLAttribute | undefined = el.getAttribute('blockDefault');
+            if (blockDefaultAttr) {
+                XSDSemanticValidator.validateDerivationSet(blockDefaultAttr.getValue(), 'blockDefault', new Set(['extension', 'restriction', 'substitution']));
+            }
+            const finalDefaultAttr: XMLAttribute | undefined = el.getAttribute('finalDefault');
+            if (finalDefaultAttr) {
+                XSDSemanticValidator.validateDerivationSet(finalDefaultAttr.getValue(), 'finalDefault', new Set(['extension', 'restriction', 'list', 'union']));
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkBlockFinalAttributes(child);
+        }
+    }
+
+    private static checkSubstitutionGroupFinalConstraints(
+        schemaRoot: XMLElement,
+        allComplexTypes: Map<string, XMLElement>
+    ): void {
+        const topLevelElements: Map<string, XMLElement> = new Map<string, XMLElement>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'element') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (nameAttr) {
+                    topLevelElements.set(nameAttr.getValue(), child);
+                }
+            }
+        }
+        for (const [, memberEl] of topLevelElements) {
+            const sgAttr: XMLAttribute | undefined = memberEl.getAttribute('substitutionGroup');
+            if (!sgAttr) { continue; }
+            const headName: string = XSDSemanticValidator.localName(sgAttr.getValue().trim());
+            const headEl: XMLElement | undefined = topLevelElements.get(headName);
+            if (!headEl) { continue; }
+            const headFinalAttr: XMLAttribute | undefined = headEl.getAttribute('final');
+            if (!headFinalAttr) { continue; }
+            const headFinal: string = headFinalAttr.getValue().trim();
+            if (headFinal.length === 0) { continue; }
+            const headTypeAttr: XMLAttribute | undefined = headEl.getAttribute('type');
+            if (!headTypeAttr) { continue; }
+            const headTypeName: string = XSDSemanticValidator.localName(headTypeAttr.getValue().trim());
+            const derivMethod: string | undefined = XSDSemanticValidator.findDerivationFromType(memberEl, headTypeName, allComplexTypes);
+            if (derivMethod === undefined) { continue; }
+            const headFinalTokens: string[] = headFinal.split(/\s+/);
+            if (headFinalTokens.indexOf('#all') !== -1 || headFinalTokens.indexOf(derivMethod) !== -1) {
+                const memberName: string = memberEl.getAttribute('name')?.getValue() ?? '(anonymous)';
+                throw new Error(
+                    'Element "' + memberName + '" cannot be a member of substitution group headed by "' + headName +
+                    '": head element has final="' + headFinal + '" which prohibits derivation by ' + derivMethod
+                );
+            }
+        }
+    }
+
+    private static findDerivationFromType(
+        memberEl: XMLElement,
+        headTypeName: string,
+        allComplexTypes: Map<string, XMLElement>
+    ): string | undefined {
+        for (const child of memberEl.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'complexType') {
+                return XSDSemanticValidator.findDerivationInComplexType(child, headTypeName, allComplexTypes, new Set<string>());
+            }
+        }
+        const typeAttr: XMLAttribute | undefined = memberEl.getAttribute('type');
+        if (typeAttr) {
+            const typeName: string = XSDSemanticValidator.localName(typeAttr.getValue().trim());
+            const typeEl: XMLElement | undefined = allComplexTypes.get(typeName);
+            if (typeEl) {
+                return XSDSemanticValidator.findDerivationInComplexType(typeEl, headTypeName, allComplexTypes, new Set<string>());
+            }
+        }
+        return undefined;
+    }
+
+    private static findDerivationInComplexType(
+        typeEl: XMLElement,
+        headTypeName: string,
+        allComplexTypes: Map<string, XMLElement>,
+        visited: Set<string>
+    ): string | undefined {
+        for (const child of typeEl.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) !== 'complexContent') { continue; }
+            for (const derivChild of child.getChildren()) {
+                const derivLocal: string = XSDSemanticValidator.localName(derivChild.getName());
+                if (derivLocal !== 'extension' && derivLocal !== 'restriction') { continue; }
+                const baseAttr: XMLAttribute | undefined = derivChild.getAttribute('base');
+                if (!baseAttr) { continue; }
+                const baseName: string = XSDSemanticValidator.localName(baseAttr.getValue().trim());
+                if (baseName === headTypeName) {
+                    return derivLocal;
+                }
+                if (!visited.has(baseName)) {
+                    visited.add(baseName);
+                    const baseEl: XMLElement | undefined = allComplexTypes.get(baseName);
+                    if (baseEl) {
+                        const indirect: string | undefined = XSDSemanticValidator.findDerivationInComplexType(baseEl, headTypeName, allComplexTypes, visited);
+                        if (indirect !== undefined) {
+                            return indirect;
+                        }
+                    }
+                }
+            }
+        }
+        return undefined;
     }
 
     private static localName(name: string): string {
