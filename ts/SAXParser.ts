@@ -734,7 +734,17 @@ export class SAXParser {
             }
             if (isSelfClosing) {
                 this.cleanCharacterRun();
-                this.validateElement(name);
+                let namespace: string = '';
+                if (this.namespaceContextStack.length > 0) {
+                    this.namespaceContextStack[this.namespaceContextStack.length - 1].forEach((uri: string, prefix: string) => {
+                        if (prefix === '') {
+                            namespace = uri;
+                        } else if (name.startsWith(prefix + ':')) {
+                            namespace = uri;
+                        }
+                    });
+                }
+                this.validateElement(name, namespace);
                 this.contentHandler?.endElement(name);
                 this.elementStack--;
                 this.elementNameStack.pop();
@@ -815,7 +825,17 @@ export class SAXParser {
         }
         // Validate element content when validating mode is enabled  
         if (this.validating && !this.isRelaxNG) {
-            this.validateElement(name);
+            let namespace: string = '';
+            if (this.namespaceContextStack.length > 0) {
+                this.namespaceContextStack[this.namespaceContextStack.length - 1].forEach((uri: string, prefix: string) => {
+                    if (prefix === '') {
+                        namespace = uri;
+                    } else if (name.startsWith(prefix + ':')) {
+                        namespace = uri;
+                    }
+                });
+            }
+            this.validateElement(name, namespace);
         }
         const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
         if (grammar !== undefined && grammar.getGrammarType() === GrammarType.XML_SCHEMA) {
@@ -840,12 +860,12 @@ export class SAXParser {
         this.pointer = 0;
     }
 
-    validateElement(name: string): void {
+    validateElement(name: string, namespace: string): void {
         const grammar: Grammar | undefined = this.contentHandler?.getGrammar();
         if (grammar && this.validating) {
             const text: string = this.contentHandler ? this.contentHandler.getCurrentText() : '';
             const actualChildrenNames: string[] = this.childrenNames.length > 0 ? this.childrenNames[this.childrenNames.length - 1] : [];
-            const elementValidationResult = grammar.validateElement(name, actualChildrenNames, text);
+            const elementValidationResult = grammar.validateElement(name, namespace, actualChildrenNames, text);
             if (!elementValidationResult.isValid) {
                 const errorMessages: string = elementValidationResult.errors.map(e => e.message).join('; ');
                 throw new Error('Element validation failed for element "' + name + '": ' + errorMessages);

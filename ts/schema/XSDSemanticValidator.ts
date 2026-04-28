@@ -198,18 +198,25 @@ export class XSDSemanticValidator {
         if (local === 'list') {
             const itemTypeAttr: XMLAttribute | undefined = el.getAttribute('itemType');
             if (itemTypeAttr) {
+                if (XSDSemanticValidator.localName(itemTypeAttr.getValue()) === 'anySimpleType') {
+                    throw new Error('xs:list itemType "anySimpleType" is not allowed');
+                }
                 const variety: 'list' | 'union' | 'atomic' | 'unknown' = XSDSemanticValidator.getTypeVariety(itemTypeAttr.getValue(), simpleTypes, new Set<string>());
                 if (variety === 'list') {
                     throw new Error('xs:list itemType "' + itemTypeAttr.getValue() + '" resolves to a list type, which is not allowed');
                 }
             } else {
+                let inlineCount: number = 0;
                 for (const child of el.getChildren()) {
                     if (XSDSemanticValidator.localName(child.getName()) === 'simpleType') {
+                        inlineCount++;
+                        if (inlineCount > 1) {
+                            throw new Error('xs:list may have at most one inline xs:simpleType child');
+                        }
                         const variety: 'list' | 'union' | 'atomic' | 'unknown' = XSDSemanticValidator.getInlineSimpleTypeVariety(child);
                         if (variety === 'list') {
                             throw new Error('xs:list inline simpleType resolves to a list type, which is not allowed');
                         }
-                        break;
                     }
                 }
             }
@@ -265,17 +272,28 @@ export class XSDSemanticValidator {
                 if (!XSD_BUILT_IN_TYPE_NAMES.has(qname)) {
                     throw new Error(context + '="' + qname + '" does not resolve to a declared simple type');
                 }
+                if (qname === 'anyType') {
+                    throw new Error(context + '="' + qname + '" refers to xs:anyType which is a complex type, not a simple type');
+                }
             } else if (!allSimpleTypes.has(qname) && !XSD_BUILT_IN_TYPE_NAMES.has(qname)) {
                 throw new Error(context + '="' + qname + '" refers to undeclared simple type "' + qname + '"');
+            } else if (qname === 'anyType') {
+                throw new Error(context + '="' + qname + '" refers to xs:anyType which is a complex type, not a simple type');
             }
         } else {
             const colon: number = qname.indexOf(':');
             const prefix: string = qname.substring(0, colon);
             const localPart: string = qname.substring(colon + 1);
             const resolvedNs: string | undefined = prefixMap.get(prefix);
+            if (resolvedNs === undefined) {
+                throw new Error(context + '="' + qname + '" uses undeclared namespace prefix "' + prefix + '"');
+            }
             if (resolvedNs === xsdNs) {
                 if (!XSD_BUILT_IN_TYPE_NAMES.has(localPart)) {
                     throw new Error(context + '="' + qname + '" refers to unknown XSD built-in type "' + localPart + '"');
+                }
+                if (localPart === 'anyType') {
+                    throw new Error(context + '="' + qname + '" refers to xs:anyType which is a complex type, not a simple type');
                 }
             } else if (resolvedNs === targetNs) {
                 if (!allSimpleTypes.has(localPart)) {
@@ -369,8 +387,10 @@ export class XSDSemanticValidator {
         if (local === 'restriction') {
             const baseAttr: XMLAttribute | undefined = el.getAttribute('base');
             if (baseAttr && XSDSemanticValidator.localName(baseAttr.getValue()) === 'NOTATION') {
+                let enumerationCount: number = 0;
                 for (const facet of el.getChildren()) {
                     if (XSDSemanticValidator.localName(facet.getName()) === 'enumeration') {
+                        enumerationCount++;
                         const valueAttr: XMLAttribute | undefined = facet.getAttribute('value');
                         if (valueAttr) {
                             const val: string = XSDSemanticValidator.localName(valueAttr.getValue());
@@ -379,6 +399,9 @@ export class XSDSemanticValidator {
                             }
                         }
                     }
+                }
+                if (enumerationCount === 0) {
+                    throw new Error('xs:NOTATION restriction must have at least one xs:enumeration facet');
                 }
             }
         }
@@ -649,6 +672,14 @@ export class XSDSemanticValidator {
             if (valAttr) {
                 XsdRegexTranslator.toRegExp(valAttr.getValue());
             }
+        } else if (localEl === 'whiteSpace') {
+            const valAttr: XMLAttribute | undefined = el.getAttribute('value');
+            if (valAttr) {
+                const raw: string = valAttr.getValue();
+                if (raw !== 'preserve' && raw !== 'replace' && raw !== 'collapse') {
+                    throw new Error('xs:whiteSpace value must be "preserve", "replace", or "collapse", got: "' + raw + '"');
+                }
+            }
         } else if (localEl === 'restriction') {
             const baseAttr: XMLAttribute | undefined = el.getAttribute('base');
             const baseLocal: string = baseAttr ? XSDSemanticValidator.localName(baseAttr.getValue()) : '';
@@ -706,8 +737,8 @@ export class XSDSemanticValidator {
                 else if (facetLocal === 'length') { hasLength = true; }
                 else if (facetLocal === 'minLength') { hasMinLength = true; minLengthVal = Number.parseInt(val, 10); }
                 else if (facetLocal === 'maxLength') { hasMaxLength = true; maxLengthVal = Number.parseInt(val, 10); }
-                else if (facetLocal === 'enumeration' && isNumericBase && isInvalidNumericValue(val)) {
-                    throw new Error('xs:enumeration value "' + val + '" is not valid for numeric base type "' + baseLocal + '"');
+                else if (facetLocal === 'enumeration' && baseLocal !== '' && !SchemaTypeValidator.validate(val, baseLocal)) {
+                    throw new Error('xs:enumeration value "' + val + '" is not valid for base type "' + baseLocal + '"');
                 }
             }
             if (hasLength && hasMinLength) {
@@ -808,9 +839,12 @@ export class XSDSemanticValidator {
         schemaFinalDefault: string
     ): void {
         const local: string = XSDSemanticValidator.localName(typeName);
+        if (local === 'anySimpleType') {
+            throw new Error('Type "anySimpleType" has final="#all" which blocks derivation by ' + derivationMethod);
+        }
         const typeEl: XMLElement | undefined = simpleTypes.get(local);
         if (!typeEl) {
-            return; // Built-in or unknown type — no final constraint from this schema.
+            return;
         }
         const finalAttr: XMLAttribute | undefined = typeEl.getAttribute('final');
         const effectiveFinal: string = finalAttr ? finalAttr.getValue() : schemaFinalDefault;
@@ -1199,10 +1233,14 @@ export class XSDSemanticValidator {
         if (baseAttr) {
             variety = XSDSemanticValidator.getTypeVariety(baseAttr.getValue(), simpleTypes, new Set<string>());
         } else {
+            let inlineCount: number = 0;
             for (const child of restrictionEl.getChildren()) {
                 if (XSDSemanticValidator.localName(child.getName()) === 'simpleType') {
+                    inlineCount++;
+                    if (inlineCount > 1) {
+                        throw new Error('xs:restriction may have at most one inline xs:simpleType child');
+                    }
                     variety = XSDSemanticValidator.getInlineSimpleTypeVariety(child);
-                    break;
                 }
             }
         }
@@ -1212,16 +1250,73 @@ export class XSDSemanticValidator {
                 throw new Error('"xs:' + childLocal + '" is not a valid facet name');
             }
         }
-        if (variety === 'unknown' || variety === 'atomic') {
+        if (variety === 'unknown') {
             return;
         }
+        if (variety !== 'atomic') {
+            for (const child of restrictionEl.getChildren()) {
+                const childLocal: string = XSDSemanticValidator.localName(child.getName());
+                if (variety === 'list' && LIST_INVALID_FACETS.has(childLocal)) {
+                    throw new Error('Facet "xs:' + childLocal + '" is not applicable to a list-variety restriction');
+                }
+                if (variety === 'union' && UNION_INVALID_FACETS.has(childLocal)) {
+                    throw new Error('Facet "xs:' + childLocal + '" is not applicable to a union-variety restriction');
+                }
+            }
+            return;
+        }
+        if (!baseAttr) {
+            return;
+        }
+        const baseLocal: string = XSDSemanticValidator.localName(baseAttr.getValue());
+        const baseTypeEl: XMLElement | undefined = simpleTypes.get(baseLocal);
+        if (!baseTypeEl) {
+            return;
+        }
+        const baseFacets: SchemaFacets = XSDSemanticValidator.collectFacetsFromSimpleType(baseTypeEl, simpleTypes, new Set<string>());
+        const wsOrder: Map<string, number> = new Map<string, number>([['preserve', 0], ['replace', 1], ['collapse', 2]]);
         for (const child of restrictionEl.getChildren()) {
             const childLocal: string = XSDSemanticValidator.localName(child.getName());
-            if (variety === 'list' && LIST_INVALID_FACETS.has(childLocal)) {
-                throw new Error('Facet "xs:' + childLocal + '" is not applicable to a list-variety restriction');
-            }
-            if (variety === 'union' && UNION_INVALID_FACETS.has(childLocal)) {
-                throw new Error('Facet "xs:' + childLocal + '" is not applicable to a union-variety restriction');
+            const valAttr: XMLAttribute | undefined = child.getAttribute('value');
+            if (!valAttr) { continue; }
+            const val: string = valAttr.getValue();
+            if (childLocal === 'length') {
+                const n: number = Number.parseInt(val, 10);
+                if (baseFacets.length !== undefined && n !== baseFacets.length) {
+                    throw new Error('xs:length value ' + n + ' must equal base xs:length ' + baseFacets.length);
+                }
+                if (baseFacets.minLength !== undefined && n < baseFacets.minLength) {
+                    throw new Error('xs:length value ' + n + ' is less than base xs:minLength ' + baseFacets.minLength);
+                }
+                if (baseFacets.maxLength !== undefined && n > baseFacets.maxLength) {
+                    throw new Error('xs:length value ' + n + ' is greater than base xs:maxLength ' + baseFacets.maxLength);
+                }
+            } else if (childLocal === 'minLength') {
+                const n: number = Number.parseInt(val, 10);
+                if (baseFacets.minLength !== undefined && n < baseFacets.minLength) {
+                    throw new Error('xs:minLength value ' + n + ' is less than base xs:minLength ' + baseFacets.minLength);
+                }
+            } else if (childLocal === 'maxLength') {
+                const n: number = Number.parseInt(val, 10);
+                if (baseFacets.maxLength !== undefined && n > baseFacets.maxLength) {
+                    throw new Error('xs:maxLength value ' + n + ' is greater than base xs:maxLength ' + baseFacets.maxLength);
+                }
+            } else if (childLocal === 'totalDigits') {
+                const n: number = Number.parseInt(val, 10);
+                if (baseFacets.totalDigits !== undefined && n > baseFacets.totalDigits) {
+                    throw new Error('xs:totalDigits value ' + n + ' is greater than base xs:totalDigits ' + baseFacets.totalDigits);
+                }
+            } else if (childLocal === 'fractionDigits') {
+                const n: number = Number.parseInt(val, 10);
+                if (baseFacets.fractionDigits !== undefined && n > baseFacets.fractionDigits) {
+                    throw new Error('xs:fractionDigits value ' + n + ' is greater than base xs:fractionDigits ' + baseFacets.fractionDigits);
+                }
+            } else if (childLocal === 'whiteSpace') {
+                const derivedRank: number | undefined = wsOrder.get(val);
+                const baseRank: number | undefined = baseFacets.whiteSpace !== undefined ? wsOrder.get(baseFacets.whiteSpace) : undefined;
+                if (derivedRank !== undefined && baseRank !== undefined && derivedRank < baseRank) {
+                    throw new Error('xs:whiteSpace value "' + val + '" is less restrictive than base xs:whiteSpace "' + baseFacets.whiteSpace + '"');
+                }
             }
         }
     }
@@ -1409,6 +1504,68 @@ export class XSDSemanticValidator {
         return { baseType: typeName, facets: {}, variety: 'atomic', memberTypes: [] };
     }
 
+    private static isValidForInlineSimpleType(value: string, simpleTypeEl: XMLElement, simpleTypes: Map<string, XMLElement>): boolean {
+        for (const child of simpleTypeEl.getChildren()) {
+            const childLocal: string = XSDSemanticValidator.localName(child.getName());
+            if (childLocal === 'restriction') {
+                const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
+                if (baseAttr) {
+                    const facets: SchemaFacets = XSDSemanticValidator.collectFacetsFromSimpleType(simpleTypeEl, simpleTypes, new Set<string>());
+                    if (!SchemaTypeValidator.validate(value, baseAttr.getValue())) {
+                        return false;
+                    }
+                    return SchemaTypeValidator.validateFacets(value, facets, baseAttr.getValue());
+                }
+                for (const restrChild of child.getChildren()) {
+                    if (XSDSemanticValidator.localName(restrChild.getName()) === 'simpleType') {
+                        return XSDSemanticValidator.isValidForInlineSimpleType(value, restrChild, simpleTypes);
+                    }
+                }
+            } else if (childLocal === 'list') {
+                const itemTypeAttr: XMLAttribute | undefined = child.getAttribute('itemType');
+                const items: string[] = value.trim().length === 0 ? [] : value.trim().split(/\s+/);
+                if (itemTypeAttr) {
+                    for (const item of items) {
+                        if (!XSDSemanticValidator.isValidForResolvedType(item, itemTypeAttr.getValue(), simpleTypes)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                for (const listChild of child.getChildren()) {
+                    if (XSDSemanticValidator.localName(listChild.getName()) === 'simpleType') {
+                        for (const item of items) {
+                            if (!XSDSemanticValidator.isValidForInlineSimpleType(item, listChild, simpleTypes)) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                }
+                return false;
+            } else if (childLocal === 'union') {
+                const memberTypesAttr: XMLAttribute | undefined = child.getAttribute('memberTypes');
+                if (memberTypesAttr) {
+                    const names: string[] = memberTypesAttr.getValue().trim().split(/\s+/);
+                    for (const name of names) {
+                        if (name.length > 0 && XSDSemanticValidator.isValidForResolvedType(value, name, simpleTypes)) {
+                            return true;
+                        }
+                    }
+                }
+                for (const unionChild of child.getChildren()) {
+                    if (XSDSemanticValidator.localName(unionChild.getName()) === 'simpleType') {
+                        if (XSDSemanticValidator.isValidForInlineSimpleType(value, unionChild, simpleTypes)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+        }
+        return false;
+    }
+
     private static isValidForResolvedType(value: string, typeName: string, simpleTypes: Map<string, XMLElement>): boolean {
         const local: string = XSDSemanticValidator.localName(typeName);
         if (!simpleTypes.has(local)) {
@@ -1492,6 +1649,17 @@ export class XSDSemanticValidator {
                     } else if (!XSDSemanticValidator.isValidForResolvedType(value, typeAttr.getValue(), simpleTypes)) {
                         const kind: string = local === 'element' ? 'Element' : 'Attribute';
                         throw new Error(kind + ' "' + declName + '" has invalid ' + constraintKind + ' value "' + value + '" for type "' + typeAttr.getValue() + '"');
+                    }
+                } else {
+                    for (const child of el.getChildren()) {
+                        if (XSDSemanticValidator.localName(child.getName()) === 'simpleType') {
+                            const value: string = constraintAttr.getValue();
+                            if (!XSDSemanticValidator.isValidForInlineSimpleType(value, child, simpleTypes)) {
+                                const kind: string = local === 'element' ? 'Element' : 'Attribute';
+                                throw new Error(kind + ' "' + declName + '" has invalid ' + constraintKind + ' value "' + value + '" for its inline type');
+                            }
+                            break;
+                        }
                     }
                 }
             }
@@ -2014,6 +2182,10 @@ export class XSDSemanticValidator {
                     if (!hasBase && !hasInlineType) {
                         const nameAttr: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
                         throw new Error('xs:restriction in xs:simpleType "' + nameAttr + '" must have either a "base" attribute or an inline xs:simpleType child');
+                    }
+                    if (hasBase && hasInlineType) {
+                        const nameAttr: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+                        throw new Error('xs:restriction in xs:simpleType "' + nameAttr + '" cannot have both a "base" attribute and an inline xs:simpleType child');
                     }
                 }
             }

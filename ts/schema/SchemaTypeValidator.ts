@@ -150,6 +150,18 @@ export class SchemaTypeValidator {
         return true;
     }
 
+    static getBuiltInWhiteSpace(typeName: string): 'preserve' | 'replace' | 'collapse' {
+        const colonIndex: number = typeName.indexOf(':');
+        const local: string = colonIndex !== -1 ? typeName.substring(colonIndex + 1) : typeName;
+        if (local === 'string') {
+            return 'preserve';
+        }
+        if (local === 'normalizedString') {
+            return 'replace';
+        }
+        return 'collapse';
+    }
+
     static validate(value: string, typeName: string, instanceNs?: Map<string, string>): boolean {
         const colonIndex: number = typeName.indexOf(':');
         const localType: string = colonIndex !== -1 ? typeName.substring(colonIndex + 1) : typeName;
@@ -166,7 +178,7 @@ export class SchemaTypeValidator {
                 return true;
 
             case 'normalizedString':
-                return !/[\t\n\r]/.test(value);
+                return true;
 
             case 'token':
                 return value === value.replaceAll(/[\t\n\r ]+/g, ' ').trim();

@@ -199,6 +199,12 @@ export class SchemaBuilder extends XMLSchemaParser {
         for (const [key, info] of this.attributeDefinitions) {
             const colonIndex: number = key.indexOf('|');
             if (colonIndex === -1) {
+                if (!info.namespace) {
+                    const attrDecl: SchemaAttributeDecl | undefined = this.buildAttributeDecl(info.element, info.namespace);
+                    if (attrDecl) {
+                        grammar.addGlobalAttributeDecl(attrDecl);
+                    }
+                }
                 continue;
             }
             const ns: string = key.substring(0, colonIndex);

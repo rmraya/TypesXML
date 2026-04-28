@@ -58,6 +58,27 @@ export class SchemaContentModel {
         return new SchemaContentModel(SchemaContentModelType.ELEMENT, rootParticle);
     }
 
+    hasAnyWildcard(): boolean {
+        if (!this.rootParticle) {
+            return false;
+        }
+        return SchemaContentModel.particleHasWildcard(this.rootParticle);
+    }
+
+    private static particleHasWildcard(particle: SchemaParticle): boolean {
+        if (particle instanceof SchemaWildcardParticle) {
+            return true;
+        }
+        if (particle instanceof SchemaSequence || particle instanceof SchemaChoice || particle instanceof SchemaAll) {
+            for (const child of particle.particles) {
+                if (SchemaContentModel.particleHasWildcard(child)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     findCoveringWildcard(childName: string, nsMap?: Map<string, string>): 'strict' | 'lax' | 'skip' | undefined {
         if (!this.rootParticle) {
             return undefined;

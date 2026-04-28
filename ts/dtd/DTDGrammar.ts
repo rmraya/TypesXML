@@ -184,7 +184,7 @@ export class DTDGrammar implements Grammar {
         return this.attributesMap.get(element);
     }
 
-    validateElement(element: string, children: string[], text: string): ValidationResult {
+    validateElement(element: string, namespace: string, children: string[], text: string): ValidationResult {
         const colonIndex = element.indexOf(':');
         if (colonIndex !== -1) {
             // element with colon means it has a namespace prefix and is not coming from a DTD

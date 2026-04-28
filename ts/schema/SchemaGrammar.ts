@@ -15,6 +15,7 @@ import { SchemaAttributeDecl } from './SchemaAttributeDecl.js';
 import { SchemaContentModelType } from './SchemaContentModel.js';
 import { IdentityConstraint, SchemaElementDecl } from './SchemaElementDecl.js';
 import { SchemaFacets, SchemaTypeValidator } from './SchemaTypeValidator.js';
+import { SchemaValidationContext } from './SchemaValidationContext.js';
 
 const BUILTIN_TYPE_HIERARCHY: Map<string, string> = new Map<string, string>([
     ['anySimpleType', 'anyType'],
@@ -94,21 +95,15 @@ export class SchemaGrammar implements Grammar {
     private namespaceDeclarations: Map<string, string>;
     private globalAttributeDecls: Map<string, SchemaAttributeDecl>;
     private importedGrammars: Map<string, SchemaGrammar>;
-    private xsiTypeStack: Array<string | undefined>;
-    private nilStack: Array<boolean>;
     private typeHierarchy: Map<string, { base: string, method: string }>;
-    private instanceNsStack: Array<Map<string, string>>;
-    private elementPath: string[];
+    private xsiTypeByDepth: Map<number, string>;
+    private depth: number;
+    private wildcardSkipDepth: number;
+    private wildcardParentDecls: Map<number, SchemaElementDecl>;
+    private nilDepths: Set<number>;
     private activeScopes: IdentityConstraintScope[];
-    private completedKeys: Map<string, Array<Array<string | undefined>>>;
-    private lastClosedDepth: number;
-    private lastPoppedXsiType: string | undefined;
-    private lastPoppedNil: boolean;
-    private lastPoppedInstanceNs: Map<string, string> | undefined;
-    private seenIds: Set<string>;
-    private pendingIdrefs: string[];
-    private pendingKeyrefChecks: Array<{ constraintName: string; refer: string; tuples: Array<Array<string | undefined>> }>;
-    private wildcardModeStack: Array<'normal' | 'lax' | 'skip'>;
+    private documentIds: Set<string>;
+    private documentIdrefs: Set<string>;
 
     constructor() {
         this.elementDecls = new Map<string, SchemaElementDecl>();
@@ -118,20 +113,15 @@ export class SchemaGrammar implements Grammar {
         this.namespaceDeclarations = new Map<string, string>();
         this.globalAttributeDecls = new Map<string, SchemaAttributeDecl>();
         this.importedGrammars = new Map<string, SchemaGrammar>();
-        this.xsiTypeStack = [];
-        this.nilStack = [];
         this.typeHierarchy = new Map<string, { base: string, method: string }>();
-        this.instanceNsStack = [];
-        this.elementPath = [];
+        this.xsiTypeByDepth = new Map<number, string>();
+        this.depth = 0;
+        this.wildcardSkipDepth = -1;
+        this.wildcardParentDecls = new Map<number, SchemaElementDecl>();
+        this.nilDepths = new Set<number>();
         this.activeScopes = [];
-        this.completedKeys = new Map<string, Array<Array<string | undefined>>>();
-        this.lastClosedDepth = -1;
-        this.lastPoppedXsiType = undefined;
-        this.lastPoppedNil = false;
-        this.seenIds = new Set<string>();
-        this.pendingIdrefs = [];
-        this.pendingKeyrefChecks = [];
-        this.wildcardModeStack = [];
+        this.documentIds = new Set<string>();
+        this.documentIdrefs = new Set<string>();
     }
 
     addTargetNamespace(namespace: string): void {
@@ -213,106 +203,52 @@ export class SchemaGrammar implements Grammar {
         return decl.getFixedValue() ?? decl.getDefaultValue();
     }
 
-    validateElement(element: string, children: string[], text: string): ValidationResult {
-        const xsiType: string | undefined = this.xsiTypeStack.length > 0 ? this.xsiTypeStack.pop() : undefined;
-        this.lastPoppedXsiType = xsiType;
-        const isNilled: boolean = this.nilStack.length > 0 ? (this.nilStack.pop() ?? false) : false;
-        this.lastPoppedNil = isNilled;
-        if (this.instanceNsStack.length > 0) {
-            this.lastPoppedInstanceNs = this.instanceNsStack.pop();
-        } else {
-            this.lastPoppedInstanceNs = undefined;
-        }
-        this.lastClosedDepth = this.elementPath.length - 1;
-        const wildcardMode: 'normal' | 'lax' | 'skip' | undefined =
-            this.wildcardModeStack.length > 0 ? this.wildcardModeStack.pop() : undefined;
-        if (wildcardMode === 'skip') {
-            if (this.elementPath.length > 0) {
-                this.elementPath.pop();
+    validateElement(element: string, namespace: string, children: string[], text: string): ValidationResult {
+        if (this.wildcardSkipDepth !== -1) {
+            if (this.depth === this.wildcardSkipDepth) {
+                this.wildcardSkipDepth = -1;
             }
+            this.wildcardParentDecls.delete(this.depth);
+            this.depth--;
             return ValidationResult.success();
         }
-        if (this.activeScopes.length > 0 && !isNilled) {
-            const closingDepth: number = this.lastClosedDepth;
-            const idLocalName: string = this.localName(element);
-            for (const scope of this.activeScopes) {
-                if (scope.pendingStack.length === 0) {
-                    continue;
-                }
-                const top: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
-                if (!top.nil) {
-                    if (closingDepth === top.depth) {
-                        this.collectTextFields(scope, idLocalName, text, true, this.lastPoppedInstanceNs, xsiType);
-                    } else {
-                        const hasDescendantField: boolean = scope.constraint.fields.some(
-                            (f: string) => f.split('|').some((alt: string) => alt.trim().startsWith('.//')))
-                            ;
-                        const depthMatches: boolean = hasDescendantField
-                            ? closingDepth > top.depth
-                            : closingDepth === top.depth + 1;
-                        if (depthMatches) {
-                            this.collectTextFields(scope, idLocalName, text, false, this.lastPoppedInstanceNs, xsiType);
-                        }
-                    }
-                }
+        this.wildcardParentDecls.delete(this.depth);
+        if (this.nilDepths.delete(this.depth)) {
+            if (children.length > 0 || text.trim().length > 0) {
+                this.depth--;
+                return ValidationResult.error(
+                    'Element "' + element + '" has xsi:nil="true" but must be empty'
+                );
             }
-        }
-        const constraintError: string | undefined = this.closeConstraintScopes();
-        if (this.elementPath.length > 0) {
-            this.elementPath.pop();
-        }
-        if (wildcardMode === 'lax') {
+            this.depth--;
             return ValidationResult.success();
         }
-        const substitutedDecl: SchemaElementDecl | undefined = xsiType !== undefined ? this.complexTypeDecls.get(xsiType) : undefined;
-
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
-        // Per spec §2.6.2: a nilled element must have no element or text children.
-        if (isNilled) {
-            if (children.length > 0) {
-                return ValidationResult.error(
-                    'Element "' + element + '" has xsi:nil="true" but contains child elements'
-                );
-            }
-            if (text.trim().length > 0) {
-                return ValidationResult.error(
-                    'Element "' + element + '" has xsi:nil="true" but contains text content'
-                );
-            }
-            if (constraintError !== undefined) {
-                return ValidationResult.error(constraintError);
-            }
-            return ValidationResult.success();
-        }
-        // Per the spec, an abstract element cannot appear directly in an instance.
-        if (decl.isAbstractElement() && xsiType === undefined) {
+        if (decl.isAbstractElement()) {
             return ValidationResult.error(
                 'Element "' + element + '" is declared abstract and cannot appear directly in an instance'
             );
         }
-        const effectiveDecl: SchemaElementDecl = substitutedDecl !== undefined ? substitutedDecl : decl;
-        const contentResult: ValidationResult = effectiveDecl.getContentModel().validateChildren(element, children, this.lastPoppedInstanceNs);
+        const nsMap: Map<string, string> = this.importedGrammars.get(namespace)?.getNamespaceDeclarations() ?? this.namespaceDeclarations;
+        const xsiTypeName: string | undefined = this.xsiTypeByDepth.get(this.depth);
+        this.xsiTypeByDepth.delete(this.depth);
+        const effectiveDecl: SchemaElementDecl = xsiTypeName !== undefined
+            ? (this.complexTypeDecls.get(xsiTypeName) ?? decl)
+            : decl;
+        const contentResult: ValidationResult = effectiveDecl.getContentModel().validateChildren(element, children, nsMap);
         if (!contentResult.isValid) {
             return contentResult;
         }
-        if (constraintError !== undefined) {
-            return ValidationResult.error(constraintError);
-        }
-        const xsiTypeDecl: SchemaElementDecl | undefined = xsiType !== undefined
-            ? (this.complexTypeDecls.get(xsiType) ?? this.simpleTypeDecls.get(xsiType))
-            : undefined;
-        const textDecl: SchemaElementDecl = xsiTypeDecl !== undefined ? xsiTypeDecl : decl;
-        const instanceNs: Map<string, string> | undefined = this.lastPoppedInstanceNs;
         const elementDefaultValue: string | undefined = decl.getDefaultValue();
         const fixedValue: string | undefined = decl.getFixedValue();
         const effectiveText: string = text.trim() === '' ? (fixedValue ?? elementDefaultValue ?? text) : text;
         let textError: string | undefined = undefined;
         if (fixedValue !== undefined && text.trim() !== '') {
             const normalizedText: string = text.replaceAll(/[\t\n\r ]+/g, ' ').trim();
-            if (!this.fixedValueMatches(normalizedText, fixedValue, textDecl, instanceNs)) {
+            if (!this.fixedValueMatches(normalizedText, fixedValue, decl, nsMap)) {
                 textError = 'Element "' + element + '" has a fixed value "' + fixedValue + '" but got "' + normalizedText + '"';
             }
         }
@@ -320,39 +256,31 @@ export class SchemaGrammar implements Grammar {
             textError = 'Element "' + element + '" has a fixed value "' + fixedValue + '" but contains element children';
         }
         if (textError === undefined) {
-            const simpleType: string | undefined = textDecl.getSimpleType();
+            const simpleType: string | undefined = effectiveDecl.getSimpleType();
             if (simpleType !== undefined) {
                 const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
-                if (!SchemaTypeValidator.validate(normalizedText, simpleType, instanceNs)) {
+                if (!SchemaTypeValidator.validate(normalizedText, simpleType, nsMap)) {
                     textError = 'Invalid text content "' + effectiveText + '" for element "' + element + '": expected type ' + simpleType;
-                } else if (textDecl.hasTextFacets() && !textDecl.validateText(effectiveText)) {
+                } else if (effectiveDecl.hasTextFacets() && !effectiveDecl.validateText(effectiveText)) {
                     textError = 'Text content "' + effectiveText + '" of element "' + element + '" violates facet constraints';
                 } else {
-                    const simpleTypeLocal: string = this.localName(simpleType);
-                    if (simpleTypeLocal === 'ID' || this.isTypeDerivedFrom(simpleTypeLocal, 'ID')) {
-                        if (this.seenIds.has(normalizedText)) {
+                    const simTypeLocal: string = this.localName(simpleType);
+                    if ((simTypeLocal === 'ID' || this.isTypeDerivedFrom(simTypeLocal, 'ID')) && normalizedText.length > 0) {
+                        if (this.documentIds.has(normalizedText)) {
                             textError = 'Duplicate xs:ID value "' + normalizedText + '" in element "' + element + '"';
                         } else {
-                            this.seenIds.add(normalizedText);
-                        }
-                    } else if (simpleTypeLocal === 'IDREF' || this.isTypeDerivedFrom(simpleTypeLocal, 'IDREF')) {
-                        this.pendingIdrefs.push(normalizedText);
-                    } else if (simpleTypeLocal === 'IDREFS' || this.isTypeDerivedFrom(simpleTypeLocal, 'IDREFS')) {
-                        for (const token of normalizedText.split(/\s+/)) {
-                            if (token.length > 0) {
-                                this.pendingIdrefs.push(token);
-                            }
+                            this.documentIds.add(normalizedText);
                         }
                     }
                 }
             } else {
-                const unionAlternatives: Array<{ facets: SchemaFacets, baseType: string }> | undefined = textDecl.getUnionAlternatives();
-                const unionMemberTypes: string[] | undefined = textDecl.getUnionMemberTypes();
+                const unionAlternatives: Array<{ facets: SchemaFacets, baseType: string }> | undefined = effectiveDecl.getUnionAlternatives();
+                const unionMemberTypes: string[] | undefined = effectiveDecl.getUnionMemberTypes();
                 if (unionAlternatives !== undefined && unionAlternatives.length > 0) {
                     const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                     let valid: boolean = false;
                     for (const alt of unionAlternatives) {
-                        if (SchemaTypeValidator.validate(normalizedText, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(normalizedText, alt.facets, alt.baseType)) {
+                        if (SchemaTypeValidator.validate(normalizedText, alt.baseType, nsMap) && SchemaTypeValidator.validateFacets(normalizedText, alt.facets, alt.baseType)) {
                             valid = true;
                             break;
                         }
@@ -364,7 +292,7 @@ export class SchemaGrammar implements Grammar {
                     const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                     let valid: boolean = false;
                     for (const memberType of unionMemberTypes) {
-                        if (this.validateTokenForType(normalizedText, memberType, instanceNs)) {
+                        if (this.validateTokenForType(normalizedText, memberType, nsMap)) {
                             valid = true;
                             break;
                         }
@@ -373,18 +301,18 @@ export class SchemaGrammar implements Grammar {
                         textError = 'Invalid text content "' + effectiveText + '" for element "' + element + '": does not match any union member type';
                     }
                 } else {
-                    const listItemType: string | undefined = textDecl.getListItemType();
+                    const listItemType: string | undefined = effectiveDecl.getListItemType();
                     if (listItemType !== undefined) {
                         const normalizedText: string = effectiveText.replaceAll(/[\t\n\r ]+/g, ' ').trim();
                         const tokens: string[] = normalizedText.length === 0 ? [] : normalizedText.split(/\s+/);
                         for (const token of tokens) {
-                            if (!this.validateTokenForType(token, listItemType, instanceNs)) {
+                            if (!this.validateTokenForType(token, listItemType, nsMap)) {
                                 textError = 'Invalid list item "' + token + '" for element "' + element + '": expected type ' + listItemType;
                                 break;
                             }
                         }
-                    } else if (decl.getContentModel().getType() === SchemaContentModelType.ELEMENT
-                        || decl.getContentModel().getType() === SchemaContentModelType.EMPTY) {
+                    } else if (effectiveDecl.getContentModel().getType() === SchemaContentModelType.ELEMENT
+                        || effectiveDecl.getContentModel().getType() === SchemaContentModelType.EMPTY) {
                         if (effectiveText.trim().length > 0) {
                             textError = 'Element "' + element + '" has element-only content but contains text: "' + effectiveText + '"';
                         }
@@ -392,34 +320,69 @@ export class SchemaGrammar implements Grammar {
                 }
             }
         }
-        if (this.elementPath.length === 0) {
-            for (const ref of this.pendingIdrefs) {
-                if (!this.seenIds.has(ref)) {
-                    return ValidationResult.error(
-                        'xs:IDREF value "' + ref + '" does not match any xs:ID in the document'
-                    );
-                }
-            }
-        }
         if (textError !== undefined) {
             return ValidationResult.error(textError);
         }
+        if (this.activeScopes.length > 0) {
+            const elemLocal: string = this.localName(element);
+            for (const scope of this.activeScopes) {
+                if (scope.pendingStack.length > 0) {
+                    const top: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
+                    if (top.depth === this.depth) {
+                        this.collectTextFieldsFromElement(scope, text, elemLocal);
+                        scope.pendingStack.pop();
+                        if (!top.nil && !top.overflow) {
+                            const idError: string | undefined = this.commitTuple(scope, top.tuple, element);
+                            if (idError !== undefined) {
+                                this.depth--;
+                                return ValidationResult.error(idError);
+                            }
+                        }
+                    }
+                }
+            }
+            for (let i: number = this.activeScopes.length - 1; i >= 0; i--) {
+                if (this.activeScopes[i].rootDepth === this.depth) {
+                    const scope: IdentityConstraintScope = this.activeScopes[i];
+                    if (scope.constraint.kind === 'keyref') {
+                        const krError: string | undefined = this.validateKeyrefScope(scope);
+                        if (krError !== undefined) {
+                            this.activeScopes.splice(i, 1);
+                            this.depth--;
+                            return ValidationResult.error(krError);
+                        }
+                    }
+                    this.activeScopes.splice(i, 1);
+                }
+            }
+        }
+        if (this.depth === 1) {
+            for (const ref of this.documentIdrefs) {
+                if (!this.documentIds.has(ref)) {
+                    this.depth--;
+                    return ValidationResult.error('xs:IDREF value "' + ref + '" does not reference any xs:ID in the document');
+                }
+            }
+        }
+        this.depth--;
         return contentResult;
     }
 
     validateAttributes(element: string, attributes: Map<string, string>): ValidationResult {
-        if (this.elementPath.length === 0) {
-            this.completedKeys = new Map<string, Array<Array<string | undefined>>>();
+        this.depth++;
+        if (this.depth === 1) {
+            this.documentIds = new Set<string>();
+            this.documentIdrefs = new Set<string>();
             this.activeScopes = [];
-            this.seenIds = new Set<string>();
-            this.pendingIdrefs = [];
-            this.pendingKeyrefChecks = [];
-            this.wildcardModeStack = [];
+            this.wildcardSkipDepth = -1;
+            this.wildcardParentDecls = new Map<number, SchemaElementDecl>();
         }
-        this.elementPath.push(this.localName(element));
-        const currentDepth: number = this.elementPath.length - 1;
-        let isNilTrue: boolean = false;
-        let isNilPresent: boolean = false;
+        if (this.wildcardSkipDepth !== -1 && this.depth > this.wildcardSkipDepth) {
+            return ValidationResult.success();
+        }
+        const context: SchemaValidationContext = new SchemaValidationContext();
+
+        // Detect xsi:nil and xsi:type
         for (const [attrName, attrValue] of attributes) {
             let isNilAttr: boolean = attrName === 'xsi:nil';
             if (!isNilAttr && attrName.endsWith(':nil') && attrName.indexOf(':') !== -1) {
@@ -430,123 +393,59 @@ export class SchemaGrammar implements Grammar {
                 }
             }
             if (isNilAttr) {
-                isNilPresent = true;
+                context.xsiNilPresent = true;
                 if (attrValue === 'true' || attrValue === '1') {
-                    isNilTrue = true;
-                }
-                break;
-            }
-        }
-        for (const scope of this.activeScopes) {
-            if (scope.pendingStack.length > 0 && scope.pendingStack[scope.pendingStack.length - 1].depth === currentDepth) {
-                continue;
-            }
-            const relativePath: string[] = this.elementPath.slice(scope.rootDepth + 1);
-            let selectorMatched: boolean = false;
-            for (const alt of scope.selectorAlternatives) {
-                if (alt.descendant) {
-                    if (currentDepth >= scope.rootDepth + alt.segments.length
-                        && relativePath.length >= alt.segments.length
-                        && this.selectorMatches(alt.segments, relativePath.slice(relativePath.length - alt.segments.length))) {
-                        selectorMatched = true;
-                        break;
-                    }
-                } else if (currentDepth === scope.rootDepth + alt.segments.length
-                    && this.selectorMatches(alt.segments, relativePath)) {
-                    selectorMatched = true;
-                    break;
+                    context.xsiNil = true;
                 }
             }
-            if (selectorMatched) {
-                scope.pendingStack.push({
-                    tuple: new Array<string | undefined>(scope.constraint.fields.length).fill(undefined),
-                    depth: currentDepth,
-                    overflow: false,
-                    nil: isNilTrue
-                });
-                this.collectAttributeFields(scope, attributes, this.localName(element));
-            }
-        }
-        // Detect xsi:type for content-model substitution and push to stack.
-        let xsiTypeLocalName: string | undefined = undefined;
-        for (const [attrName, attrValue] of attributes) {
             if (attrName === 'xsi:type') {
-                xsiTypeLocalName = this.localName(attrValue);
-                break;
-            }
-            if (attrName.endsWith(':type') && attrName.indexOf(':') !== -1) {
+                context.xsiType = this.localName(attrValue);
+            } else if (attrName.endsWith(':type') && attrName.indexOf(':') !== -1) {
                 const prefix: string = attrName.substring(0, attrName.indexOf(':'));
                 const ns: string | undefined = this.resolvePrefix(prefix);
                 if (ns === 'http://www.w3.org/2001/XMLSchema-instance') {
-                    xsiTypeLocalName = this.localName(attrValue);
-                    break;
+                    context.xsiType = this.localName(attrValue);
                 }
             }
         }
-        this.xsiTypeStack.push(xsiTypeLocalName);
 
-        // Detect xsi:nil and push to nil stack.
-        this.nilStack.push(isNilTrue);
-
-        // Build instance namespace scope for this element (inherits from parent scope).
-        const instanceNs: Map<string, string> = new Map<string, string>();
-        if (this.instanceNsStack.length > 0) {
-            for (const [p, u] of this.instanceNsStack[this.instanceNsStack.length - 1]) {
-                instanceNs.set(p, u);
-            }
-        }
+        // Build instance namespace scope for this element
         for (const [attrName, attrValue] of attributes) {
             if (attrName === 'xmlns') {
-                instanceNs.set('', attrValue);
+                context.instanceNamespaces.set('', attrValue);
             } else if (attrName.startsWith('xmlns:')) {
-                instanceNs.set(attrName.substring(6), attrValue);
+                context.instanceNamespaces.set(attrName.substring(6), attrValue);
             }
         }
-        this.instanceNsStack.push(instanceNs);
 
-        const parentMode: 'normal' | 'lax' | 'skip' | undefined =
-            this.wildcardModeStack.length > 0 ? this.wildcardModeStack[this.wildcardModeStack.length - 1] : undefined;
-        if (parentMode === 'skip') {
-            this.wildcardModeStack.push('skip');
-            return ValidationResult.success();
-        }
+        // Lookup element declaration
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
-            if (parentMode === 'lax') {
-                this.wildcardModeStack.push('lax');
-                return ValidationResult.success();
-            }
-            if (this.elementPath.length >= 2) {
-                const parentName: string = this.elementPath[this.elementPath.length - 2];
-                const parentDecl: SchemaElementDecl | undefined = this.lookupElementDecl(parentName);
-                if (parentDecl !== undefined) {
-                    if (parentDecl.getContentModel().getType() === SchemaContentModelType.ANY) {
-                        this.wildcardModeStack.push('skip');
-                        return ValidationResult.success();
-                    }
-                    const currentNs: Map<string, string> | undefined = this.instanceNsStack.length > 0 ? this.instanceNsStack[this.instanceNsStack.length - 1] : undefined;
-                    const pc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, currentNs);
-                    if (pc === 'lax') {
-                        this.wildcardModeStack.push('lax');
-                        return ValidationResult.success();
-                    }
-                    if (pc === 'skip') {
-                        this.wildcardModeStack.push('skip');
-                        return ValidationResult.success();
-                    }
+            const parentDecl: SchemaElementDecl | undefined = this.wildcardParentDecls.get(this.depth - 1);
+            if (parentDecl !== undefined) {
+                const wc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, context.instanceNamespaces);
+                if (wc === 'skip' || wc === 'lax') {
+                    this.wildcardSkipDepth = this.depth;
+                    return ValidationResult.success();
                 }
             }
+            context.wildcardMode = undefined;
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
-        this.wildcardModeStack.push('normal');
-        // Enforce elementFormDefault / form per XSD §3.3.1 / §2.6.3.
-        // Use instanceNsStack (which already includes xmlns= declared on this element)
-        // rather than resolvePrefix(), which only reads the static namespaceDeclarations map.
+        context.wildcardMode = 'normal';
+        const parentWc: 'strict' | 'lax' | 'skip' | undefined = this.wildcardParentDecls.get(this.depth - 1)?.getContentModel().findCoveringWildcard(element, context.instanceNamespaces);
+        if (parentWc === 'skip') {
+            this.wildcardSkipDepth = this.depth;
+            return ValidationResult.success();
+        }
+
+        // Enforce elementFormDefault / form
         const colonIdx: number = element.indexOf(':');
         const elemPrefix: string = colonIdx !== -1 ? element.substring(0, colonIdx) : '';
-        const currentInstanceNs: Map<string, string> | undefined =
-            this.instanceNsStack.length > 0 ? this.instanceNsStack[this.instanceNsStack.length - 1] : undefined;
-        const resolvedElemNs: string | undefined = currentInstanceNs !== undefined ? currentInstanceNs.get(elemPrefix) : undefined;
+        const resolvedElemNs: string | undefined = context.instanceNamespaces.get(elemPrefix) ?? this.resolvePrefix(elemPrefix);
+        if (context.xsiType !== undefined) {
+            this.xsiTypeByDepth.set(this.depth, context.xsiType);
+        }
         if (decl.isQualified()) {
             const declNs: string | undefined = decl.getNamespace();
             if (declNs !== undefined && resolvedElemNs !== declNs) {
@@ -561,99 +460,58 @@ export class SchemaGrammar implements Grammar {
                 );
             }
         }
-        // Per spec §3.3.4 cvc-elt 3.2.1: xsi:nil is only allowed when the element declaration has nillable="true".
-        if (isNilPresent && !decl.isNillable()) {
+        // xsi:nil allowed only if nillable
+        if (context.xsiNilPresent && !decl.isNillable()) {
             return ValidationResult.error(
                 'Element "' + element + '" is not nillable but xsi:nil was specified'
             );
         }
-        if (xsiTypeLocalName === undefined) {
-            const declaredTypeName: string | undefined = decl.getDeclaredTypeName();
-            if (declaredTypeName !== undefined) {
-                const declaredTypeDecl: SchemaElementDecl | undefined = this.complexTypeDecls.get(declaredTypeName);
-                if (declaredTypeDecl !== undefined && declaredTypeDecl.isAbstractElement()) {
-                    return ValidationResult.error(
-                        'Element "' + element + '" has abstract type "' + declaredTypeName +
-                        '" and must use xsi:type to specify a concrete type'
-                    );
-                }
-            }
+        if (context.xsiNil) {
+            this.nilDepths.add(this.depth);
         }
-        // Per the spec (§3.9.4), xsi:type must name a type validly derived from the element's declared type.
-        if (xsiTypeLocalName !== undefined) {
-            const xsiTypeDecl: SchemaElementDecl | undefined = this.complexTypeDecls.get(xsiTypeLocalName);
+        // xsi:type checks
+        if (context.xsiType !== undefined) {
+            const xsiTypeDecl: SchemaElementDecl | undefined = this.complexTypeDecls.get(context.xsiType);
             if (xsiTypeDecl !== undefined && xsiTypeDecl.isAbstractElement()) {
                 return ValidationResult.error(
-                    'xsi:type "' + xsiTypeLocalName + '" is abstract and cannot be used for element instantiation'
+                    'xsi:type "' + context.xsiType + '" is abstract and cannot be used for element instantiation'
                 );
             }
             const declaredTypeName: string | undefined = decl.getDeclaredTypeName();
             if (declaredTypeName !== undefined) {
-                if (!this.isTypeDerivedFrom(xsiTypeLocalName, declaredTypeName)) {
+                if (!this.isTypeDerivedFrom(context.xsiType, declaredTypeName)) {
                     return ValidationResult.error(
-                        'xsi:type "' + xsiTypeLocalName + '" is not derived from the declared type "' +
+                        'xsi:type "' + context.xsiType + '" is not derived from the declared type "' +
                         declaredTypeName + '" of element "' + element + '"'
                     );
                 }
-                const finalBlockedMethod: string | undefined = this.getFinalBlockedMethod(xsiTypeLocalName, declaredTypeName);
+                const finalBlockedMethod: string | undefined = this.getFinalBlockedMethod(context.xsiType, declaredTypeName);
                 if (finalBlockedMethod !== undefined) {
                     return ValidationResult.error(
-                        'xsi:type "' + xsiTypeLocalName + '" is not validly derived: type "' +
+                        'xsi:type "' + context.xsiType + '" is not validly derived: type "' +
                         declaredTypeName + '" has final="' + finalBlockedMethod + '"'
                     );
-                }
-                // Effective block is union of element's {disallowed substitutions} and
-                // the declared type's {prohibited substitutions} — spec §3.9.4 / §3.3.4.
-                const typeDecl: SchemaElementDecl | undefined = this.complexTypeDecls.get(declaredTypeName);
-                const elementBlock: Set<string> = decl.getBlockConstraints();
-                const typeBlock: Set<string> = typeDecl !== undefined ? typeDecl.getBlockConstraints() : new Set<string>();
-                const effectiveBlock: Set<string> = new Set<string>([...elementBlock, ...typeBlock]);
-                if (effectiveBlock.size > 0) {
-                    const blocksAll: boolean = effectiveBlock.has('#all');
-                    if (blocksAll || effectiveBlock.has('extension') || effectiveBlock.has('restriction')) {
-                        const pathMethods: Set<string> = this.getPathMethods(xsiTypeLocalName, declaredTypeName);
-                        if (pathMethods.size > 0) {
-                            if (blocksAll) {
-                                return ValidationResult.error(
-                                    'xsi:type "' + xsiTypeLocalName + '" is blocked by type "' +
-                                    declaredTypeName + '"'
-                                );
-                            }
-                            for (const m of pathMethods) {
-                                if (effectiveBlock.has(m)) {
-                                    return ValidationResult.error(
-                                        'xsi:type "' + xsiTypeLocalName + '" is blocked: derivation by "' +
-                                        m + '" is prohibited'
-                                    );
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
 
-        // If xsi:type is present, also use the substituted type's attribute declarations
-        // so that derived-type attributes (e.g. exportCode on UKAddress) are accepted.
-        const substitutedDecl: SchemaElementDecl | undefined = xsiTypeLocalName !== undefined
-            ? this.complexTypeDecls.get(xsiTypeLocalName)
+        // Use substituted type's attribute declarations if xsi:type present
+        const substitutedDecl: SchemaElementDecl | undefined = context.xsiType !== undefined
+            ? this.complexTypeDecls.get(context.xsiType)
             : undefined;
         const baseAttributes: Map<string, SchemaAttributeDecl> = decl.getAttributeDecls();
         const declaredAttributes: Map<string, SchemaAttributeDecl> = substitutedDecl !== undefined
             ? substitutedDecl.getAttributeDecls()
             : baseAttributes;
 
-        // Check provided attributes.
+        // Check provided attributes
         for (const [attrName, attrValue] of attributes) {
-            // Namespace declarations are not XML attributes in the data model.
             if (attrName === 'xmlns' || attrName.startsWith('xmlns:')) {
                 continue;
             }
-            // XML Schema instance attributes (xsi:*) are always permitted on any element.
             if (attrName.startsWith('xsi:')) {
                 continue;
             }
-
             const colonIndex: number = attrName.indexOf(':');
             if (colonIndex !== -1) {
                 const prefix0: string = attrName.substring(0, colonIndex);
@@ -662,13 +520,11 @@ export class SchemaGrammar implements Grammar {
                     continue;
                 }
             }
-
             const attrLocalName: string = colonIndex !== -1 ? attrName.substring(colonIndex + 1) : attrName;
             const attrDecl: SchemaAttributeDecl | undefined =
                 declaredAttributes.get(attrName) !== undefined
                     ? declaredAttributes.get(attrName)
                     : declaredAttributes.get(attrLocalName);
-
             if (attrDecl) {
                 if (!attrDecl.isValid(attrValue)) {
                     return ValidationResult.error(
@@ -678,29 +534,24 @@ export class SchemaGrammar implements Grammar {
                 }
                 const attrTypeLocal: string = this.localName(attrDecl.getType());
                 if (attrTypeLocal === 'ID' || this.isTypeDerivedFrom(attrTypeLocal, 'ID')) {
-                    if (this.seenIds.has(attrValue)) {
+                    if (this.documentIds.has(attrValue)) {
                         return ValidationResult.error(
                             'Duplicate xs:ID value "' + attrValue + '" on attribute "' + attrName +
                             '" of element "' + element + '"'
                         );
                     }
-                    this.seenIds.add(attrValue);
+                    this.documentIds.add(attrValue);
                 } else if (attrTypeLocal === 'IDREF' || this.isTypeDerivedFrom(attrTypeLocal, 'IDREF')) {
-                    this.pendingIdrefs.push(attrValue);
+                    this.documentIdrefs.add(attrValue);
                 } else if (attrTypeLocal === 'IDREFS' || this.isTypeDerivedFrom(attrTypeLocal, 'IDREFS')) {
                     for (const token of attrValue.trim().split(/\s+/)) {
                         if (token.length > 0) {
-                            this.pendingIdrefs.push(token);
+                            this.documentIdrefs.add(token);
                         }
                     }
                 }
                 continue;
             }
-
-            // anyAttribute wildcard takes priority over imported-grammar lookups.
-            // The wildcard namespace constraint (e.g. ##other) may explicitly exclude
-            // certain namespaces, so it must be evaluated before any global-attribute
-            // fallback that would bypass that restriction.
             if (decl.allowsAnyAttribute()) {
                 const anyNs: string = decl.getAnyAttributeNamespace();
                 const anyPc: string = decl.getAnyAttributeProcessContents();
@@ -713,8 +564,6 @@ export class SchemaGrammar implements Grammar {
                     'Attribute "' + attrName + '" is not permitted by the anyAttribute wildcard on element "' + element + '"'
                 );
             }
-
-            // No anyAttribute — try imported namespace grammars as a fallback.
             if (colonIndex !== -1) {
                 const prefix: string = attrName.substring(0, colonIndex);
                 const namespaceUri: string | undefined = this.resolvePrefix(prefix);
@@ -737,7 +586,6 @@ export class SchemaGrammar implements Grammar {
                     }
                 }
             }
-
             if (decl.getContentModel().getType() === SchemaContentModelType.ANY) {
                 continue;
             }
@@ -746,7 +594,7 @@ export class SchemaGrammar implements Grammar {
             );
         }
 
-        // Check required attributes are present.
+        // Check required attributes
         for (const [, attrDecl] of declaredAttributes) {
             if (attrDecl.getUse() !== AttributeUse.REQUIRED) {
                 continue;
@@ -755,7 +603,6 @@ export class SchemaGrammar implements Grammar {
             if (attributes.has(declaredName)) {
                 continue;
             }
-            // Also accept a prefixed variant (prefix:localName) of the same local name.
             let found: boolean = false;
             for (const attrName of attributes.keys()) {
                 if (this.localName(attrName) === declaredName) {
@@ -770,30 +617,39 @@ export class SchemaGrammar implements Grammar {
             }
         }
 
+        if (this.activeScopes.length > 0) {
+            const elemLocal: string = this.localName(element);
+            for (const scope of this.activeScopes) {
+                if (this.selectorMatchesAtDepth(scope, elemLocal)) {
+                    scope.pendingStack.push({
+                        tuple: new Array<string | undefined>(scope.constraint.fields.length).fill(undefined),
+                        depth: this.depth,
+                        overflow: false,
+                        nil: context.xsiNil
+                    });
+                    this.collectAttributeFields(scope, attributes, elemLocal, context);
+                }
+            }
+        }
+
         const identityConstraints: IdentityConstraint[] | undefined = decl.getIdentityConstraints();
         if (identityConstraints !== undefined) {
             for (const constraint of identityConstraints) {
                 const selectorAlternatives: Array<{ segments: string[], descendant: boolean }> = this.parseSelectorSegments(constraint.selector);
-                const scope: IdentityConstraintScope = {
+                this.activeScopes.push({
                     constraint,
-                    rootDepth: currentDepth,
+                    rootDepth: this.depth,
                     selectorAlternatives,
                     pendingStack: [],
                     lastCommittedTuple: undefined,
                     lastCommittedDepth: -1,
                     tuples: [],
-                };
-                if (selectorAlternatives.some((alt: { segments: string[], descendant: boolean }) => alt.segments.length === 0)) {
-                    scope.pendingStack.push({
-                        tuple: new Array<string | undefined>(constraint.fields.length).fill(undefined),
-                        depth: currentDepth,
-                        overflow: false,
-                        nil: isNilTrue
-                    });
-                    this.collectAttributeFields(scope, attributes, this.localName(element));
-                }
-                this.activeScopes.push(scope);
+                });
             }
+        }
+
+        if (decl.getContentModel().hasAnyWildcard()) {
+            this.wildcardParentDecls.set(this.depth, decl);
         }
 
         return ValidationResult.success();
@@ -914,15 +770,14 @@ export class SchemaGrammar implements Grammar {
             return true; // lax: silently accept if no declaration
         }
         // Unqualified attribute with no namespace.
+        const globalDecl: SchemaAttributeDecl | undefined = this.globalAttributeDecls.get(attrLocalName);
+        if (globalDecl) {
+            return globalDecl.isValid(attrValue);
+        }
         if (processContents === 'strict') {
             return false; // strict requires a declaration; none found for unqualified attr
         }
         return true; // lax: accept
-    }
-
-    private getElementNamespace(elementName: string): string | undefined {
-        const decl: SchemaElementDecl | undefined = this.lookupElementDecl(elementName);
-        return decl ? decl.getNamespace() : undefined;
     }
 
     private resolvePrefix(prefix: string): string | undefined {
@@ -941,10 +796,12 @@ export class SchemaGrammar implements Grammar {
         const unionAlternatives: Array<{ facets: SchemaFacets, baseType: string }> | undefined = textDecl.getUnionAlternatives();
         if (unionAlternatives !== undefined && unionAlternatives.length > 0) {
             for (const alt of unionAlternatives) {
-                if (SchemaTypeValidator.validate(fixedValue, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(fixedValue, alt.facets, alt.baseType)) {
-                    if (SchemaTypeValidator.validate(instanceText, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(instanceText, alt.facets, alt.baseType)) {
-                        return SchemaTypeValidator.canonicalize(instanceText, alt.baseType, instanceNs) === SchemaTypeValidator.canonicalize(fixedValue, alt.baseType, instanceNs);
+                if (SchemaTypeValidator.validate(instanceText, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(instanceText, alt.facets, alt.baseType)) {
+                    const normalizedFixed: string = SchemaTypeValidator.canonicalize(fixedValue, alt.baseType, instanceNs);
+                    if (SchemaTypeValidator.validate(normalizedFixed, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(normalizedFixed, alt.facets, alt.baseType)) {
+                        return SchemaTypeValidator.canonicalize(instanceText, alt.baseType, instanceNs) === normalizedFixed;
                     }
+                    return false;
                 }
             }
             return false;
@@ -952,10 +809,12 @@ export class SchemaGrammar implements Grammar {
         const unionMemberTypes: string[] | undefined = textDecl.getUnionMemberTypes();
         if (unionMemberTypes !== undefined && unionMemberTypes.length > 0) {
             for (const memberType of unionMemberTypes) {
-                if (this.validateTokenForType(fixedValue, memberType, instanceNs)) {
-                    if (this.validateTokenForType(instanceText, memberType, instanceNs)) {
-                        return SchemaTypeValidator.canonicalize(instanceText, memberType, instanceNs) === SchemaTypeValidator.canonicalize(fixedValue, memberType, instanceNs);
+                if (this.validateTokenForType(instanceText, memberType, instanceNs)) {
+                    const normalizedFixed: string = SchemaTypeValidator.canonicalize(fixedValue, memberType, instanceNs);
+                    if (this.validateTokenForType(normalizedFixed, memberType, instanceNs)) {
+                        return SchemaTypeValidator.canonicalize(instanceText, memberType, instanceNs) === normalizedFixed;
                     }
+                    return false;
                 }
             }
             return false;
@@ -993,7 +852,7 @@ export class SchemaGrammar implements Grammar {
         return colonIndex !== -1 ? qname.substring(colonIndex + 1) : qname;
     }
 
-    private lookupElementDecl(elementName: string): SchemaElementDecl | undefined {
+    private lookupElementDecl(elementName: string, instanceNs?: Map<string, string>): SchemaElementDecl | undefined {
         // 1. Exact key match.
         let decl: SchemaElementDecl | undefined = this.elementDecls.get(elementName);
         if (decl) {
@@ -1013,12 +872,10 @@ export class SchemaGrammar implements Grammar {
         }
 
         // 2b. Resolve the element's actual namespace from namespaceDeclarations and try that key first.
-        // Also consult instanceNsStack for prefixes declared in the instance document.
+        // Also consult the provided instanceNs map for prefixes declared in the instance document.
         const colonIndex: number = elementName.indexOf(':');
         const prefix: string = colonIndex !== -1 ? elementName.substring(0, colonIndex) : '';
-        const instanceNsTop: Map<string, string> | undefined =
-            this.instanceNsStack.length > 0 ? this.instanceNsStack[this.instanceNsStack.length - 1] : undefined;
-        const resolvedNs: string | undefined = this.resolvePrefix(prefix) ?? instanceNsTop?.get(prefix);
+        const resolvedNs: string | undefined = this.resolvePrefix(prefix) ?? instanceNs?.get(prefix);
         if (resolvedNs) {
             const nsKey: string = this.buildElementKey(local, resolvedNs);
             decl = this.elementDecls.get(nsKey);
@@ -1106,39 +963,6 @@ export class SchemaGrammar implements Grammar {
         return false;
     }
 
-    private getPathMethods(candidate: string, required: string): Set<string> {
-        if (candidate === required) {
-            return new Set<string>();
-        }
-        let current: string | undefined = candidate;
-        const visited: Set<string> = new Set<string>();
-        const methods: Set<string> = new Set<string>();
-        while (current !== undefined) {
-            if (current === required) {
-                return methods;
-            }
-            if (visited.has(current)) {
-                break;
-            }
-            visited.add(current);
-            const entry: { base: string, method: string } | undefined = this.typeHierarchy.get(current);
-            if (entry) {
-                methods.add(entry.method);
-                current = entry.base;
-            } else {
-                const builtinBase: string | undefined = BUILTIN_TYPE_HIERARCHY.get(current);
-                if (builtinBase) {
-                    methods.add('restriction');
-                    current = builtinBase;
-                } else {
-                    break;
-                }
-            }
-        }
-        // Did not reach required — type is not derived; return empty set.
-        return new Set<string>();
-    }
-
     private parseSelectorSegments(selector: string): Array<{ segments: string[], descendant: boolean }> {
         return selector.split('|').map((alt: string) => {
             const trimmed: string = alt.trim();
@@ -1166,18 +990,6 @@ export class SchemaGrammar implements Grammar {
         });
     }
 
-    private selectorMatches(segments: string[], relativePath: string[]): boolean {
-        if (segments.length !== relativePath.length) {
-            return false;
-        }
-        for (let i: number = 0; i < segments.length; i++) {
-            if (segments[i] !== '*' && segments[i] !== relativePath[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private parseFieldPath(field: string): { isAttribute: boolean, localName: string, descendant: boolean } {
         const trimmed: string = field.trim();
         const descendant: boolean = trimmed.startsWith('.//');
@@ -1196,32 +1008,112 @@ export class SchemaGrammar implements Grammar {
         return field.split('|').map((alt: string) => this.parseFieldPath(alt));
     }
 
-    private collectAttributeFields(scope: IdentityConstraintScope, attributes: Map<string, string>, elementLocalName: string): void {
+    private selectorMatchesAtDepth(scope: IdentityConstraintScope, elemLocal: string): boolean {
+        const relativeDepth: number = this.depth - scope.rootDepth;
+        for (const alt of scope.selectorAlternatives) {
+            if (alt.segments.length === 0) {
+                continue;
+            }
+            const lastSeg: string = alt.segments[alt.segments.length - 1];
+            const nameMatches: boolean = lastSeg === '*' || lastSeg === elemLocal;
+            if (!nameMatches) {
+                continue;
+            }
+            if (alt.descendant) {
+                if (relativeDepth >= 1) {
+                    return true;
+                }
+            } else {
+                if (relativeDepth === alt.segments.length) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private collectTextFieldsFromElement(scope: IdentityConstraintScope, text: string, elementLocalName: string): void {
+        const pendingTop: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
+        const normalized: string = text.replaceAll(/[\t\n\r ]+/g, ' ').trim();
+        for (let i: number = 0; i < scope.constraint.fields.length; i++) {
+            if (pendingTop.tuple[i] !== undefined) {
+                continue;
+            }
+            const alternatives: Array<{ isAttribute: boolean, localName: string, descendant: boolean }> = this.parseFieldAlternatives(scope.constraint.fields[i]);
+            for (const alt of alternatives) {
+                if (alt.isAttribute) {
+                    continue;
+                }
+                if (alt.localName === '' || alt.localName === elementLocalName || alt.localName === '*') {
+                    pendingTop.tuple[i] = 'string\x02' + normalized;
+                    break;
+                }
+            }
+        }
+    }
+
+    private commitTuple(scope: IdentityConstraintScope, tuple: Array<string | undefined>, element: string): string | undefined {
+        const hasUndefined: boolean = tuple.some(v => v === undefined);
+        if (scope.constraint.kind === 'key') {
+            if (hasUndefined) {
+                return 'Key constraint "' + scope.constraint.name + '" requires all fields to be present on element "' + element + '"';
+            }
+            const key: string = this.tupleKey(tuple);
+            for (const existing of scope.tuples) {
+                if (this.tupleKey(existing) === key) {
+                    return 'Key constraint "' + scope.constraint.name + '" has a duplicate value on element "' + element + '"';
+                }
+            }
+            scope.tuples.push(tuple);
+        } else if (scope.constraint.kind === 'unique') {
+            if (!hasUndefined) {
+                const key: string = this.tupleKey(tuple);
+                for (const existing of scope.tuples) {
+                    if (this.tupleKey(existing) === key) {
+                        return 'Unique constraint "' + scope.constraint.name + '" has a duplicate value on element "' + element + '"';
+                    }
+                }
+                scope.tuples.push(tuple);
+            }
+        } else {
+            if (!hasUndefined) {
+                scope.tuples.push(tuple);
+            }
+        }
+        return undefined;
+    }
+
+    private validateKeyrefScope(scope: IdentityConstraintScope): string | undefined {
+        const referName: string | undefined = scope.constraint.refer;
+        if (referName === undefined) {
+            return undefined;
+        }
+        const refScope: IdentityConstraintScope | undefined = this.activeScopes.find(
+            (s: IdentityConstraintScope) => s.constraint.name === referName
+        );
+        if (refScope === undefined) {
+            return undefined;
+        }
+        for (const tuple of scope.tuples) {
+            if (tuple.some(v => v === undefined)) {
+                continue;
+            }
+            const key: string = this.tupleKey(tuple);
+            if (!refScope.tuples.some((t: Array<string | undefined>) => this.tupleKey(t) === key)) {
+                return 'Keyref constraint "' + scope.constraint.name + '" references a key that does not exist';
+            }
+        }
+        return undefined;
+    }
+
+    private collectAttributeFields(scope: IdentityConstraintScope, attributes: Map<string, string>, elementLocalName: string, context: SchemaValidationContext): void {
         if (scope.pendingStack.length === 0) {
             return;
         }
         const pendingTop: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
-        const attrNs: Map<string, string> = new Map<string, string>();
-        if (this.instanceNsStack.length > 0) {
-            for (const [p, u] of this.instanceNsStack[this.instanceNsStack.length - 1]) {
-                attrNs.set(p, u);
-            }
-        }
-        for (const [attrName, attrValue] of attributes) {
-            if (attrName === 'xmlns') {
-                attrNs.set('', attrValue);
-            } else if (attrName.startsWith('xmlns:')) {
-                attrNs.set(attrName.substring(6), attrValue);
-            }
-        }
-        const declaredDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
-        let xsiTypeLocal: string | undefined = undefined;
-        for (const [attrName, attrValue] of attributes) {
-            if (attrName === 'xsi:type' || (attrName.endsWith(':type') && attrName.indexOf(':') !== -1)) {
-                xsiTypeLocal = this.localName(attrValue);
-                break;
-            }
-        }
+        const attrNs: Map<string, string> = context.instanceNamespaces;
+        const declaredDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName, attrNs);
+        const xsiTypeLocal: string | undefined = context.xsiType;
         const effectiveDecl: SchemaElementDecl | undefined = xsiTypeLocal !== undefined
             ? (this.complexTypeDecls.get(xsiTypeLocal) ?? this.simpleTypeDecls.get(xsiTypeLocal) ?? declaredDecl)
             : declaredDecl;
@@ -1247,189 +1139,7 @@ export class SchemaGrammar implements Grammar {
         }
     }
 
-    private collectTextFields(scope: IdentityConstraintScope, elementLocalName: string, text: string, isSelf: boolean, nsMap?: Map<string, string>, xsiTypeLocalName?: string): void {
-        if (scope.pendingStack.length === 0) {
-            return;
-        }
-        const textTop: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
-        const tuple: Array<string | undefined> = textTop.tuple;
-        const fields: string[] = scope.constraint.fields;
-        for (let i: number = 0; i < fields.length; i++) {
-            const alternatives: Array<{ isAttribute: boolean, localName: string, descendant: boolean }> = this.parseFieldAlternatives(fields[i]);
-            for (const alt of alternatives) {
-                if (alt.isAttribute) {
-                    continue;
-                }
-                const matches: boolean = isSelf
-                    ? (alt.localName === '' || alt.localName === '.')
-                    : (alt.localName === elementLocalName || (alt.descendant && alt.localName === '*'));
-                if (matches) {
-                    if (tuple[i] !== undefined) {
-                        if (!isSelf) {
-                            textTop.overflow = true;
-                        }
-                    } else {
-                        const declaredDecl: SchemaElementDecl | undefined = this.lookupElementDecl(elementLocalName);
-                        const effectiveDecl: SchemaElementDecl | undefined = xsiTypeLocalName !== undefined
-                            ? (this.complexTypeDecls.get(xsiTypeLocalName) ?? this.simpleTypeDecls.get(xsiTypeLocalName) ?? declaredDecl)
-                            : declaredDecl;
-                        const simpleType: string | undefined = effectiveDecl?.getSimpleType();
-                        const raw: string = text.trim();
-                        const canonicalized: string = simpleType !== undefined ? SchemaTypeValidator.canonicalize(raw, simpleType, nsMap) : raw;
-                        tuple[i] = (simpleType ?? 'string') + '\x02' + canonicalized;
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
     private tupleKey(tuple: Array<string | undefined>): string {
         return tuple.map(v => v === undefined ? '\x00' : v).join('\x01');
-    }
-
-    private closeConstraintScopes(): string | undefined {
-        const closingDepth: number = this.lastClosedDepth;
-        let errorMessage: string | undefined = undefined;
-        for (const scope of this.activeScopes) {
-            if (scope.pendingStack.length > 0 && scope.pendingStack[scope.pendingStack.length - 1].depth === closingDepth) {
-                const committedEntry: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
-                const tuple: Array<string | undefined> = committedEntry.tuple;
-                scope.lastCommittedTuple = tuple;
-                scope.lastCommittedDepth = committedEntry.depth;
-                scope.pendingStack.pop();
-                const wasNil: boolean = committedEntry.nil;
-                if (wasNil) {
-                    if (scope.constraint.kind === 'key') {
-                        if (errorMessage === undefined) {
-                            errorMessage = 'xs:key "' + scope.constraint.name + '": nilled element in key target node set';
-                        }
-                    }
-                    continue;
-                }
-                if (committedEntry.overflow) {
-                    if (scope.constraint.kind === 'key') {
-                        if (errorMessage === undefined) {
-                            errorMessage = 'xs:key "' + scope.constraint.name + '": selected node has multiple values for a field';
-                        }
-                        scope.tuples.push(tuple);
-                    }
-                    continue;
-                }
-                const allAbsent: boolean = tuple.every(v => v === undefined);
-                if (allAbsent) {
-                    if (scope.constraint.kind === 'key') {
-                        if (errorMessage === undefined) {
-                            errorMessage = 'xs:key "' + scope.constraint.name + '": selected node is missing one or more key field values';
-                        }
-                    }
-                    scope.tuples.push(tuple);
-                    continue;
-                }
-                const anyAbsent: boolean = tuple.some(v => v === undefined);
-                if (anyAbsent && scope.constraint.kind === 'key') {
-                    if (errorMessage === undefined) {
-                        errorMessage = 'xs:key "' + scope.constraint.name + '": selected node is missing one or more key field values';
-                    }
-                }
-                scope.tuples.push(tuple);
-            }
-        }
-        const removedScopes: IdentityConstraintScope[] = [];
-        let i: number = this.activeScopes.length - 1;
-        while (i >= 0) {
-            const scope: IdentityConstraintScope = this.activeScopes[i];
-            if (scope.rootDepth === closingDepth) {
-                this.activeScopes.splice(i, 1);
-                removedScopes.push(scope);
-            }
-            i--;
-        }
-        for (const scope of removedScopes) {
-            if (errorMessage !== undefined) {
-                break;
-            }
-            if (scope.constraint.kind === 'key' || scope.constraint.kind === 'unique') {
-                const seen: Set<string> = new Set<string>();
-                for (const tuple of scope.tuples) {
-                    const allPresent: boolean = tuple.every(v => v !== undefined);
-                    if (!allPresent) {
-                        continue;
-                    }
-                    const key: string = this.tupleKey(tuple);
-                    if (seen.has(key)) {
-                        errorMessage = 'xs:' + scope.constraint.kind + ' "' + scope.constraint.name + '": duplicate key value ' + JSON.stringify(key);
-                        break;
-                    }
-                    seen.add(key);
-                }
-                if (scope.constraint.kind === 'key' || scope.constraint.kind === 'unique') {
-                    this.completedKeys.set(scope.constraint.name, scope.tuples);
-                    let ci: number = this.pendingKeyrefChecks.length - 1;
-                    while (ci >= 0) {
-                        const check = this.pendingKeyrefChecks[ci];
-                        if (check.refer === scope.constraint.name) {
-                            this.pendingKeyrefChecks.splice(ci, 1);
-                            if (errorMessage === undefined) {
-                                const keySet: Set<string> = new Set<string>();
-                                for (const kt of scope.tuples) {
-                                    keySet.add(this.tupleKey(kt));
-                                }
-                                for (const tuple of check.tuples) {
-                                    const allPresent: boolean = tuple.every(v => v !== undefined);
-                                    if (!allPresent) {
-                                        continue;
-                                    }
-                                    const key: string = this.tupleKey(tuple);
-                                    if (!keySet.has(key)) {
-                                        errorMessage = 'xs:keyref "' + check.constraintName + '": value ' + JSON.stringify(key) + ' has no matching xs:key "' + scope.constraint.name + '"';
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        ci--;
-                    }
-                }
-            }
-        }
-        for (const scope of removedScopes) {
-            if (errorMessage !== undefined) {
-                break;
-            }
-            if (scope.constraint.kind === 'keyref') {
-                const referName: string | undefined = scope.constraint.refer;
-                if (referName !== undefined) {
-                    const keyTuples: Array<Array<string | undefined>> | undefined = this.completedKeys.get(referName);
-                    if (keyTuples !== undefined) {
-                        const keySet: Set<string> = new Set<string>();
-                        for (const kt of keyTuples) {
-                            keySet.add(this.tupleKey(kt));
-                        }
-                        for (const tuple of scope.tuples) {
-                            const allPresent: boolean = tuple.every(v => v !== undefined);
-                            if (!allPresent) {
-                                continue;
-                            }
-                            const key: string = this.tupleKey(tuple);
-                            if (!keySet.has(key)) {
-                                errorMessage = 'xs:keyref "' + scope.constraint.name + '": value ' + JSON.stringify(key) + ' has no matching xs:key "' + referName + '"';
-                                break;
-                            }
-                        }
-                    } else {
-                        this.pendingKeyrefChecks.push({ constraintName: scope.constraint.name, refer: referName, tuples: scope.tuples });
-                    }
-                }
-            }
-        }
-        if (closingDepth === 0 && this.pendingKeyrefChecks.length > 0) {
-            if (errorMessage === undefined) {
-                const check = this.pendingKeyrefChecks[0];
-                errorMessage = 'xs:keyref "' + check.constraintName + '": referred key/unique "' + check.refer + '" was not found in the document';
-            }
-            this.pendingKeyrefChecks = [];
-        }
-        return errorMessage;
     }
 }
