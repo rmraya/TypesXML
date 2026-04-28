@@ -598,6 +598,14 @@ export class XMLSchemaParser {
                 this.complexTypeDefinitions.set(typeName, child);
                 this.complexTypeDefinitions.set(localKey, child);
             }
+            if (localName === 'simpleType') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (!nameAttr) { continue; }
+                const typeName: string = nameAttr.getValue();
+                const nsKey: string = this.buildTypeKey(typeName, targetNamespace);
+                this.simpleTypeDefinitions.set(typeName, child);
+                this.simpleTypeDefinitions.set(nsKey, child);
+            }
         }
     }
 

@@ -115,6 +115,107 @@ export class XSDSemanticValidator {
             XSDSemanticValidator.checkSubstitutionGroupFinalConstraints(root, allComplexTypes);
             XSDSemanticValidator.checkComplexRestrictionAttributes(root, allComplexTypes);
             XSDSemanticValidator.checkListUnionTypeReferences(root, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
+            XSDSemanticValidator.checkListItemTypeVariety(root, allSimpleTypes);
+            XSDSemanticValidator.checkSimpleTypeRestrictionBaseRefs(root, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
+        }
+        XSDSemanticValidator.checkCircularTypeDefinitions(allSimpleTypes);
+    }
+
+    private static checkSimpleTypeRestrictionBaseRefs(
+        el: XMLElement,
+        allSimpleTypes: Map<string, XMLElement>,
+        targetNs: string,
+        defaultNs: string,
+        prefixMap: Map<string, string>
+    ): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'simpleType') {
+            for (const child of el.getChildren()) {
+                if (XSDSemanticValidator.localName(child.getName()) === 'restriction') {
+                    const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
+                    if (baseAttr) {
+                        XSDSemanticValidator.checkQNameSimpleTypeRef(
+                            baseAttr.getValue(), 'xs:restriction base', allSimpleTypes, targetNs, defaultNs, prefixMap
+                        );
+                    }
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkSimpleTypeRestrictionBaseRefs(child, allSimpleTypes, targetNs, defaultNs, prefixMap);
+        }
+    }
+
+    private static checkCircularTypeDefinitions(simpleTypes: Map<string, XMLElement>): void {
+        const checked: Set<string> = new Set<string>();
+        for (const typeName of simpleTypes.keys()) {
+            if (checked.has(typeName)) {
+                continue;
+            }
+            XSDSemanticValidator.walkRestrictionChain(typeName, simpleTypes, new Set<string>(), checked);
+        }
+    }
+
+    private static walkRestrictionChain(
+        typeName: string,
+        simpleTypes: Map<string, XMLElement>,
+        chain: Set<string>,
+        checked: Set<string>
+    ): void {
+        const local: string = XSDSemanticValidator.localName(typeName);
+        if (checked.has(local)) {
+            return;
+        }
+        if (chain.has(local)) {
+            throw new Error('Circular type definition detected: type "' + local + '" is part of a restriction cycle');
+        }
+        const typeEl: XMLElement | undefined = simpleTypes.get(local);
+        if (!typeEl) {
+            checked.add(local);
+            return;
+        }
+        chain.add(local);
+        for (const child of typeEl.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'restriction') {
+                const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
+                if (baseAttr) {
+                    XSDSemanticValidator.walkRestrictionChain(baseAttr.getValue(), simpleTypes, chain, checked);
+                }
+            }
+        }
+        chain.delete(local);
+        checked.add(local);
+    }
+
+    private static checkListItemTypeVariety(el: XMLElement, simpleTypes: Map<string, XMLElement>): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'list') {
+            const itemTypeAttr: XMLAttribute | undefined = el.getAttribute('itemType');
+            if (itemTypeAttr) {
+                const variety: 'list' | 'union' | 'atomic' | 'unknown' = XSDSemanticValidator.getTypeVariety(itemTypeAttr.getValue(), simpleTypes, new Set<string>());
+                if (variety === 'list') {
+                    throw new Error('xs:list itemType "' + itemTypeAttr.getValue() + '" resolves to a list type, which is not allowed');
+                }
+            } else {
+                for (const child of el.getChildren()) {
+                    if (XSDSemanticValidator.localName(child.getName()) === 'simpleType') {
+                        const variety: 'list' | 'union' | 'atomic' | 'unknown' = XSDSemanticValidator.getInlineSimpleTypeVariety(child);
+                        if (variety === 'list') {
+                            throw new Error('xs:list inline simpleType resolves to a list type, which is not allowed');
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkListItemTypeVariety(child, simpleTypes);
         }
     }
 
@@ -832,6 +933,51 @@ export class XSDSemanticValidator {
                                 '" refers to undeclared complex type "' + localPart + '"'
                             );
                         }
+                    }
+                }
+            }
+        }
+        if (local === 'simpleContent') {
+            for (const derivChild of el.getChildren()) {
+                const derivLocal: string = XSDSemanticValidator.localName(derivChild.getName());
+                if (derivLocal !== 'restriction') {
+                    continue;
+                }
+                const baseAttr: XMLAttribute | undefined = derivChild.getAttribute('base');
+                if (!baseAttr) {
+                    continue;
+                }
+                const baseValue: string = baseAttr.getValue();
+                const xsdNs: string = 'http://www.w3.org/2001/XMLSchema';
+                if (baseValue.indexOf(':') === -1) {
+                    if (defaultNs === xsdNs) {
+                        throw new Error(
+                            'xs:simpleContent xs:restriction base="' + baseValue +
+                            '" must be a complex type, not a built-in simple type'
+                        );
+                    }
+                    if (!complexTypes.has(baseValue)) {
+                        throw new Error(
+                            'xs:simpleContent xs:restriction base="' + baseValue +
+                            '" must be a complex type with simple content'
+                        );
+                    }
+                } else {
+                    const colon: number = baseValue.indexOf(':');
+                    const prefix: string = baseValue.substring(0, colon);
+                    const localPart: string = baseValue.substring(colon + 1);
+                    const resolvedNs: string | undefined = prefixMap.get(prefix);
+                    if (resolvedNs === xsdNs) {
+                        throw new Error(
+                            'xs:simpleContent xs:restriction base="' + baseValue +
+                            '" must be a complex type, not a built-in simple type'
+                        );
+                    }
+                    if (resolvedNs === targetNs && !complexTypes.has(localPart)) {
+                        throw new Error(
+                            'xs:simpleContent xs:restriction base="' + baseValue +
+                            '" must be a complex type with simple content'
+                        );
                     }
                 }
             }
@@ -1837,18 +1983,38 @@ export class XSDSemanticValidator {
         }
     }
 
-    private static checkSimpleTypeChildren(el: XMLElement): void {
+    private static checkSimpleTypeChildren(el: XMLElement, parent?: XMLElement): void {
         const local: string = XSDSemanticValidator.localName(el.getName());
         if (local === 'appinfo' || local === 'documentation') {
             return;
         }
         if (local === 'simpleType') {
-            const VALID_CHILDREN: Set<string> = new Set(['restriction', 'list', 'union']);
+            if (parent !== undefined && XSDSemanticValidator.localName(parent.getName()) !== 'schema') {
+                if (el.getAttribute('name') !== undefined) {
+                    const nameVal: string = el.getAttribute('name')!.getValue();
+                    throw new Error('xs:simpleType "' + nameVal + '" with a name attribute must be a top-level child of xs:schema');
+                }
+            }
+            const VALID_CHILDREN: Set<string> = new Set(['annotation', 'restriction', 'list', 'union']);
             let count: number = 0;
             for (const child of el.getChildren()) {
                 const childLocal: string = XSDSemanticValidator.localName(child.getName());
-                if (VALID_CHILDREN.has(childLocal)) {
+                if (!VALID_CHILDREN.has(childLocal)) {
+                    const nameAttr: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+                    throw new Error('xs:simpleType "' + nameAttr + '" contains invalid child element xs:' + childLocal);
+                }
+                if (childLocal !== 'annotation') {
                     count++;
+                }
+                if (childLocal === 'restriction') {
+                    const hasBase: boolean = child.getAttribute('base') !== undefined;
+                    const hasInlineType: boolean = child.getChildren().some(
+                        (c: XMLElement) => XSDSemanticValidator.localName(c.getName()) === 'simpleType'
+                    );
+                    if (!hasBase && !hasInlineType) {
+                        const nameAttr: string = el.getAttribute('name')?.getValue() ?? '(anonymous)';
+                        throw new Error('xs:restriction in xs:simpleType "' + nameAttr + '" must have either a "base" attribute or an inline xs:simpleType child');
+                    }
                 }
             }
             if (count !== 1) {
@@ -1857,7 +2023,7 @@ export class XSDSemanticValidator {
             }
         }
         for (const child of el.getChildren()) {
-            XSDSemanticValidator.checkSimpleTypeChildren(child);
+            XSDSemanticValidator.checkSimpleTypeChildren(child, el);
         }
     }
 
@@ -1977,7 +2143,7 @@ export class XSDSemanticValidator {
         } else if (localEl === 'simpleType') {
             const finalAttr: XMLAttribute | undefined = el.getAttribute('final');
             if (finalAttr) {
-                XSDSemanticValidator.validateDerivationSet(finalAttr.getValue(), 'final', new Set(['list', 'union', 'restriction', 'extension']));
+                XSDSemanticValidator.validateDerivationSet(finalAttr.getValue(), 'final', new Set(['list', 'union', 'restriction']));
             }
         } else if (localEl === 'schema') {
             const blockDefaultAttr: XMLAttribute | undefined = el.getAttribute('blockDefault');

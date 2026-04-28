@@ -312,7 +312,7 @@ export class SchemaGrammar implements Grammar {
         let textError: string | undefined = undefined;
         if (fixedValue !== undefined && text.trim() !== '') {
             const normalizedText: string = text.replaceAll(/[\t\n\r ]+/g, ' ').trim();
-            if (normalizedText !== fixedValue) {
+            if (!this.fixedValueMatches(normalizedText, fixedValue, textDecl, instanceNs)) {
                 textError = 'Element "' + element + '" has a fixed value "' + fixedValue + '" but got "' + normalizedText + '"';
             }
         }
@@ -931,6 +931,36 @@ export class SchemaGrammar implements Grammar {
             return 'http://www.w3.org/XML/1998/namespace';
         }
         return this.namespaceDeclarations.get(prefix);
+    }
+
+    private fixedValueMatches(instanceText: string, fixedValue: string, textDecl: SchemaElementDecl, instanceNs?: Map<string, string>): boolean {
+        const simpleType: string | undefined = textDecl.getSimpleType();
+        if (simpleType !== undefined) {
+            return SchemaTypeValidator.canonicalize(instanceText, simpleType, instanceNs) === SchemaTypeValidator.canonicalize(fixedValue, simpleType, instanceNs);
+        }
+        const unionAlternatives: Array<{ facets: SchemaFacets, baseType: string }> | undefined = textDecl.getUnionAlternatives();
+        if (unionAlternatives !== undefined && unionAlternatives.length > 0) {
+            for (const alt of unionAlternatives) {
+                if (SchemaTypeValidator.validate(fixedValue, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(fixedValue, alt.facets, alt.baseType)) {
+                    if (SchemaTypeValidator.validate(instanceText, alt.baseType, instanceNs) && SchemaTypeValidator.validateFacets(instanceText, alt.facets, alt.baseType)) {
+                        return SchemaTypeValidator.canonicalize(instanceText, alt.baseType, instanceNs) === SchemaTypeValidator.canonicalize(fixedValue, alt.baseType, instanceNs);
+                    }
+                }
+            }
+            return false;
+        }
+        const unionMemberTypes: string[] | undefined = textDecl.getUnionMemberTypes();
+        if (unionMemberTypes !== undefined && unionMemberTypes.length > 0) {
+            for (const memberType of unionMemberTypes) {
+                if (this.validateTokenForType(fixedValue, memberType, instanceNs)) {
+                    if (this.validateTokenForType(instanceText, memberType, instanceNs)) {
+                        return SchemaTypeValidator.canonicalize(instanceText, memberType, instanceNs) === SchemaTypeValidator.canonicalize(fixedValue, memberType, instanceNs);
+                    }
+                }
+            }
+            return false;
+        }
+        return instanceText === fixedValue;
     }
 
     private buildElementKey(name: string, namespace: string | undefined): string {
