@@ -516,6 +516,13 @@ export class SchemaGrammar implements Grammar {
                         declaredTypeName + '" has final="' + finalBlockedMethod + '"'
                     );
                 }
+                const blockMethod: string | undefined = this.getBlockedDerivationMethod(context.xsiType, declaredTypeName);
+                if (blockMethod !== undefined) {
+                    return ValidationResult.error(
+                        'xsi:type "' + context.xsiType + '" is blocked by type "' +
+                        declaredTypeName + '" which has block="' + blockMethod + '"'
+                    );
+                }
             }
         }
 
@@ -931,6 +938,35 @@ export class SchemaGrammar implements Grammar {
             }
         }
 
+        return undefined;
+    }
+
+    private getBlockedDerivationMethod(candidate: string, required: string): string | undefined {
+        const requiredDecl: SchemaElementDecl | undefined =
+            this.complexTypeDecls.get(required) ?? this.simpleTypeDecls.get(required);
+        if (requiredDecl === undefined) {
+            return undefined;
+        }
+        const blockSet: Set<string> = requiredDecl.getBlockConstraints();
+        if (blockSet.size === 0) {
+            return undefined;
+        }
+        let current: string | undefined = candidate;
+        const visited: Set<string> = new Set<string>();
+        while (current !== undefined && current !== required) {
+            if (visited.has(current)) {
+                break;
+            }
+            visited.add(current);
+            const entry: { base: string, method: string } | undefined = this.typeHierarchy.get(current);
+            if (!entry) {
+                break;
+            }
+            if (blockSet.has('#all') || blockSet.has(entry.method)) {
+                return entry.method;
+            }
+            current = entry.base;
+        }
         return undefined;
     }
 

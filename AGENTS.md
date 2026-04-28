@@ -74,7 +74,7 @@ TypesXML supports three grammar types with different capabilities:
 
 - **DTD**: Full validation when `setValidating(true)` is enabled. Default attributes merge automatically regardless of validation mode.
 - **RelaxNG**: Default attributes are extracted and merged during parsing. No validation—defaults only.
-- **XML Schema**: Full validation when `setValidating(true)` is enabled, passing 96.4% of the W3C XML Schema Test Suite (2006 edition). Default attributes are also extracted and merged during parsing regardless of validation mode.
+- **XML Schema**: Full validation when `setValidating(true)` is enabled, passing 96.5% of the W3C XML Schema Test Suite (2006 edition). Default attributes are also extracted and merged during parsing regardless of validation mode.
 
 All grammars are loaded automatically when referenced in XML documents (via DOCTYPE, `xsi:schemaLocation`, or processing instructions) and resolved through the catalog if configured. Use `parser.processedSchemaLocations` and `parser.processedNamespaces` to confirm which grammars loaded successfully.
 

@@ -118,6 +118,17 @@ export class XSDSemanticValidator {
             XSDSemanticValidator.checkListItemTypeVariety(root, allSimpleTypes);
             XSDSemanticValidator.checkSimpleTypeRestrictionBaseRefs(root, allSimpleTypes, schemaTargetNs, schemaDefaultNs, schemaPrefixMap);
         }
+        const constraintsByNs: Map<string, Set<string>> = new Map<string, Set<string>>();
+        for (const root of roots) {
+            const targetNs: string = root.getAttribute('targetNamespace')?.getValue() ?? '';
+            if (!constraintsByNs.has(targetNs)) {
+                constraintsByNs.set(targetNs, new Set<string>());
+            }
+            const names: Set<string> | undefined = constraintsByNs.get(targetNs);
+            if (names !== undefined) {
+                XSDSemanticValidator.gatherConstraintNames(root, names);
+            }
+        }
         XSDSemanticValidator.checkCircularTypeDefinitions(allSimpleTypes);
     }
 
@@ -1083,7 +1094,9 @@ export class XSDSemanticValidator {
         prefixMap: Map<string, string>
     ): void {
         if (qname.indexOf(':') === -1) {
-            const nsKey: string = targetNs.length > 0 ? targetNs + '|' + qname : qname;
+            const xsdNs: string = 'http://www.w3.org/2001/XMLSchema';
+            const effectiveNs: string = (defaultNs.length > 0 && defaultNs !== xsdNs) ? defaultNs : '';
+            const nsKey: string = effectiveNs.length > 0 ? effectiveNs + '|' + qname : qname;
             if (!topLevelElements.has(qname) && !topLevelElements.has(nsKey)) {
                 throw new Error('xs:element ref="' + qname + '" refers to undeclared element "' + qname + '"');
             }
@@ -1699,6 +1712,23 @@ export class XSDSemanticValidator {
         const isCompositor: boolean = local === 'sequence' || local === 'choice';
         for (const child of el.getChildren()) {
             XSDSemanticValidator.checkAllNesting(child, resetsContext ? false : (insideCompositor || isCompositor));
+        }
+    }
+
+    private static gatherConstraintNames(el: XMLElement, names: Set<string>): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'key' || local === 'unique' || local === 'keyref') {
+            const nameAttr: XMLAttribute | undefined = el.getAttribute('name');
+            if (nameAttr) {
+                const constraintName: string = nameAttr.getValue();
+                if (names.has(constraintName)) {
+                    throw new Error('Duplicate identity constraint name across included schemas: "' + constraintName + '"');
+                }
+                names.add(constraintName);
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.gatherConstraintNames(child, names);
         }
     }
 

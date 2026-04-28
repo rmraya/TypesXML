@@ -126,7 +126,7 @@ export class SchemaContentModel {
         // MIXED: child elements must conform to the declared particle when one exists.
         // If no particle is present, any children are allowed.
         if (this.type === SchemaContentModelType.MIXED) {
-            if (!this.rootParticle || children.length === 0) {
+            if (!this.rootParticle) {
                 return ValidationResult.success();
             }
         }
