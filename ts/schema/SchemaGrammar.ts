@@ -102,6 +102,8 @@ export class SchemaGrammar implements Grammar {
     private wildcardParentDecls: Map<number, SchemaElementDecl>;
     private nilDepths: Set<number>;
     private activeScopes: IdentityConstraintScope[];
+    private completedKeys: Map<string, Array<Array<string | undefined>>>;
+    private elementPath: string[];
     private documentIds: Set<string>;
     private documentIdrefs: Set<string>;
 
@@ -120,6 +122,8 @@ export class SchemaGrammar implements Grammar {
         this.wildcardParentDecls = new Map<number, SchemaElementDecl>();
         this.nilDepths = new Set<number>();
         this.activeScopes = [];
+        this.completedKeys = new Map<string, Array<Array<string | undefined>>>();
+        this.elementPath = [];
         this.documentIds = new Set<string>();
         this.documentIdrefs = new Set<string>();
     }
@@ -207,6 +211,7 @@ export class SchemaGrammar implements Grammar {
         if (this.wildcardSkipDepth !== -1) {
             if (this.depth === this.wildcardSkipDepth) {
                 this.wildcardSkipDepth = -1;
+                this.elementPath.pop();
             }
             this.wildcardParentDecls.delete(this.depth);
             this.depth--;
@@ -215,19 +220,25 @@ export class SchemaGrammar implements Grammar {
         this.wildcardParentDecls.delete(this.depth);
         if (this.nilDepths.delete(this.depth)) {
             if (children.length > 0 || text.trim().length > 0) {
+                this.elementPath.pop();
                 this.depth--;
                 return ValidationResult.error(
                     'Element "' + element + '" has xsi:nil="true" but must be empty'
                 );
             }
+            this.elementPath.pop();
             this.depth--;
             return ValidationResult.success();
         }
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
+            this.elementPath.pop();
+            this.depth--;
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
         if (decl.isAbstractElement()) {
+            this.elementPath.pop();
+            this.depth--;
             return ValidationResult.error(
                 'Element "' + element + '" is declared abstract and cannot appear directly in an instance'
             );
@@ -321,6 +332,8 @@ export class SchemaGrammar implements Grammar {
             }
         }
         if (textError !== undefined) {
+            this.elementPath.pop();
+            this.depth--;
             return ValidationResult.error(textError);
         }
         if (this.activeScopes.length > 0) {
@@ -334,10 +347,13 @@ export class SchemaGrammar implements Grammar {
                         if (!top.nil && !top.overflow) {
                             const idError: string | undefined = this.commitTuple(scope, top.tuple, element);
                             if (idError !== undefined) {
+                                this.elementPath.pop();
                                 this.depth--;
                                 return ValidationResult.error(idError);
                             }
                         }
+                    } else if (top.depth < this.depth) {
+                        this.collectDescendantFieldsFromElement(scope, text, elemLocal);
                     }
                 }
             }
@@ -348,9 +364,12 @@ export class SchemaGrammar implements Grammar {
                         const krError: string | undefined = this.validateKeyrefScope(scope);
                         if (krError !== undefined) {
                             this.activeScopes.splice(i, 1);
+                            this.elementPath.pop();
                             this.depth--;
                             return ValidationResult.error(krError);
                         }
+                    } else {
+                        this.completedKeys.set(scope.constraint.name, scope.tuples);
                     }
                     this.activeScopes.splice(i, 1);
                 }
@@ -359,11 +378,13 @@ export class SchemaGrammar implements Grammar {
         if (this.depth === 1) {
             for (const ref of this.documentIdrefs) {
                 if (!this.documentIds.has(ref)) {
+                    this.elementPath.pop();
                     this.depth--;
                     return ValidationResult.error('xs:IDREF value "' + ref + '" does not reference any xs:ID in the document');
                 }
             }
         }
+        this.elementPath.pop();
         this.depth--;
         return contentResult;
     }
@@ -374,12 +395,15 @@ export class SchemaGrammar implements Grammar {
             this.documentIds = new Set<string>();
             this.documentIdrefs = new Set<string>();
             this.activeScopes = [];
+            this.completedKeys = new Map<string, Array<Array<string | undefined>>>();
+            this.elementPath = [];
             this.wildcardSkipDepth = -1;
             this.wildcardParentDecls = new Map<number, SchemaElementDecl>();
         }
         if (this.wildcardSkipDepth !== -1 && this.depth > this.wildcardSkipDepth) {
             return ValidationResult.success();
         }
+        this.elementPath.push(this.localName(element));
         const context: SchemaValidationContext = new SchemaValidationContext();
 
         // Detect xsi:nil and xsi:type
@@ -1025,7 +1049,18 @@ export class SchemaGrammar implements Grammar {
                 }
             } else {
                 if (relativeDepth === alt.segments.length) {
-                    return true;
+                    let intermediateMatch: boolean = true;
+                    for (let si: number = 0; si < alt.segments.length - 1; si++) {
+                        const seg: string = alt.segments[si];
+                        const pathName: string | undefined = this.elementPath[scope.rootDepth + si];
+                        if (seg !== '*' && seg !== pathName) {
+                            intermediateMatch = false;
+                            break;
+                        }
+                    }
+                    if (intermediateMatch) {
+                        return true;
+                    }
                 }
             }
         }
@@ -1042,6 +1077,26 @@ export class SchemaGrammar implements Grammar {
             const alternatives: Array<{ isAttribute: boolean, localName: string, descendant: boolean }> = this.parseFieldAlternatives(scope.constraint.fields[i]);
             for (const alt of alternatives) {
                 if (alt.isAttribute) {
+                    continue;
+                }
+                if (alt.localName === '' || alt.localName === elementLocalName || alt.localName === '*') {
+                    pendingTop.tuple[i] = 'string\x02' + normalized;
+                    break;
+                }
+            }
+        }
+    }
+
+    private collectDescendantFieldsFromElement(scope: IdentityConstraintScope, text: string, elementLocalName: string): void {
+        const pendingTop: PendingTupleEntry = scope.pendingStack[scope.pendingStack.length - 1];
+        const normalized: string = text.replaceAll(/[\t\n\r ]+/g, ' ').trim();
+        for (let i: number = 0; i < scope.constraint.fields.length; i++) {
+            if (pendingTop.tuple[i] !== undefined) {
+                continue;
+            }
+            const alternatives: Array<{ isAttribute: boolean, localName: string, descendant: boolean }> = this.parseFieldAlternatives(scope.constraint.fields[i]);
+            for (const alt of alternatives) {
+                if (alt.isAttribute || !alt.descendant) {
                     continue;
                 }
                 if (alt.localName === '' || alt.localName === elementLocalName || alt.localName === '*') {
@@ -1091,7 +1146,9 @@ export class SchemaGrammar implements Grammar {
         const refScope: IdentityConstraintScope | undefined = this.activeScopes.find(
             (s: IdentityConstraintScope) => s.constraint.name === referName
         );
-        if (refScope === undefined) {
+        const refTuples: Array<Array<string | undefined>> | undefined =
+            refScope !== undefined ? refScope.tuples : this.completedKeys.get(referName);
+        if (refTuples === undefined) {
             return undefined;
         }
         for (const tuple of scope.tuples) {
@@ -1099,7 +1156,7 @@ export class SchemaGrammar implements Grammar {
                 continue;
             }
             const key: string = this.tupleKey(tuple);
-            if (!refScope.tuples.some((t: Array<string | undefined>) => this.tupleKey(t) === key)) {
+            if (!refTuples.some((t: Array<string | undefined>) => this.tupleKey(t) === key)) {
                 return 'Keyref constraint "' + scope.constraint.name + '" references a key that does not exist';
             }
         }
