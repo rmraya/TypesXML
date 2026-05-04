@@ -89,11 +89,13 @@ export class XSDSemanticValidator {
         XSDSemanticValidator.checkElementRefConstraints(schemaRoot);
         XSDSemanticValidator.checkAttributeUseConstraints(schemaRoot);
         XSDSemanticValidator.checkOccurrenceConstraints(schemaRoot);
+        XSDSemanticValidator.checkWildcardNamespaceValues(schemaRoot);
         XSDSemanticValidator.checkSimpleTypeChildren(schemaRoot);
         XSDSemanticValidator.checkListUnionConstraints(schemaRoot);
         XSDSemanticValidator.checkComplexTypeContentModel(schemaRoot);
         XSDSemanticValidator.checkGroupCompositorCount(schemaRoot);
         XSDSemanticValidator.checkBlockFinalAttributes(schemaRoot);
+        XSDSemanticValidator.checkSubstitutionGroupCycles(schemaRoot);
     }
 
     static validateCrossReferences(
@@ -129,7 +131,10 @@ export class XSDSemanticValidator {
                 XSDSemanticValidator.gatherConstraintNames(root, names);
             }
         }
-        XSDSemanticValidator.checkCircularTypeDefinitions(allSimpleTypes);
+        const redefineComplexTypeNames: Set<string> = XSDSemanticValidator.collectRedefineTypeNames(roots, 'complexType');
+        XSDSemanticValidator.checkCircularComplexTypeDefinitions(allComplexTypes, redefineComplexTypeNames);
+        const redefineSimpleTypeNames: Set<string> = XSDSemanticValidator.collectRedefineTypeNames(roots, 'simpleType');
+        XSDSemanticValidator.checkCircularTypeDefinitions(allSimpleTypes, redefineSimpleTypeNames);
     }
 
     private static checkSimpleTypeRestrictionBaseRefs(
@@ -160,13 +165,84 @@ export class XSDSemanticValidator {
         }
     }
 
-    private static checkCircularTypeDefinitions(simpleTypes: Map<string, XMLElement>): void {
+    private static collectRedefineTypeNames(roots: Array<XMLElement>, tagName: string): Set<string> {
+        const names: Set<string> = new Set<string>();
+        for (const root of roots) {
+            for (const child of root.getChildren()) {
+                if (XSDSemanticValidator.localName(child.getName()) === 'redefine') {
+                    for (const redefChild of child.getChildren()) {
+                        if (XSDSemanticValidator.localName(redefChild.getName()) === tagName) {
+                            const nameAttr: XMLAttribute | undefined = redefChild.getAttribute('name');
+                            if (nameAttr) {
+                                names.add(nameAttr.getValue());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return names;
+    }
+
+    private static checkCircularComplexTypeDefinitions(complexTypes: Map<string, XMLElement>, redefineTypeNames: Set<string> = new Set<string>()): void {
+        const checked: Set<string> = new Set<string>();
+        for (const typeName of complexTypes.keys()) {
+            if (checked.has(typeName)) {
+                continue;
+            }
+            XSDSemanticValidator.walkComplexTypeChain(typeName, complexTypes, new Set<string>(), checked, redefineTypeNames);
+        }
+    }
+
+    private static walkComplexTypeChain(
+        typeName: string,
+        complexTypes: Map<string, XMLElement>,
+        chain: Set<string>,
+        checked: Set<string>,
+        redefineTypeNames: Set<string>
+    ): void {
+        const local: string = XSDSemanticValidator.localName(typeName);
+        if (checked.has(local)) {
+            return;
+        }
+        if (chain.has(local)) {
+            throw new Error('Circular type definition detected: complexType "' + local + '" is part of a derivation cycle');
+        }
+        const typeEl: XMLElement | undefined = complexTypes.get(local);
+        if (!typeEl) {
+            checked.add(local);
+            return;
+        }
+        chain.add(local);
+        for (const child of typeEl.getChildren()) {
+            const childLocal: string = XSDSemanticValidator.localName(child.getName());
+            if (childLocal === 'complexContent' || childLocal === 'simpleContent') {
+                for (const derivChild of child.getChildren()) {
+                    const derivLocal: string = XSDSemanticValidator.localName(derivChild.getName());
+                    if (derivLocal === 'extension' || derivLocal === 'restriction') {
+                        const baseAttr: XMLAttribute | undefined = derivChild.getAttribute('base');
+                        if (baseAttr) {
+                            const baseName: string = XSDSemanticValidator.localName(baseAttr.getValue());
+                            if (baseName === local && redefineTypeNames.has(local)) {
+                                continue;
+                            }
+                            XSDSemanticValidator.walkComplexTypeChain(baseAttr.getValue(), complexTypes, chain, checked, redefineTypeNames);
+                        }
+                    }
+                }
+            }
+        }
+        chain.delete(local);
+        checked.add(local);
+    }
+
+    private static checkCircularTypeDefinitions(simpleTypes: Map<string, XMLElement>, redefineTypeNames: Set<string> = new Set<string>()): void {
         const checked: Set<string> = new Set<string>();
         for (const typeName of simpleTypes.keys()) {
             if (checked.has(typeName)) {
                 continue;
             }
-            XSDSemanticValidator.walkRestrictionChain(typeName, simpleTypes, new Set<string>(), checked);
+            XSDSemanticValidator.walkRestrictionChain(typeName, simpleTypes, new Set<string>(), checked, redefineTypeNames);
         }
     }
 
@@ -174,7 +250,8 @@ export class XSDSemanticValidator {
         typeName: string,
         simpleTypes: Map<string, XMLElement>,
         chain: Set<string>,
-        checked: Set<string>
+        checked: Set<string>,
+        redefineTypeNames: Set<string> = new Set<string>()
     ): void {
         const local: string = XSDSemanticValidator.localName(typeName);
         if (checked.has(local)) {
@@ -193,7 +270,11 @@ export class XSDSemanticValidator {
             if (XSDSemanticValidator.localName(child.getName()) === 'restriction') {
                 const baseAttr: XMLAttribute | undefined = child.getAttribute('base');
                 if (baseAttr) {
-                    XSDSemanticValidator.walkRestrictionChain(baseAttr.getValue(), simpleTypes, chain, checked);
+                    const baseName: string = XSDSemanticValidator.localName(baseAttr.getValue());
+                    if (baseName === local && redefineTypeNames.has(local)) {
+                        continue;
+                    }
+                    XSDSemanticValidator.walkRestrictionChain(baseAttr.getValue(), simpleTypes, chain, checked, redefineTypeNames);
                 }
             }
         }
@@ -2174,10 +2255,40 @@ export class XSDSemanticValidator {
                 if (maxVal !== 'unbounded' && !/^\d+$/.test(maxVal)) {
                     throw new Error('xs:' + local + ' maxOccurs must be a non-negative integer or "unbounded", got: "' + maxVal + '"');
                 }
+                if (maxVal !== 'unbounded' && minOccursAttr !== undefined) {
+                    const minNum: number = parseInt(minOccursAttr.getValue(), 10);
+                    const maxNum: number = parseInt(maxVal, 10);
+                    if (minNum > maxNum) {
+                        throw new Error('xs:' + local + ' minOccurs (' + minNum + ') must not be greater than maxOccurs (' + maxNum + ')');
+                    }
+                }
             }
         }
         for (const child of el.getChildren()) {
             XSDSemanticValidator.checkOccurrenceConstraints(child);
+        }
+    }
+
+    private static checkWildcardNamespaceValues(el: XMLElement): void {
+        const local: string = XSDSemanticValidator.localName(el.getName());
+        if (local === 'appinfo' || local === 'documentation') {
+            return;
+        }
+        if (local === 'any' || local === 'anyAttribute') {
+            const nsAttr: XMLAttribute | undefined = el.getAttribute('namespace');
+            if (nsAttr !== undefined) {
+                const val: string = nsAttr.getValue().trim();
+                if (val !== '##any' && val !== '##other') {
+                    for (const token of val.split(/\s+/)) {
+                        if (token.startsWith('##') && token !== '##targetNamespace' && token !== '##local') {
+                            throw new Error('xs:' + local + ' namespace contains invalid token "' + token + '"');
+                        }
+                    }
+                }
+            }
+        }
+        for (const child of el.getChildren()) {
+            XSDSemanticValidator.checkWildcardNamespaceValues(child);
         }
     }
 
@@ -2359,6 +2470,33 @@ export class XSDSemanticValidator {
         }
         for (const child of el.getChildren()) {
             XSDSemanticValidator.checkBlockFinalAttributes(child);
+        }
+    }
+
+    private static checkSubstitutionGroupCycles(schemaRoot: XMLElement): void {
+        const topLevelElements: Map<string, XMLElement> = new Map<string, XMLElement>();
+        for (const child of schemaRoot.getChildren()) {
+            if (XSDSemanticValidator.localName(child.getName()) === 'element') {
+                const nameAttr: XMLAttribute | undefined = child.getAttribute('name');
+                if (nameAttr) {
+                    topLevelElements.set(nameAttr.getValue(), child);
+                }
+            }
+        }
+        for (const memberName of topLevelElements.keys()) {
+            const visited: Set<string> = new Set<string>();
+            let current: string = memberName;
+            while (true) {
+                if (visited.has(current)) {
+                    throw new Error('Cyclic substitution group detected involving element "' + current + '"');
+                }
+                visited.add(current);
+                const el: XMLElement | undefined = topLevelElements.get(current);
+                if (!el) { break; }
+                const sgAttr: XMLAttribute | undefined = el.getAttribute('substitutionGroup');
+                if (!sgAttr) { break; }
+                current = XSDSemanticValidator.localName(sgAttr.getValue().trim());
+            }
         }
     }
 

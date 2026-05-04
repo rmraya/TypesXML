@@ -44,6 +44,9 @@ export class SchemaWildcardParticle extends SchemaParticle {
         let childNs: string | undefined;
         if (prefix !== undefined) {
             childNs = nsMap ? nsMap.get(prefix) : undefined;
+            if (childNs === undefined) {
+                throw new Error('Undeclared namespace prefix "' + prefix + '" in element "' + childName + '"');
+            }
         } else {
             const defaultNs: string | undefined = nsMap ? nsMap.get('') : undefined;
             childNs = defaultNs !== '' ? defaultNs : undefined;
