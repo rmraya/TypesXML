@@ -31,7 +31,7 @@ export class SchemaWildcardParticle extends SchemaParticle {
         this.schemaTargetNamespace = schemaTargetNamespace;
     }
 
-    matchOnce(children: string[], pos: number, nsMap?: Map<string, string>): number[] {
+    matchOnce(children: string[], pos: number, nsMap?: Map<string, string>, childNamespaces?: string[]): number[] {
         if (pos >= children.length) {
             return [];
         }
@@ -42,7 +42,9 @@ export class SchemaWildcardParticle extends SchemaParticle {
         const colonIdx: number = childName.indexOf(':');
         const prefix: string | undefined = colonIdx !== -1 ? childName.substring(0, colonIdx) : undefined;
         let childNs: string | undefined;
-        if (prefix !== undefined) {
+        if (childNamespaces !== undefined && pos < childNamespaces.length) {
+            childNs = childNamespaces[pos] !== '' ? childNamespaces[pos] : undefined;
+        } else if (prefix !== undefined) {
             childNs = nsMap ? nsMap.get(prefix) : undefined;
             if (childNs === undefined) {
                 throw new Error('Undeclared namespace prefix "' + prefix + '" in element "' + childName + '"');

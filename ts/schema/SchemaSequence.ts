@@ -21,12 +21,12 @@ export class SchemaSequence extends SchemaParticle {
         this.particles = particles;
     }
 
-    matchOnce(children: string[], pos: number, nsMap?: Map<string, string>): number[] {
+    matchOnce(children: string[], pos: number, nsMap?: Map<string, string>, childNamespaces?: string[]): number[] {
         let positions: Set<number> = new Set<number>([pos]);
         for (const particle of this.particles) {
             const nextPositions: Set<number> = new Set<number>();
             for (const p of positions) {
-                const matched: number[] = particle.matchRepeated(children, p, nsMap);
+                const matched: number[] = particle.matchRepeated(children, p, nsMap, childNamespaces);
                 for (const m of matched) {
                     nextPositions.add(m);
                 }

@@ -106,6 +106,8 @@ export class SchemaGrammar implements Grammar {
     private elementPath: string[];
     private documentIds: Set<string>;
     private documentIdrefs: Set<string>;
+    private defaultNsStack: string[];
+    private childNamespacesByDepth: Map<number, string[]>;
 
     constructor() {
         this.elementDecls = new Map<string, SchemaElementDecl>();
@@ -126,6 +128,8 @@ export class SchemaGrammar implements Grammar {
         this.elementPath = [];
         this.documentIds = new Set<string>();
         this.documentIdrefs = new Set<string>();
+        this.defaultNsStack = [];
+        this.childNamespacesByDepth = new Map<number, string[]>();
     }
 
     addTargetNamespace(namespace: string): void {
@@ -208,6 +212,11 @@ export class SchemaGrammar implements Grammar {
     }
 
     validateElement(element: string, namespace: string, children: string[], text: string): ValidationResult {
+        if (this.defaultNsStack.length > 0) {
+            this.defaultNsStack.pop();
+        }
+        const childNamespaces: string[] | undefined = this.childNamespacesByDepth.get(this.depth);
+        this.childNamespacesByDepth.delete(this.depth);
         if (this.wildcardSkipDepth !== -1) {
             if (this.depth === this.wildcardSkipDepth) {
                 this.wildcardSkipDepth = -1;
@@ -249,7 +258,7 @@ export class SchemaGrammar implements Grammar {
         const effectiveDecl: SchemaElementDecl = xsiTypeName !== undefined
             ? (this.complexTypeDecls.get(xsiTypeName) ?? decl)
             : decl;
-        const contentResult: ValidationResult = effectiveDecl.getContentModel().validateChildren(element, children, nsMap);
+        const contentResult: ValidationResult = effectiveDecl.getContentModel().validateChildren(element, children, nsMap, childNamespaces);
         if (!contentResult.isValid) {
             return contentResult;
         }
@@ -399,8 +408,40 @@ export class SchemaGrammar implements Grammar {
             this.elementPath = [];
             this.wildcardSkipDepth = -1;
             this.wildcardParentDecls = new Map<number, SchemaElementDecl>();
+            this.defaultNsStack = [];
+            this.childNamespacesByDepth = new Map<number, string[]>();
         }
         if (this.wildcardSkipDepth !== -1 && this.depth > this.wildcardSkipDepth) {
+            const skipParentDefaultNs: string = this.defaultNsStack.length > 0 ? this.defaultNsStack[this.defaultNsStack.length - 1] : '';
+            let skipDefaultNs: string = skipParentDefaultNs;
+            for (const [attrName, attrValue] of attributes) {
+                if (attrName === 'xmlns') {
+                    skipDefaultNs = attrValue;
+                    break;
+                }
+            }
+            this.defaultNsStack.push(skipDefaultNs);
+            const skipColonIdx: number = element.indexOf(':');
+            const skipPrefix: string = skipColonIdx !== -1 ? element.substring(0, skipColonIdx) : '';
+            let skipNs: string;
+            if (skipPrefix !== '') {
+                skipNs = this.namespaceDeclarations.get(skipPrefix) ?? '';
+                if (skipNs === '') {
+                    for (const [attrName, attrValue] of attributes) {
+                        if (attrName === 'xmlns:' + skipPrefix) {
+                            skipNs = attrValue;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                skipNs = skipDefaultNs;
+            }
+            const skipParentDepth: number = this.depth - 1;
+            if (!this.childNamespacesByDepth.has(skipParentDepth)) {
+                this.childNamespacesByDepth.set(skipParentDepth, []);
+            }
+            (this.childNamespacesByDepth.get(skipParentDepth) as string[]).push(skipNs);
             return ValidationResult.success();
         }
         this.elementPath.push(this.localName(element));
@@ -442,12 +483,43 @@ export class SchemaGrammar implements Grammar {
             }
         }
 
+        const parentDefaultNs: string = this.defaultNsStack.length > 0 ? this.defaultNsStack[this.defaultNsStack.length - 1] : '';
+        const thisDefaultNs: string = context.instanceNamespaces.has('') ? (context.instanceNamespaces.get('') as string) : parentDefaultNs;
+        this.defaultNsStack.push(thisDefaultNs);
+
+        const mergedNamespaces: Map<string, string> = new Map<string, string>();
+        for (const [p, u] of this.namespaceDeclarations) {
+            mergedNamespaces.set(p, u);
+        }
+        mergedNamespaces.set('', thisDefaultNs);
+        for (const [p, u] of context.instanceNamespaces) {
+            mergedNamespaces.set(p, u);
+        }
+
+        const colonIdxForNs: number = element.indexOf(':');
+        const elemPrefixForNs: string = colonIdxForNs !== -1 ? element.substring(0, colonIdxForNs) : '';
+        let resolvedNsForParent: string;
+        if (elemPrefixForNs !== '') {
+            resolvedNsForParent = context.instanceNamespaces.get(elemPrefixForNs) ?? this.resolvePrefix(elemPrefixForNs) ?? '';
+        } else {
+            resolvedNsForParent = thisDefaultNs;
+        }
+        const parentDepth: number = this.depth - 1;
+        if (!this.childNamespacesByDepth.has(parentDepth)) {
+            this.childNamespacesByDepth.set(parentDepth, []);
+        }
+        (this.childNamespacesByDepth.get(parentDepth) as string[]).push(resolvedNsForParent);
+
         // Lookup element declaration
         const decl: SchemaElementDecl | undefined = this.lookupElementDecl(element);
         if (!decl) {
             const parentDecl: SchemaElementDecl | undefined = this.wildcardParentDecls.get(this.depth - 1);
             if (parentDecl !== undefined) {
-                const wc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, context.instanceNamespaces);
+                if (parentDecl.getContentModel().getType() === SchemaContentModelType.ANY) {
+                    this.wildcardSkipDepth = this.depth;
+                    return ValidationResult.success();
+                }
+                const wc: 'strict' | 'lax' | 'skip' | undefined = parentDecl.getContentModel().findCoveringWildcard(element, mergedNamespaces);
                 if (wc === 'skip' || wc === 'lax') {
                     this.wildcardSkipDepth = this.depth;
                     return ValidationResult.success();
@@ -457,7 +529,7 @@ export class SchemaGrammar implements Grammar {
             return ValidationResult.error('Element "' + element + '" is not declared in the schema');
         }
         context.wildcardMode = 'normal';
-        const parentWc: 'strict' | 'lax' | 'skip' | undefined = this.wildcardParentDecls.get(this.depth - 1)?.getContentModel().findCoveringWildcard(element, context.instanceNamespaces);
+        const parentWc: 'strict' | 'lax' | 'skip' | undefined = this.wildcardParentDecls.get(this.depth - 1)?.getContentModel().findCoveringWildcard(element, mergedNamespaces);
         if (parentWc === 'skip') {
             this.wildcardSkipDepth = this.depth;
             return ValidationResult.success();
@@ -679,7 +751,7 @@ export class SchemaGrammar implements Grammar {
             }
         }
 
-        if (decl.getContentModel().hasAnyWildcard()) {
+        if (decl.getContentModel().hasAnyWildcard() || decl.getContentModel().getType() === SchemaContentModelType.ANY) {
             this.wildcardParentDecls.set(this.depth, decl);
         }
 

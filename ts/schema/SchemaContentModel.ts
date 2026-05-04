@@ -109,7 +109,7 @@ export class SchemaContentModel {
         return undefined;
     }
 
-    validateChildren(elementName: string, children: string[], nsMap?: Map<string, string>): ValidationResult {
+    validateChildren(elementName: string, children: string[], nsMap?: Map<string, string>, childNamespaces?: string[]): ValidationResult {
         if (this.type === SchemaContentModelType.EMPTY) {
             if (children.length > 0) {
                 return ValidationResult.error(
@@ -143,7 +143,7 @@ export class SchemaContentModel {
 
         // Run the NFA: success when the root particle's matchRepeated can reach
         // exactly children.length (all children consumed).
-        const positions: number[] = this.rootParticle.matchRepeated(children, 0, nsMap);
+        const positions: number[] = this.rootParticle.matchRepeated(children, 0, nsMap, childNamespaces);
         for (const p of positions) {
             if (p === children.length) {
                 return ValidationResult.success();
