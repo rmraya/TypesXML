@@ -235,8 +235,8 @@ export class SchemaBuilder extends XMLSchemaParser {
             const decl: SchemaElementDecl = new SchemaElementDecl(typeLocalName, typeNamespace);
             decl.setContentModel(this.buildContentModel(typeElement, typeNamespace));
             const { attrs, anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces } = this.collectAllAttributes(typeElement, typeNamespace);
-            for (const attrDecl of attrs.values()) {
-                decl.addAttributeDecl(attrDecl);
+            for (const [attributeName, attrDecl] of attrs) {
+                decl.addAttributeDeclWithKey(attributeName, attrDecl);
             }
             if (anyAttributeNamespace !== undefined) {
                 decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces);
@@ -605,8 +605,8 @@ export class SchemaBuilder extends XMLSchemaParser {
         if (typeElement) {
             decl.setContentModel(this.buildContentModel(typeElement, info.namespace));
             const { attrs, anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces } = this.collectAllAttributes(typeElement, info.namespace);
-            for (const attrDecl of attrs.values()) {
-                decl.addAttributeDecl(attrDecl);
+            for (const [attributeName, attrDecl] of attrs) {
+                decl.addAttributeDeclWithKey(attributeName, attrDecl);
             }
             if (anyAttributeNamespace !== undefined) {
                 decl.setAnyAttribute(anyAttributeNamespace, anyAttributeProcessContents, anyAttributeOwnerNs, anyAttributeExcludedNamespaces);
@@ -1154,7 +1154,8 @@ export class SchemaBuilder extends XMLSchemaParser {
             if (localName === 'attribute') {
                 const attrDecl: SchemaAttributeDecl | undefined = this.buildAttributeDecl(child, namespace);
                 if (attrDecl) {
-                    result.set(attrDecl.getName(), attrDecl);
+                    const attributeName: string = this.getAttributeDisplayName(attrDecl, namespace);
+                    result.set(attributeName, attrDecl);
                 }
             } else if (localName === 'anyAttribute') {
                 if (onAnyAttribute) {
@@ -1709,6 +1710,49 @@ export class SchemaBuilder extends XMLSchemaParser {
             }
         }
         return typeValue;
+    }
+
+    private getAttributeDisplayName(attrDecl: SchemaAttributeDecl, contextNamespace?: string): string {
+        const attributeNamespace: string | undefined = attrDecl.getNamespace();
+        if (attributeNamespace === undefined) {
+            return attrDecl.getName();
+        }
+        if (attributeNamespace === 'http://www.w3.org/XML/1998/namespace') {
+            return 'xml:' + attrDecl.getName();
+        }
+        const prefix: string | undefined = this.findPrefixForNamespace(attributeNamespace, contextNamespace);
+        if (prefix !== undefined && prefix.length > 0) {
+            return prefix + ':' + attrDecl.getName();
+        }
+        return attrDecl.getName();
+    }
+
+    private findPrefixForNamespace(namespaceUri: string, contextNamespace?: string): string | undefined {
+        const contextKey: string = contextNamespace !== undefined ? contextNamespace : '';
+        const contextMap: Map<string, string> | undefined = this.schemaPrefixMaps.get(contextKey);
+        if (contextMap) {
+            for (const [prefix, uri] of contextMap) {
+                if (uri === namespaceUri && prefix.length > 0) {
+                    return prefix;
+                }
+            }
+        }
+        const fallbackMap: Map<string, string> | undefined = this.schemaPrefixMaps.get('');
+        if (fallbackMap) {
+            for (const [prefix, uri] of fallbackMap) {
+                if (uri === namespaceUri && prefix.length > 0) {
+                    return prefix;
+                }
+            }
+        }
+        for (const [, map] of this.schemaPrefixMaps) {
+            for (const [prefix, uri] of map) {
+                if (uri === namespaceUri && prefix.length > 0) {
+                    return prefix;
+                }
+            }
+        }
+        return undefined;
     }
 
     private resolveSimpleTypeBase(simpleTypeEl: XMLElement, visited?: Set<string>): string | undefined {

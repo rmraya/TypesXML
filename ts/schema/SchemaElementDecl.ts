@@ -75,6 +75,10 @@ export class SchemaElementDecl {
         this.attributeDecls.set(decl.getName(), decl);
     }
 
+    addAttributeDeclWithKey(name: string, decl: SchemaAttributeDecl): void {
+        this.attributeDecls.set(name, decl);
+    }
+
     getAttributeDecl(name: string): SchemaAttributeDecl | undefined {
         return this.attributeDecls.get(name);
     }
