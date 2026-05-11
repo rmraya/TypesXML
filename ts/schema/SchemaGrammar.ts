@@ -465,7 +465,7 @@ export class SchemaGrammar implements Grammar {
             }
             if (attrName === 'xsi:type') {
                 context.xsiType = this.localName(attrValue);
-            } else if (attrName.endsWith(':type') && attrName.indexOf(':') !== -1) {
+            } else if (attrName.endsWith(':type') && attrName.includes(':')) {
                 const prefix: string = attrName.substring(0, attrName.indexOf(':'));
                 const ns: string | undefined = this.resolvePrefix(prefix);
                 if (ns === 'http://www.w3.org/2001/XMLSchema-instance') {

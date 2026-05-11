@@ -280,7 +280,7 @@ export class JsonTokenizer {
     private readLiteral(expected: string): void {
         const startOffset: number = this.offset;
         const endOffset: number = this.offset + expected.length;
-        while (endOffset > this.buffer.length) {
+        if (endOffset > this.buffer.length) {
             if (this.finished) {
                 throw new Error('Unexpected end of JSON stream while reading literal');
             }

@@ -1075,7 +1075,7 @@ export class XSDSemanticValidator {
                 }
                 const baseValue: string = baseAttr.getValue();
                 const xsdNs: string = 'http://www.w3.org/2001/XMLSchema';
-                if (baseValue.indexOf(':') === -1) {
+                if (baseValue.includes(':')) {
                     if (defaultNs === xsdNs) {
                         throw new Error(
                             'xs:simpleContent xs:restriction base="' + baseValue +
@@ -1117,7 +1117,7 @@ export class XSDSemanticValidator {
         const map: Map<string, string> = new Map<string, string>();
         for (const attr of schemaRoot.getAttributes()) {
             const attrName: string = attr.getName();
-            if (attrName.length > 6 && attrName.substring(0, 6) === 'xmlns:') {
+            if (attrName.length > 6 && attrName.startsWith('xmlns:')) {
                 map.set(attrName.substring(6), attr.getValue());
             }
         }
@@ -2256,8 +2256,8 @@ export class XSDSemanticValidator {
                     throw new Error('xs:' + local + ' maxOccurs must be a non-negative integer or "unbounded", got: "' + maxVal + '"');
                 }
                 if (maxVal !== 'unbounded' && minOccursAttr !== undefined) {
-                    const minNum: number = parseInt(minOccursAttr.getValue(), 10);
-                    const maxNum: number = parseInt(maxVal, 10);
+                    const minNum: number = Number.parseInt(minOccursAttr.getValue(), 10);
+                    const maxNum: number = Number.parseInt(maxVal, 10);
                     if (minNum > maxNum) {
                         throw new Error('xs:' + local + ' minOccurs (' + minNum + ') must not be greater than maxOccurs (' + maxNum + ')');
                     }
@@ -2529,7 +2529,7 @@ export class XSDSemanticValidator {
             const derivMethod: string | undefined = XSDSemanticValidator.findDerivationFromType(memberEl, headTypeName, allComplexTypes);
             if (derivMethod === undefined) { continue; }
             const headFinalTokens: string[] = headFinal.split(/\s+/);
-            if (headFinalTokens.indexOf('#all') !== -1 || headFinalTokens.indexOf(derivMethod) !== -1) {
+            if (headFinalTokens.includes('#all') || headFinalTokens.includes(derivMethod)) {
                 const memberName: string = memberEl.getAttribute('name')?.getValue() ?? '(anonymous)';
                 throw new Error(
                     'Element "' + memberName + '" cannot be a member of substitution group headed by "' + headName +

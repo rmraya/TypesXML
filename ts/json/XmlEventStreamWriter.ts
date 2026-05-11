@@ -206,11 +206,7 @@ export class XmlEventStreamWriter implements ContentHandler {
         if (!this.dtdOpen) {
             return;
         }
-        if (!this.dtdHasSubset) {
-            this.write(">");
-        } else {
-            this.write(">");
-        }
+        this.write(">");
         this.dtdOpen = false;
     }
 

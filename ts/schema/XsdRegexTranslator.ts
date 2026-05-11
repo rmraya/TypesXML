@@ -300,7 +300,7 @@ export class XsdRegexTranslator {
                         const rawFlags = src.substring(i + 2, flagEnd);
                         const flags = rawFlags.startsWith('+') ? rawFlags.slice(1) : rawFlags;
                         if (/^[nimsx]+$/.test(flags)) {
-                            const jsFlags = flags.replaceAll(/n/g, '');
+                            const jsFlags = flags.replaceAll('n', '');
                             prefix = jsFlags.length > 0 ? '(?' + jsFlags + ':' : '(?:';
                             bodyStart = flagEnd + 1;
                         }
@@ -530,22 +530,22 @@ export class XsdRegexTranslator {
 
         switch (next) {
             case 'i': return { item: new CharClassItem(false, XsdRegexTranslator.NAME_START_CHAR), end: i + 2 };
-            case 'I': return { item: new CharClassItem(true,  XsdRegexTranslator.NAME_START_CHAR), end: i + 2 };
+            case 'I': return { item: new CharClassItem(true, XsdRegexTranslator.NAME_START_CHAR), end: i + 2 };
             case 'c': return { item: new CharClassItem(false, XsdRegexTranslator.NAME_CHAR), end: i + 2 };
-            case 'C': return { item: new CharClassItem(true,  XsdRegexTranslator.NAME_CHAR), end: i + 2 };
+            case 'C': return { item: new CharClassItem(true, XsdRegexTranslator.NAME_CHAR), end: i + 2 };
             case 's': return { item: new CharClassItem(false, '\\x20\\t\\n\\r'), end: i + 2 };
-            case 'S': return { item: new CharClassItem(true,  '\\x20\\t\\n\\r'), end: i + 2 };
+            case 'S': return { item: new CharClassItem(true, '\\x20\\t\\n\\r'), end: i + 2 };
             case 'd': return { item: new CharClassItem(false, XsdRegexTranslator.XSD_DIGITS), end: i + 2 };
-            case 'D': return { item: new CharClassItem(true,  XsdRegexTranslator.XSD_DIGITS), end: i + 2 };
+            case 'D': return { item: new CharClassItem(true, XsdRegexTranslator.XSD_DIGITS), end: i + 2 };
             case 'w': return { item: new CharClassItem(false, '\\p{L}\\p{M}\\p{N}\\p{S}'), end: i + 2 };
-            case 'W': return { item: new CharClassItem(true,  '\\p{L}\\p{M}\\p{N}\\p{S}'), end: i + 2 };
+            case 'W': return { item: new CharClassItem(true, '\\p{L}\\p{M}\\p{N}\\p{S}'), end: i + 2 };
             case 'p': {
                 const { name, end } = XsdRegexTranslator.readBracedName(src, i + 2);
                 return { item: new CharClassItem(false, XsdRegexTranslator.resolveClassContent(name)), end };
             }
             case 'P': {
                 const { name, end } = XsdRegexTranslator.readBracedName(src, i + 2);
-                return { item: new CharClassItem(true,  XsdRegexTranslator.resolveClassContent(name)), end };
+                return { item: new CharClassItem(true, XsdRegexTranslator.resolveClassContent(name)), end };
             }
             case 'A': return { item: new CharClassItem(false, ''), end: i + 2 };
             case 'Z': return { item: new CharClassItem(false, ''), end: i + 2 };
@@ -574,7 +574,7 @@ export class XsdRegexTranslator {
         if (name.startsWith('Is')) {
             const blockName = name.slice(2);
             const range = XsdRegexTranslator.BLOCK_MAP[blockName]
-                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replaceAll(/-/g, '')];
+                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replaceAll('-', '')];
             if (range) {
                 return negate ? '[^' + range + ']' : '[' + range + ']';
             }
@@ -594,7 +594,7 @@ export class XsdRegexTranslator {
         if (name.startsWith('Is')) {
             const blockName = name.slice(2);
             const range = XsdRegexTranslator.BLOCK_MAP[blockName]
-                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replaceAll(/-/g, '')];
+                ?? XsdRegexTranslator.BLOCK_MAP[blockName.replaceAll('-', '')];
             if (range) {
                 return range;
             }
